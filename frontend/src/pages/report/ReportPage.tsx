@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { clientiService } from '../../services/clienti.service';
 import { scadenzeService } from '../../services/scadenze.service';
 import { pagamentiService } from '../../services/pagamenti.service';
-import { Cliente, Scadenza, Pagamento, StatoScadenza } from '../../types';
+import type { Cliente, StatoScadenza } from '../../types';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { FileText, Download, FileSpreadsheet } from 'lucide-react';

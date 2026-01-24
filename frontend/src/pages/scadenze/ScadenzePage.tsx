@@ -1,15 +1,15 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { Calendar, momentLocalizer, View } from 'react-big-calendar';
+import { Calendar, momentLocalizer } from 'react-big-calendar';
 import moment from 'moment';
-import 'moment/locale/it';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { scadenzeService } from '../../services/scadenze.service';
 import { clientiService } from '../../services/clienti.service';
 import { veicoliService } from '../../services/veicoli.service';
-import { Scadenza, Cliente, Veicolo, StatoScadenza } from '../../types';
+import { StatoScadenza } from '../../types';
+import type { Scadenza, Cliente, Veicolo } from '../../types';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
-import { Plus, X, Calendar as CalendarIcon, List, AlertCircle } from 'lucide-react';
+import { Plus, X, Calendar as CalendarIcon, List } from 'lucide-react';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 
@@ -34,7 +34,12 @@ export const ScadenzePage: React.FC = () => {
   const [filterCliente, setFilterCliente] = useState<number | undefined>();
   const [showModal, setShowModal] = useState(false);
   const [editingScadenza, setEditingScadenza] = useState<Scadenza | null>(null);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    idVeicolo: number;
+    dataScadenza: string;
+    importoPrevisto: string;
+    stato: StatoScadenza;
+  }>({
     idVeicolo: 0,
     dataScadenza: '',
     importoPrevisto: '',
@@ -242,7 +247,7 @@ export const ScadenzePage: React.FC = () => {
             endAccessor="end"
             style={{ height: '100%' }}
             eventPropGetter={eventStyleGetter}
-            onSelectEvent={(event) => handleOpenModal(event.resource)}
+            onSelectEvent={(event: CalendarEvent) => handleOpenModal(event.resource)}
             messages={{
               next: 'Avanti',
               previous: 'Indietro',

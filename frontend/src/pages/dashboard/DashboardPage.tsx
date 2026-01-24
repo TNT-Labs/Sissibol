@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { scadenzeService } from '../../services/scadenze.service';
-import { Scadenza } from '../../types';
+import type { Scadenza } from '../../types';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { Calendar, AlertCircle, CheckCircle, Clock } from 'lucide-react';
