@@ -5,6 +5,10 @@ import { Layout } from './components/layout/Layout';
 import { LoginPage } from './pages/auth/LoginPage';
 import { DashboardPage } from './pages/dashboard/DashboardPage';
 import { ClientiPage } from './pages/clienti/ClientiPage';
+import { VeicoliPage } from './pages/veicoli/VeicoliPage';
+import { ScadenzePage } from './pages/scadenze/ScadenzePage';
+import { PagamentiPage } from './pages/pagamenti/PagamentiPage';
+import { ReportPage } from './pages/report/ReportPage';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
@@ -54,10 +58,7 @@ const AppRoutes: React.FC = () => {
         element={
           <ProtectedRoute>
             <Layout>
-              <div className="text-center py-12">
-                <h2 className="text-2xl font-bold text-gray-900">Veicoli</h2>
-                <p className="mt-2 text-gray-600">Pagina in costruzione</p>
-              </div>
+              <VeicoliPage />
             </Layout>
           </ProtectedRoute>
         }
@@ -67,10 +68,7 @@ const AppRoutes: React.FC = () => {
         element={
           <ProtectedRoute>
             <Layout>
-              <div className="text-center py-12">
-                <h2 className="text-2xl font-bold text-gray-900">Scadenziario</h2>
-                <p className="mt-2 text-gray-600">Pagina in costruzione</p>
-              </div>
+              <ScadenzePage />
             </Layout>
           </ProtectedRoute>
         }
@@ -80,10 +78,7 @@ const AppRoutes: React.FC = () => {
         element={
           <ProtectedRoute>
             <Layout>
-              <div className="text-center py-12">
-                <h2 className="text-2xl font-bold text-gray-900">Pagamenti</h2>
-                <p className="mt-2 text-gray-600">Pagina in costruzione</p>
-              </div>
+              <PagamentiPage />
             </Layout>
           </ProtectedRoute>
         }
@@ -93,10 +88,7 @@ const AppRoutes: React.FC = () => {
         element={
           <ProtectedRoute>
             <Layout>
-              <div className="text-center py-12">
-                <h2 className="text-2xl font-bold text-gray-900">Report</h2>
-                <p className="mt-2 text-gray-600">Pagina in costruzione</p>
-              </div>
+              <ReportPage />
             </Layout>
           </ProtectedRoute>
         }
