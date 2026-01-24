@@ -90,8 +90,8 @@ export class PagamentiService {
     await this.findOne(id); // Check if exists
 
     const data: any = { ...updatePagamentoDto };
-    if (updatePagamentoDto.dataPagamento) {
-      data.dataPagamento = new Date(updatePagamentoDto.dataPagamento);
+    if ((updatePagamentoDto as any).dataPagamento) {
+      data.dataPagamento = new Date((updatePagamentoDto as any).dataPagamento);
     }
 
     return this.prisma.pagamento.update({

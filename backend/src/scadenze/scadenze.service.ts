@@ -80,8 +80,8 @@ export class ScadenzeService {
     await this.findOne(id); // Check if exists
 
     const data: any = { ...updateScadenzaDto };
-    if (updateScadenzaDto.dataScadenza) {
-      data.dataScadenza = new Date(updateScadenzaDto.dataScadenza);
+    if ((updateScadenzaDto as any).dataScadenza) {
+      data.dataScadenza = new Date((updateScadenzaDto as any).dataScadenza);
     }
 
     return this.prisma.scadenza.update({
