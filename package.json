@@ -1,0 +1,26 @@
+{
+  "name": "sissibol-monorepo",
+  "version": "1.0.0",
+  "description": "PWA Gestione Scadenziario Bolli per Autotrasporto",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev:backend": "npm run start:dev --workspace=backend",
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "build:backend": "npm run build --workspace=backend",
+    "build:frontend": "npm run build --workspace=frontend",
+    "start:backend": "npm run start:prod --workspace=backend",
+    "preview:frontend": "npm run preview --workspace=frontend"
+  },
+  "keywords": [
+    "pwa",
+    "bollo-auto",
+    "autotrasporto",
+    "scadenziario"
+  ],
+  "author": "",
+  "license": "MIT"
+}

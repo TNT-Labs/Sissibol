@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: sissibol-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sissibol
+      POSTGRES_USER: sissibol_user
+      POSTGRES_PASSWORD: sissibol_password
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - sissibol-network-dev
+
+  # Backend API (NestJS) - Development mode with hot reload
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: sissibol-backend-dev
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://sissibol_user:sissibol_password@postgres:5432/sissibol?schema=public
+      JWT_SECRET: dev-secret-key
+      JWT_EXPIRATION: 24h
+      PORT: 3000
+      NODE_ENV: development
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+      - ./backend/uploads:/app/uploads
+    depends_on:
+      - postgres
+    networks:
+      - sissibol-network-dev
+    command: sh -c "npx prisma generate && npx prisma migrate deploy && npm run start:dev"
+
+  # Frontend (React + Vite) - Development mode with hot reload
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: sissibol-frontend-dev
+    restart: unless-stopped
+    environment:
+      VITE_API_URL: http://localhost:3000
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - sissibol-network-dev
+    command: npm run dev -- --host
+
+volumes:
+  postgres_data_dev:
+    driver: local
+
+networks:
+  sissibol-network-dev:
+    driver: bridge

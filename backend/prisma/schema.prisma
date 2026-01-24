@@ -1,0 +1,96 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Utente {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  ruolo     Ruolo    @default(OPERATORE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("utenti")
+}
+
+enum Ruolo {
+  ADMIN
+  OPERATORE
+}
+
+model Cliente {
+  id              Int       @id @default(autoincrement())
+  ragioneSociale  String    @map("ragione_sociale")
+  partitaIva      String?   @map("partita_iva")
+  indirizzo       String?
+  email           String?
+  telefono        String?
+  note            String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  veicoli         Veicolo[]
+
+  @@map("clienti")
+}
+
+model Veicolo {
+  id                Int       @id @default(autoincrement())
+  idCliente         Int       @map("id_cliente")
+  targa             String
+  tipoVeicolo       String?   @map("tipo_veicolo")
+  classeAmbientale  String?   @map("classe_ambientale")
+  regione           String?
+  note              String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  cliente           Cliente   @relation(fields: [idCliente], references: [id], onDelete: Cascade)
+  scadenze          Scadenza[]
+
+  @@map("veicoli")
+}
+
+model Scadenza {
+  id              Int       @id @default(autoincrement())
+  idVeicolo       Int       @map("id_veicolo")
+  dataScadenza    DateTime  @map("data_scadenza") @db.Date
+  importoPrevisto Decimal?  @map("importo_previsto") @db.Decimal(10, 2)
+  stato           StatoScadenza @default(DA_PAGARE)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  veicolo         Veicolo   @relation(fields: [idVeicolo], references: [id], onDelete: Cascade)
+  pagamenti       Pagamento[]
+
+  @@map("scadenze")
+}
+
+enum StatoScadenza {
+  DA_PAGARE
+  PAGATO
+  SCADUTO
+}
+
+model Pagamento {
+  id                Int       @id @default(autoincrement())
+  idScadenza        Int       @map("id_scadenza")
+  dataPagamento     DateTime  @map("data_pagamento") @db.Date
+  importoPagato     Decimal   @map("importo_pagato") @db.Decimal(10, 2)
+  metodoPagamento   String?   @map("metodo_pagamento")
+  ricevutaFile      String?   @map("ricevuta_file")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  scadenza          Scadenza  @relation(fields: [idScadenza], references: [id], onDelete: Cascade)
+
+  @@map("pagamenti")
+}
