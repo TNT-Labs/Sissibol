@@ -54,5 +54,5 @@ ENV NODE_ENV=production
 CMD ["sh", "-c", "echo '🚀 Starting Sissibol Backend...' && \
      echo '⏳ Waiting for database...' && sleep 5 && \
      echo '🔄 Running migrations...' && npx prisma migrate deploy && \
-     echo '🌱 Running seed...' && npm run prisma:seed || echo '⚠️ Seed skipped' && \
+     echo '🌱 Running seed...' && (npm run prisma:seed || echo '⚠️ Seed skipped') && \
      echo '✅ Starting application...' && node dist/main.js"]
