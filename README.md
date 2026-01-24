@@ -36,8 +36,62 @@ Progressive Web App per la gestione dello scadenziario bolli per autotrasporto.
 
 ## 🚀 Setup e Installazione
 
-### Prerequisiti
+### 🐳 Metodo 1: Docker (Consigliato)
 
+**Prerequisiti:**
+- Docker >= 20.x
+- Docker Compose >= 2.x
+
+**Avvio rapido:**
+
+```bash
+# Clona il repository
+git clone <repository-url>
+cd Sissibol
+
+# Avvia tutti i servizi con Docker Compose
+docker-compose up -d
+
+# Attendi che tutti i servizi siano pronti (30-60 secondi)
+# L'applicazione sarà disponibile su:
+# - Frontend: http://localhost
+# - Backend API: http://localhost:3000
+# - Database: localhost:5432
+
+# Crea il primo utente amministratore
+make seed-admin
+# Oppure manualmente:
+curl -X POST http://localhost:3000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@sissibol.com","password":"admin123","ruolo":"ADMIN"}'
+```
+
+**Comandi utili (con Makefile):**
+
+```bash
+make help           # Mostra tutti i comandi disponibili
+make up             # Avvia tutti i servizi
+make down           # Ferma tutti i servizi
+make logs           # Mostra i log di tutti i servizi
+make restart        # Riavvia tutti i servizi
+make clean          # Rimuove tutti i container e volumi
+make rebuild        # Ricostruisce tutto da zero
+make prisma-studio  # Apri Prisma Studio
+make db-shell       # Apri shell PostgreSQL
+```
+
+**Configurazione personalizzata:**
+
+Per modificare le configurazioni, edita il file `docker-compose.yml`:
+- Cambia le porte esposte
+- Modifica le credenziali del database
+- Aggiorna il JWT_SECRET per produzione
+
+---
+
+### 💻 Metodo 2: Installazione Locale
+
+**Prerequisiti:**
 - Node.js >= 18.x
 - PostgreSQL >= 14.x
 - npm o yarn
@@ -196,6 +250,16 @@ Funzionalità offline:
 
 ## 🧪 Testing
 
+### Con Docker
+```bash
+# Backend tests
+docker-compose exec backend npm test
+
+# Frontend tests
+docker-compose exec frontend npm test
+```
+
+### Senza Docker
 ```bash
 # Backend
 cd backend
@@ -208,7 +272,26 @@ npm test
 
 ## 🏗️ Build per Produzione
 
-### Backend
+### 🐳 Con Docker (Consigliato)
+
+```bash
+# Build e avvio con docker-compose
+docker-compose up -d --build
+
+# Oppure usa il Makefile
+make rebuild
+
+# Per deployment su server:
+# 1. Modifica docker-compose.yml con le configurazioni di produzione
+# 2. Cambia JWT_SECRET con un valore sicuro
+# 3. Configura HTTPS con un reverse proxy (nginx/traefik)
+# 4. Esegui:
+docker-compose -f docker-compose.yml up -d
+```
+
+### 💻 Build Locale
+
+#### Backend
 
 ```bash
 cd backend
@@ -216,13 +299,42 @@ npm run build
 npm run start:prod
 ```
 
-### Frontend
+#### Frontend
 
 ```bash
 cd frontend
 npm run build
 npm run preview  # Preview della build
 ```
+
+## 🐳 Architettura Docker
+
+```
+┌─────────────────────────────────────────────────────┐
+│                   Docker Network                     │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐ │
+│  │  Frontend   │  │   Backend   │  │  PostgreSQL │ │
+│  │   (Nginx)   │◄─┤   (NestJS)  │◄─┤  (Database) │ │
+│  │   Port 80   │  │  Port 3000  │  │  Port 5432  │ │
+│  └─────────────┘  └─────────────┘  └─────────────┘ │
+│       │                  │                  │        │
+│       │                  │                  │        │
+│   Static Files      API Requests      Persistent    │
+│                                         Volume       │
+└─────────────────────────────────────────────────────┘
+```
+
+### Volumi Docker
+
+- `postgres_data`: Persistenza dati PostgreSQL
+- `./backend/uploads`: Upload file ricevute (montato come volume)
+
+### Variabili d'Ambiente Docker
+
+Configurate in `docker-compose.yml`:
+- `DATABASE_URL`: Connection string PostgreSQL
+- `JWT_SECRET`: Chiave segreta JWT
+- `VITE_API_URL`: URL API per il frontend
 
 ## 🔄 Funzionalità Future
 

@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: sissibol-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sissibol
+      POSTGRES_USER: sissibol_user
+      POSTGRES_PASSWORD: sissibol_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - sissibol-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sissibol_user -d sissibol"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend API (NestJS)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sissibol-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://sissibol_user:sissibol_password@postgres:5432/sissibol?schema=public
+      JWT_SECRET: your-production-secret-key-change-me
+      JWT_EXPIRATION: 24h
+      PORT: 3000
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./backend/uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - sissibol-network
+    command: sh -c "npx prisma migrate deploy && npm run start:prod"
+
+  # Frontend (React + Vite)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: http://localhost:3000
+    container_name: sissibol-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - sissibol-network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  sissibol-network:
+    driver: bridge
