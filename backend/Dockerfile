@@ -41,6 +41,10 @@ RUN npm install --only=production && \
 # Copy built application from builder
 COPY --from=builder /app/dist ./dist
 
+# Copy entrypoint script
+COPY docker-entrypoint.sh ./
+RUN chmod +x docker-entrypoint.sh
+
 # Create uploads directory
 RUN mkdir -p /app/uploads
 
@@ -50,5 +54,5 @@ EXPOSE 3000
 # Set environment
 ENV NODE_ENV=production
 
-# Start application
-CMD ["node", "dist/main.js"]
+# Start application with entrypoint script
+ENTRYPOINT ["./docker-entrypoint.sh"]
