@@ -1,5 +1,5 @@
 import { api } from './api';
-import { Pagamento } from '../types';
+import type { Pagamento } from '../types';
 
 export const pagamentiService = {
   async getAll(idScadenza?: number): Promise<Pagamento[]> {

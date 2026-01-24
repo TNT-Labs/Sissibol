@@ -1,13 +1,17 @@
-export enum Ruolo {
-  ADMIN = 'ADMIN',
-  OPERATORE = 'OPERATORE',
-}
+export const Ruolo = {
+  ADMIN: 'ADMIN',
+  OPERATORE: 'OPERATORE',
+} as const;
 
-export enum StatoScadenza {
-  DA_PAGARE = 'DA_PAGARE',
-  PAGATO = 'PAGATO',
-  SCADUTO = 'SCADUTO',
-}
+export type Ruolo = typeof Ruolo[keyof typeof Ruolo];
+
+export const StatoScadenza = {
+  DA_PAGARE: 'DA_PAGARE',
+  PAGATO: 'PAGATO',
+  SCADUTO: 'SCADUTO',
+} as const;
+
+export type StatoScadenza = typeof StatoScadenza[keyof typeof StatoScadenza];
 
 export interface Utente {
   id: number;

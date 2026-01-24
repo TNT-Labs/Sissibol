@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { pagamentiService } from '../../services/pagamenti.service';
 import { scadenzeService } from '../../services/scadenze.service';
-import { Pagamento, Scadenza, StatoScadenza } from '../../types';
+import { StatoScadenza } from '../../types';
+import type { Pagamento, Scadenza } from '../../types';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { Plus, X, CreditCard, Upload, FileText, Trash2, Edit } from 'lucide-react';

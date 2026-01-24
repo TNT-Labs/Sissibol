@@ -1,5 +1,5 @@
 import { api } from './api';
-import { Scadenza, StatoScadenza } from '../types';
+import type { Scadenza, StatoScadenza } from '../types';
 
 export const scadenzeService = {
   async getAll(stato?: StatoScadenza, idCliente?: number): Promise<Scadenza[]> {

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { clientiService } from '../../services/clienti.service';
-import { Cliente } from '../../types';
+import type { Cliente } from '../../types';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { Plus, Search, Edit, Trash2, X } from 'lucide-react';

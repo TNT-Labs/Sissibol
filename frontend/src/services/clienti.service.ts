@@ -1,5 +1,5 @@
 import { api } from './api';
-import { Cliente } from '../types';
+import type { Cliente } from '../types';
 
 export const clientiService = {
   async getAll(search?: string): Promise<Cliente[]> {
