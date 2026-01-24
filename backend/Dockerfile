@@ -41,10 +41,6 @@ RUN npm install --only=production && \
 # Copy built application from builder
 COPY --from=builder /app/dist ./dist
 
-# Copy entrypoint script
-COPY docker-entrypoint.sh ./
-RUN chmod +x docker-entrypoint.sh
-
 # Create uploads directory
 RUN mkdir -p /app/uploads
 
@@ -54,5 +50,9 @@ EXPOSE 3000
 # Set environment
 ENV NODE_ENV=production
 
-# Start application with entrypoint script
-ENTRYPOINT ["./docker-entrypoint.sh"]
+# Start application with migrations and seed
+CMD ["sh", "-c", "echo '🚀 Starting Sissibol Backend...' && \
+     echo '⏳ Waiting for database...' && sleep 5 && \
+     echo '🔄 Running migrations...' && npx prisma migrate deploy && \
+     echo '🌱 Running seed...' && npm run prisma:seed || echo '⚠️ Seed skipped' && \
+     echo '✅ Starting application...' && node dist/main.js"]
