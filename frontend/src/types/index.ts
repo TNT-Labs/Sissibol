@@ -70,6 +70,17 @@ export interface Veicolo {
   tipoVeicolo?: string;
   classeAmbientale?: string;
   regione?: string;
+  // Nuovi campi per calcolo bollo (tariffario Lombardia 2026)
+  alimentazione?: string;
+  potenzaKw?: number;
+  cilindrata?: number;
+  portataKg?: number;
+  pesoComplessivoKg?: number;
+  numeroAssi?: number;
+  tipoSospensione?: string;
+  numeroPosti?: number;
+  massaRimorchiabileKg?: number;
+  dataImmatricolazione?: string;
   note?: string;
   createdAt: string;
   updatedAt: string;

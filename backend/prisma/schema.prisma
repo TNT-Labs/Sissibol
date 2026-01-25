@@ -55,18 +55,29 @@ model Cliente {
 }
 
 model Veicolo {
-  id                Int       @id @default(autoincrement())
-  idCliente         Int       @map("id_cliente")
-  targa             String
-  tipoVeicolo       String?   @map("tipo_veicolo")
-  classeAmbientale  String?   @map("classe_ambientale")
-  regione           String?
-  note              String?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  id                    Int       @id @default(autoincrement())
+  idCliente             Int       @map("id_cliente")
+  targa                 String
+  tipoVeicolo           String?   @map("tipo_veicolo")
+  classeAmbientale      String?   @map("classe_ambientale")
+  regione               String?
+  // Nuovi campi per calcolo bollo (tariffario Lombardia 2026)
+  alimentazione         String?                           // Benzina, Diesel, GPL, Metano, Elettrico, etc.
+  potenzaKw             Decimal?  @map("potenza_kw") @db.Decimal(10, 2)  // Potenza in KW
+  cilindrata            Int?                              // Cilindrata in cc (per motocarri/motofurgoni)
+  portataKg             Int?      @map("portata_kg")      // Portata in KG (autocarri < 12 ton)
+  pesoComplessivoKg     Int?      @map("peso_complessivo_kg") // Peso complessivo (determina categoria autocarro)
+  numeroAssi            Int?      @map("numero_assi")     // Numero assi (autocarri >= 12 ton)
+  tipoSospensione       String?   @map("tipo_sospensione") // Pneumatiche o non pneumatiche
+  numeroPosti           Int?      @map("numero_posti")    // Per rimorchi trasporto persone
+  massaRimorchiabileKg  Int?      @map("massa_rimorchiabile_kg") // Tassa aggiuntiva trattori stradali
+  dataImmatricolazione  DateTime? @map("data_immatricolazione") @db.Date // Per calcolo ultratrentennali
+  note                  String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
-  cliente           Cliente   @relation(fields: [idCliente], references: [id], onDelete: Cascade)
-  scadenze          Scadenza[]
+  cliente               Cliente   @relation(fields: [idCliente], references: [id], onDelete: Cascade)
+  scadenze              Scadenza[]
 
   @@map("veicoli")
 }
