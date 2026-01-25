@@ -42,9 +42,10 @@ export class ClientiService {
         veicoli: {
           include: {
             scadenze: {
-              orderBy: {
-                dataScadenza: 'desc',
-              },
+              orderBy: [
+                { annoScadenza: 'desc' },
+                { meseScadenza: 'desc' },
+              ],
             },
           },
         },

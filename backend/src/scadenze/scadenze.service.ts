@@ -66,9 +66,10 @@ export class ScadenzeService {
         },
         pagamenti: true,
       },
-      orderBy: {
-        dataScadenza: 'desc',
-      },
+      orderBy: [
+        { annoScadenza: 'desc' },
+        { meseScadenza: 'desc' },
+      ],
     });
   }
 
