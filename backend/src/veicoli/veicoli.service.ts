@@ -45,9 +45,10 @@ export class VeicoliService {
           include: {
             pagamenti: true,
           },
-          orderBy: {
-            dataScadenza: 'desc',
-          },
+          orderBy: [
+            { annoScadenza: 'desc' },
+            { meseScadenza: 'desc' },
+          ],
         },
       },
     });
