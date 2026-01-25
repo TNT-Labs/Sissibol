@@ -29,14 +29,16 @@ export class ScadenzeController {
   @Get()
   findAll(
     @Query('stato') stato?: StatoScadenza,
-    @Query('idCliente', ParseIntPipe) idCliente?: number,
+    @Query('idCliente') idCliente?: string,
   ) {
-    return this.scadenzeService.findAll(stato, idCliente);
+    const parsedIdCliente = idCliente ? parseInt(idCliente, 10) : undefined;
+    return this.scadenzeService.findAll(stato, parsedIdCliente);
   }
 
   @Get('in-scadenza')
-  getScadenzeInScadenza(@Query('giorni', ParseIntPipe) giorni?: number) {
-    return this.scadenzeService.getScadenzeInScadenza(giorni);
+  getScadenzeInScadenza(@Query('giorni') giorni?: string) {
+    const parsedGiorni = giorni ? parseInt(giorni, 10) : undefined;
+    return this.scadenzeService.getScadenzeInScadenza(parsedGiorni);
   }
 
   @Get(':id')
