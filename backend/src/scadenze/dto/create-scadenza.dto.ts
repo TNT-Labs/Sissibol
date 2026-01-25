@@ -1,5 +1,5 @@
-import { IsNotEmpty, IsInt, IsDateString, IsDecimal, IsEnum, IsOptional } from 'class-validator';
-import { StatoScadenza } from '@prisma/client';
+import { IsNotEmpty, IsInt, IsEnum, IsOptional, Min, Max } from 'class-validator';
+import { StatoScadenza, Periodicita } from '@prisma/client';
 import { Type } from 'class-transformer';
 
 export class CreateScadenzaDto {
@@ -7,9 +7,21 @@ export class CreateScadenzaDto {
   @IsNotEmpty()
   idVeicolo: number;
 
-  @IsDateString()
+  @IsInt()
+  @Min(1)
+  @Max(12)
   @IsNotEmpty()
-  dataScadenza: string;
+  meseScadenza: number;
+
+  @IsInt()
+  @Min(2000)
+  @Max(2100)
+  @IsNotEmpty()
+  annoScadenza: number;
+
+  @IsEnum(Periodicita)
+  @IsOptional()
+  periodicita?: Periodicita;
 
   @IsOptional()
   @Type(() => Number)
