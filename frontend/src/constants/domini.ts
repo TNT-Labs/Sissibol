@@ -167,6 +167,8 @@ export const shouldShowField = (tipoVeicolo: string | undefined, campo: keyof ty
   return config ? !!config[campo] : false;
 };
 
+// Classi ambientali Euro (allineate al tariffario Lombardia 2026)
+// Nota: Il tariffario raggruppa Euro 4-5-6 per la tariffa, ma qui registriamo la classe effettiva del veicolo
 export const CLASSI_AMBIENTALI = [
   'Euro 0',
   'Euro 1',
@@ -174,16 +176,65 @@ export const CLASSI_AMBIENTALI = [
   'Euro 3',
   'Euro 4',
   'Euro 5',
+  'Euro 5a',
   'Euro 5b',
   'Euro 6',
+  'Euro 6a',
   'Euro 6b',
   'Euro 6c',
-  'Euro 6d',
   'Euro 6d-TEMP',
+  'Euro 6d',
+  'Euro 6d-ISC',
+  'Euro 6d-ISC-FCM',
+  'Euro 6e',
   'Euro 7',
-  'Elettrico',
-  'Ibrido',
 ] as const;
+
+export type ClasseAmbientale = typeof CLASSI_AMBIENTALI[number];
+
+// Mapping classe Euro -> categoria tariffaria (per calcolo bollo autovetture)
+export const CATEGORIA_TARIFFARIA_AUTOVETTURE: Record<string, string> = {
+  'Euro 0': 'Euro 0',
+  'Euro 1': 'Euro 1',
+  'Euro 2': 'Euro 2',
+  'Euro 3': 'Euro 3',
+  'Euro 4': 'Euro 4-5-6',
+  'Euro 5': 'Euro 4-5-6',
+  'Euro 5a': 'Euro 4-5-6',
+  'Euro 5b': 'Euro 4-5-6',
+  'Euro 6': 'Euro 4-5-6',
+  'Euro 6a': 'Euro 4-5-6',
+  'Euro 6b': 'Euro 4-5-6',
+  'Euro 6c': 'Euro 4-5-6',
+  'Euro 6d-TEMP': 'Euro 4-5-6',
+  'Euro 6d': 'Euro 4-5-6',
+  'Euro 6d-ISC': 'Euro 4-5-6',
+  'Euro 6d-ISC-FCM': 'Euro 4-5-6',
+  'Euro 6e': 'Euro 4-5-6',
+  'Euro 7': 'Euro 4-5-6',
+};
+
+// Mapping classe Euro -> categoria tariffaria (per calcolo bollo motocicli)
+export const CATEGORIA_TARIFFARIA_MOTOCICLI: Record<string, string> = {
+  'Euro 0': 'Euro 0',
+  'Euro 1': 'Euro 1',
+  'Euro 2': 'Euro 2',
+  'Euro 3': 'Euro 3 e successivi',
+  'Euro 4': 'Euro 3 e successivi',
+  'Euro 5': 'Euro 3 e successivi',
+  'Euro 5a': 'Euro 3 e successivi',
+  'Euro 5b': 'Euro 3 e successivi',
+  'Euro 6': 'Euro 3 e successivi',
+  'Euro 6a': 'Euro 3 e successivi',
+  'Euro 6b': 'Euro 3 e successivi',
+  'Euro 6c': 'Euro 3 e successivi',
+  'Euro 6d-TEMP': 'Euro 3 e successivi',
+  'Euro 6d': 'Euro 3 e successivi',
+  'Euro 6d-ISC': 'Euro 3 e successivi',
+  'Euro 6d-ISC-FCM': 'Euro 3 e successivi',
+  'Euro 6e': 'Euro 3 e successivi',
+  'Euro 7': 'Euro 3 e successivi',
+};
 
 export const REGIONI_ITALIANE = [
   'Abruzzo',
