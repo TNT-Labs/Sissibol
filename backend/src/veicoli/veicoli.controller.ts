@@ -26,8 +26,9 @@ export class VeicoliController {
   }
 
   @Get()
-  findAll(@Query('idCliente', ParseIntPipe) idCliente?: number) {
-    return this.veicoliService.findAll(idCliente);
+  findAll(@Query('idCliente') idCliente?: string) {
+    const parsedIdCliente = idCliente ? parseInt(idCliente, 10) : undefined;
+    return this.veicoliService.findAll(parsedIdCliente);
   }
 
   @Get(':id')

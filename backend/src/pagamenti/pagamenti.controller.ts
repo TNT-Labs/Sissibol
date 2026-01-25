@@ -52,8 +52,9 @@ export class PagamentiController {
   }
 
   @Get()
-  findAll(@Query('idScadenza', ParseIntPipe) idScadenza?: number) {
-    return this.pagamentiService.findAll(idScadenza);
+  findAll(@Query('idScadenza') idScadenza?: string) {
+    const parsedIdScadenza = idScadenza ? parseInt(idScadenza, 10) : undefined;
+    return this.pagamentiService.findAll(parsedIdScadenza);
   }
 
   @Get(':id')
