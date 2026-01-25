@@ -1,0 +1,170 @@
+# =============================================================================
+# Docker Compose - HTTPS Production Deployment
+# =============================================================================
+# Secure deployment with Let's Encrypt SSL certificates via DuckDNS DNS Challenge
+# No port 80 required - uses DNS-01 challenge for certificate validation
+# =============================================================================
+#
+# Prerequisites:
+#   1. Create a DuckDNS account and domain at https://www.duckdns.org
+#   2. Copy .env.https.example to .env and configure your settings
+#   3. Run the initial certificate generation:
+#      ./scripts/ssl/init-ssl.sh
+#   4. Start the stack:
+#      docker compose -f docker-compose.https.yml up -d
+#
+# =============================================================================
+
+services:
+  # ===========================================================================
+  # PostgreSQL Database
+  # ===========================================================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: sissibol-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-sissibol}
+      POSTGRES_USER: ${POSTGRES_USER:-sissibol_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Database password is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # Security: Do NOT expose database port externally
+    # Only accessible via internal network
+    networks:
+      - sissibol-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sissibol_user} -d ${POSTGRES_DB:-sissibol}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Security: read-only root filesystem where possible
+    security_opt:
+      - no-new-privileges:true
+
+  # ===========================================================================
+  # Backend API (NestJS)
+  # ===========================================================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sissibol-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sissibol_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-sissibol}?schema=public
+      JWT_SECRET: ${JWT_SECRET:?JWT secret is required}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-24h}
+      PORT: 3000
+      NODE_ENV: production
+      # Trust proxy headers from nginx
+      TRUST_PROXY: "true"
+    volumes:
+      - ./backend/uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - sissibol-internal
+    # Security: Do NOT expose backend port externally
+    # Only accessible via internal network through nginx
+    security_opt:
+      - no-new-privileges:true
+    # Resource limits to prevent DoS
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+  # ===========================================================================
+  # Frontend (React + Nginx HTTPS)
+  # ===========================================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.https
+      args:
+        VITE_API_URL: /api
+        DOMAIN_NAME: ${DUCKDNS_SUBDOMAIN}.duckdns.org
+    container_name: sissibol-frontend
+    restart: unless-stopped
+    ports:
+      # HTTPS only - no port 80 exposed
+      - "443:443"
+    environment:
+      DOMAIN_NAME: ${DUCKDNS_SUBDOMAIN}.duckdns.org
+    volumes:
+      # SSL certificates from Let's Encrypt
+      - letsencrypt_data:/etc/letsencrypt:ro
+      # DH parameters
+      - ./ssl/dhparam.pem:/etc/nginx/ssl/dhparam.pem:ro
+    depends_on:
+      - backend
+    networks:
+      - sissibol-internal
+      - sissibol-external
+    security_opt:
+      - no-new-privileges:true
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+
+  # ===========================================================================
+  # Certbot - Certificate Management
+  # ===========================================================================
+  # This container handles certificate renewal automatically
+  # Uses DNS-01 challenge via DuckDNS API (no port 80 needed)
+  certbot:
+    image: certbot/certbot:latest
+    container_name: sissibol-certbot
+    volumes:
+      - letsencrypt_data:/etc/letsencrypt
+      - ./scripts/ssl:/scripts:ro
+    environment:
+      DUCKDNS_TOKEN: ${DUCKDNS_TOKEN:?DuckDNS token is required}
+      DUCKDNS_SUBDOMAIN: ${DUCKDNS_SUBDOMAIN:?DuckDNS subdomain is required}
+      CERT_EMAIL: ${CERT_EMAIL:?Email for certificate notifications is required}
+    # Run renewal check daily at 3 AM
+    entrypoint: "/bin/sh"
+    command: >
+      -c 'trap exit TERM; while :; do
+        certbot renew --deploy-hook "touch /etc/letsencrypt/renewal-complete";
+        sleep 12h & wait $${!};
+      done'
+    networks:
+      - sissibol-internal
+    depends_on:
+      - frontend
+    security_opt:
+      - no-new-privileges:true
+
+# ===========================================================================
+# Volumes
+# ===========================================================================
+volumes:
+  postgres_data:
+    driver: local
+  letsencrypt_data:
+    driver: local
+
+# ===========================================================================
+# Networks
+# ===========================================================================
+networks:
+  # Internal network - not accessible from outside
+  sissibol-internal:
+    driver: bridge
+    internal: true
+  # External network - for public-facing services
+  sissibol-external:
+    driver: bridge
