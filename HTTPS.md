@@ -13,9 +13,10 @@ La configurazione utilizza:
 ## Prerequisiti
 
 1. Un account DuckDNS (gratuito su https://www.duckdns.org)
-2. Docker e Docker Compose installati
+2. Docker Desktop installato (Windows/Mac) o Docker + Docker Compose (Linux)
 3. Porta 443 aperta sul router e inoltrata al server
-4. OpenSSL installato (per generare DH parameters)
+
+> **Nota**: Questa guida supporta sia Linux/Mac (Bash) che Windows (PowerShell). Gli script sono disponibili in entrambi i formati.
 
 ## Configurazione Rapida
 
@@ -28,6 +29,7 @@ La configurazione utilizza:
 
 ### 2. Configura le variabili d'ambiente
 
+**Linux/Mac:**
 ```bash
 # Copia il file di esempio
 cp .env.https.example .env
@@ -36,9 +38,20 @@ cp .env.https.example .env
 nano .env
 ```
 
+**Windows (PowerShell):**
+```powershell
+# Copia il file di esempio
+Copy-Item .env.https.example .env
+
+# Modifica il file con Notepad o VS Code
+notepad .env
+# oppure
+code .env
+```
+
 **Valori da configurare obbligatoriamente:**
 
-```bash
+```ini
 # DuckDNS
 DUCKDNS_SUBDOMAIN=miaapp          # Il tuo sottodominio
 DUCKDNS_TOKEN=xxxxxxxx-xxxx-xxxx  # Il tuo token DuckDNS
@@ -47,15 +60,21 @@ DUCKDNS_TOKEN=xxxxxxxx-xxxx-xxxx  # Il tuo token DuckDNS
 CERT_EMAIL=tua@email.com
 
 # Sicurezza - CAMBIA QUESTI VALORI!
-POSTGRES_PASSWORD=$(openssl rand -base64 32)
-JWT_SECRET=$(openssl rand -base64 64)
+# Genera password sicure con: [System.Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Maximum 256 }))
+POSTGRES_PASSWORD=genera_una_password_sicura_qui
+JWT_SECRET=genera_un_secret_sicuro_di_64_caratteri_qui
 ```
 
 ### 3. Genera i certificati SSL
 
+**Linux/Mac:**
 ```bash
-# Esegui lo script di inizializzazione
 ./scripts/ssl/init-ssl.sh
+```
+
+**Windows (PowerShell):**
+```powershell
+.\scripts\ssl\init-ssl.ps1
 ```
 
 Questo script:
@@ -152,14 +171,26 @@ Il container `certbot` rinnova automaticamente i certificati prima della scadenz
 
 ### Rinnovo Manuale
 
+**Linux/Mac:**
 ```bash
 ./scripts/ssl/renew-ssl.sh
 ```
 
+**Windows (PowerShell):**
+```powershell
+.\scripts\ssl\renew-ssl.ps1
+```
+
 ### Verifica Stato Certificato
 
+**Linux/Mac:**
 ```bash
 ./scripts/ssl/check-ssl.sh
+```
+
+**Windows (PowerShell):**
+```powershell
+.\scripts\ssl\check-ssl.ps1
 ```
 
 ### Test SSL Completo
@@ -174,8 +205,15 @@ https://www.ssllabs.com/ssltest/analyze.html?d=tuodominio.duckdns.org
 ### Errore "Certificate not found"
 
 Il certificato non è stato generato. Esegui:
+
+**Linux/Mac:**
 ```bash
 ./scripts/ssl/init-ssl.sh
+```
+
+**Windows (PowerShell):**
+```powershell
+.\scripts\ssl\init-ssl.ps1
 ```
 
 ### Errore "DNS propagation"
@@ -187,11 +225,24 @@ La DNS challenge può fallire se il DNS non si propaga in tempo. Soluzioni:
 
 ### Errore "Port 443 already in use"
 
+**Linux/Mac:**
 ```bash
 # Trova cosa usa la porta
 sudo lsof -i :443
 
 # Ferma il servizio o cambia porta
+```
+
+**Windows (PowerShell come Amministratore):**
+```powershell
+# Trova cosa usa la porta
+netstat -ano | findstr :443
+
+# Trova il processo dal PID
+Get-Process -Id <PID>
+
+# Oppure
+Get-NetTCPConnection -LocalPort 443 | Select-Object OwningProcess
 ```
 
 ### Certificato scaduto
@@ -219,8 +270,9 @@ docker compose -f docker-compose.https.yml logs -f
 
 ## Aggiornamento IP Dinamico
 
-Se hai un IP dinamico, crea un cron job per aggiornare DuckDNS:
+Se hai un IP dinamico, configura un task schedulato per aggiornare DuckDNS.
 
+**Linux/Mac (cron):**
 ```bash
 # Crea lo script
 cat > /home/user/update-duckdns.sh << 'EOF'
@@ -235,9 +287,33 @@ chmod +x /home/user/update-duckdns.sh
 (crontab -l 2>/dev/null; echo "*/5 * * * * /home/user/update-duckdns.sh") | crontab -
 ```
 
+**Windows (Task Scheduler via PowerShell):**
+
+1. Crea lo script `update-duckdns.ps1`:
+```powershell
+# Percorso: C:\Sissibol\scripts\update-duckdns.ps1
+$EnvFile = "C:\path\to\Sissibol\.env"
+Get-Content $EnvFile | ForEach-Object {
+    if ($_ -match '^\s*([^#][^=]+)=(.*)$') {
+        Set-Item -Path "env:$($matches[1].Trim())" -Value $matches[2].Trim()
+    }
+}
+Invoke-RestMethod -Uri "https://www.duckdns.org/update?domains=$env:DUCKDNS_SUBDOMAIN&token=$env:DUCKDNS_TOKEN&ip="
+```
+
+2. Crea il task schedulato (esegui PowerShell come Amministratore):
+```powershell
+$Action = New-ScheduledTaskAction -Execute "PowerShell.exe" -Argument "-ExecutionPolicy Bypass -File C:\Sissibol\scripts\update-duckdns.ps1"
+$Trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 5)
+$Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+Register-ScheduledTask -TaskName "DuckDNS Update" -Action $Action -Trigger $Trigger -Settings $Settings -RunLevel Highest
+```
+
 ## Comandi Utili
 
-```bash
+I comandi Docker sono identici su tutti i sistemi operativi:
+
+```powershell
 # Avvia stack HTTPS
 docker compose -f docker-compose.https.yml up -d
 
@@ -253,8 +329,20 @@ docker compose -f docker-compose.https.yml up -d --build
 # Verifica configurazione nginx
 docker exec sissibol-frontend nginx -t
 
-# Visualizza certificato
+# Visualizza log in tempo reale
+docker compose -f docker-compose.https.yml logs -f
+```
+
+**Visualizzare il certificato:**
+
+*Linux/Mac:*
+```bash
 openssl x509 -in letsencrypt/live/tuodominio.duckdns.org/fullchain.pem -text -noout
+```
+
+*Windows (usando Docker):*
+```powershell
+docker run --rm -v "${PWD}/letsencrypt:/certs:ro" alpine/openssl x509 -in /certs/live/tuodominio.duckdns.org/fullchain.pem -text -noout
 ```
 
 ## Migrazione da HTTP a HTTPS
