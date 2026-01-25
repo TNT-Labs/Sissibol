@@ -5,13 +5,37 @@ import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { scadenzeService } from '../../services/scadenze.service';
 import { clientiService } from '../../services/clienti.service';
 import { veicoliService } from '../../services/veicoli.service';
-import { StatoScadenza } from '../../types';
+import { StatoScadenza, Periodicita } from '../../types';
 import type { Scadenza, Cliente, Veicolo } from '../../types';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { Plus, X, Calendar as CalendarIcon, List } from 'lucide-react';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
+
+const MESI = [
+  { value: 1, label: 'Gennaio' },
+  { value: 2, label: 'Febbraio' },
+  { value: 3, label: 'Marzo' },
+  { value: 4, label: 'Aprile' },
+  { value: 5, label: 'Maggio' },
+  { value: 6, label: 'Giugno' },
+  { value: 7, label: 'Luglio' },
+  { value: 8, label: 'Agosto' },
+  { value: 9, label: 'Settembre' },
+  { value: 10, label: 'Ottobre' },
+  { value: 11, label: 'Novembre' },
+  { value: 12, label: 'Dicembre' },
+];
+
+const getMeseLabel = (mese: number): string => {
+  return MESI.find(m => m.value === mese)?.label || '';
+};
+
+// Utility per ottenere l'ultimo giorno del mese
+const getUltimoGiornoMese = (anno: number, mese: number): Date => {
+  return new Date(anno, mese, 0);
+};
 
 moment.locale('it');
 const localizer = momentLocalizer(moment);
@@ -36,12 +60,16 @@ export const ScadenzePage: React.FC = () => {
   const [editingScadenza, setEditingScadenza] = useState<Scadenza | null>(null);
   const [formData, setFormData] = useState<{
     idVeicolo: number;
-    dataScadenza: string;
+    meseScadenza: number;
+    annoScadenza: number;
+    periodicita: Periodicita;
     importoPrevisto: string;
     stato: StatoScadenza;
   }>({
     idVeicolo: 0,
-    dataScadenza: '',
+    meseScadenza: new Date().getMonth() + 1,
+    annoScadenza: new Date().getFullYear(),
+    periodicita: Periodicita.ANNUALE,
     importoPrevisto: '',
     stato: StatoScadenza.DA_PAGARE,
   });
@@ -68,13 +96,17 @@ export const ScadenzePage: React.FC = () => {
   };
 
   const calendarEvents: CalendarEvent[] = useMemo(() => {
-    return scadenze.map((scadenza) => ({
-      id: scadenza.id,
-      title: `${scadenza.veicolo?.targa || 'N/A'} - ${scadenza.veicolo?.cliente?.ragioneSociale || 'N/A'}`,
-      start: new Date(scadenza.dataScadenza),
-      end: new Date(scadenza.dataScadenza),
-      resource: scadenza,
-    }));
+    return scadenze.map((scadenza) => {
+      // L'evento viene mostrato sull'ultimo giorno del mese di scadenza
+      const ultimoGiorno = getUltimoGiornoMese(scadenza.annoScadenza, scadenza.meseScadenza);
+      return {
+        id: scadenza.id,
+        title: `${scadenza.veicolo?.targa || 'N/A'} - ${scadenza.veicolo?.cliente?.ragioneSociale || 'N/A'}`,
+        start: ultimoGiorno,
+        end: ultimoGiorno,
+        resource: scadenza,
+      };
+    });
   }, [scadenze]);
 
   const handleOpenModal = (scadenza?: Scadenza) => {
@@ -82,15 +114,20 @@ export const ScadenzePage: React.FC = () => {
       setEditingScadenza(scadenza);
       setFormData({
         idVeicolo: scadenza.idVeicolo,
-        dataScadenza: format(new Date(scadenza.dataScadenza), 'yyyy-MM-dd'),
+        meseScadenza: scadenza.meseScadenza,
+        annoScadenza: scadenza.annoScadenza,
+        periodicita: scadenza.periodicita,
         importoPrevisto: scadenza.importoPrevisto?.toString() || '',
         stato: scadenza.stato,
       });
     } else {
       setEditingScadenza(null);
+      const oggi = new Date();
       setFormData({
         idVeicolo: veicoli.length > 0 ? veicoli[0].id : 0,
-        dataScadenza: format(new Date(), 'yyyy-MM-dd'),
+        meseScadenza: oggi.getMonth() + 1,
+        annoScadenza: oggi.getFullYear(),
+        periodicita: Periodicita.ANNUALE,
         importoPrevisto: '',
         stato: StatoScadenza.DA_PAGARE,
       });
@@ -107,8 +144,12 @@ export const ScadenzePage: React.FC = () => {
     e.preventDefault();
     try {
       const data = {
-        ...formData,
+        idVeicolo: formData.idVeicolo,
+        meseScadenza: formData.meseScadenza,
+        annoScadenza: formData.annoScadenza,
+        periodicita: formData.periodicita,
         importoPrevisto: formData.importoPrevisto ? parseFloat(formData.importoPrevisto) : undefined,
+        stato: formData.stato,
       };
       if (editingScadenza) {
         await scadenzeService.update(editingScadenza.id, data);
@@ -272,7 +313,10 @@ export const ScadenzePage: React.FC = () => {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Data Scadenza
+                  Scadenza
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Periodicita
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Cliente
@@ -294,7 +338,7 @@ export const ScadenzePage: React.FC = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {scadenze.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
                     Nessuna scadenza trovata
                   </td>
                 </tr>
@@ -302,7 +346,12 @@ export const ScadenzePage: React.FC = () => {
                 scadenze.map((scadenza) => (
                   <tr key={scadenza.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {format(new Date(scadenza.dataScadenza), 'dd/MM/yyyy', { locale: it })}
+                      {getMeseLabel(scadenza.meseScadenza)} {scadenza.annoScadenza}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+                        {scadenza.periodicita === 'QUADRIMESTRALE' ? '4 mesi' : 'Annuale'}
+                      </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {scadenza.veicolo?.cliente?.ragioneSociale || '-'}
@@ -375,13 +424,56 @@ export const ScadenzePage: React.FC = () => {
                   ))}
                 </select>
               </div>
-              <Input
-                label="Data Scadenza *"
-                type="date"
-                value={formData.dataScadenza}
-                onChange={(e) => setFormData({ ...formData, dataScadenza: e.target.value })}
-                required
-              />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Mese Scadenza *
+                  </label>
+                  <select
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={formData.meseScadenza}
+                    onChange={(e) => setFormData({ ...formData, meseScadenza: Number(e.target.value) })}
+                    required
+                  >
+                    {MESI.map((mese) => (
+                      <option key={mese.value} value={mese.value}>
+                        {mese.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Anno *
+                  </label>
+                  <select
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={formData.annoScadenza}
+                    onChange={(e) => setFormData({ ...formData, annoScadenza: Number(e.target.value) })}
+                    required
+                  >
+                    {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() + i).map((anno) => (
+                      <option key={anno} value={anno}>
+                        {anno}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Periodicita *
+                </label>
+                <select
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={formData.periodicita}
+                  onChange={(e) => setFormData({ ...formData, periodicita: e.target.value as Periodicita })}
+                  required
+                >
+                  <option value="ANNUALE">Annuale (12 mesi)</option>
+                  <option value="QUADRIMESTRALE">Quadrimestrale (4 mesi)</option>
+                </select>
+              </div>
               <Input
                 label="Importo Previsto"
                 type="number"

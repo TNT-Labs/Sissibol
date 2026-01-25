@@ -2,9 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { scadenzeService } from '../../services/scadenze.service';
 import type { Scadenza } from '../../types';
-import { format } from 'date-fns';
-import { it } from 'date-fns/locale';
 import { Calendar, AlertCircle, CheckCircle, Clock } from 'lucide-react';
+
+const MESI = [
+  'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
+  'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'
+];
+
+const getMeseLabel = (mese: number): string => MESI[mese - 1] || '';
 
 export const DashboardPage: React.FC = () => {
   const [scadenzeImminenti, setScadenzeImminenti] = useState<Scadenza[]>([]);
@@ -141,7 +146,10 @@ export const DashboardPage: React.FC = () => {
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-medium text-gray-900">
-                      {format(new Date(scadenza.dataScadenza), 'dd MMMM yyyy', { locale: it })}
+                      {getMeseLabel(scadenza.meseScadenza)} {scadenza.annoScadenza}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {scadenza.periodicita === 'QUADRIMESTRALE' ? '4 mesi' : 'Annuale'}
                     </p>
                     <div className="mt-1">
                       <span

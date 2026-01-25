@@ -13,6 +13,13 @@ export const StatoScadenza = {
 
 export type StatoScadenza = typeof StatoScadenza[keyof typeof StatoScadenza];
 
+export const Periodicita = {
+  QUADRIMESTRALE: 'QUADRIMESTRALE',
+  ANNUALE: 'ANNUALE',
+} as const;
+
+export type Periodicita = typeof Periodicita[keyof typeof Periodicita];
+
 export interface Utente {
   id: number;
   email: string;
@@ -51,7 +58,9 @@ export interface Veicolo {
 export interface Scadenza {
   id: number;
   idVeicolo: number;
-  dataScadenza: string;
+  meseScadenza: number;  // 1-12
+  annoScadenza: number;
+  periodicita: Periodicita;
   importoPrevisto?: number;
   stato: StatoScadenza;
   createdAt: string;

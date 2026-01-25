@@ -62,7 +62,9 @@ model Veicolo {
 model Scadenza {
   id              Int       @id @default(autoincrement())
   idVeicolo       Int       @map("id_veicolo")
-  dataScadenza    DateTime  @map("data_scadenza") @db.Date
+  meseScadenza    Int       @map("mese_scadenza")  // 1-12
+  annoScadenza    Int       @map("anno_scadenza")
+  periodicita     Periodicita @default(ANNUALE)
   importoPrevisto Decimal?  @map("importo_previsto") @db.Decimal(10, 2)
   stato           StatoScadenza @default(DA_PAGARE)
   createdAt       DateTime  @default(now())
@@ -78,6 +80,11 @@ enum StatoScadenza {
   DA_PAGARE
   PAGATO
   SCADUTO
+}
+
+enum Periodicita {
+  QUADRIMESTRALE
+  ANNUALE
 }
 
 model Pagamento {
