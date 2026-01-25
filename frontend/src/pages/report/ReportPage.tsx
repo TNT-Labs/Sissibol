@@ -3,6 +3,7 @@ import { clientiService } from '../../services/clienti.service';
 import { scadenzeService } from '../../services/scadenze.service';
 import { pagamentiService } from '../../services/pagamenti.service';
 import type { Cliente, StatoScadenza } from '../../types';
+import { getClienteDisplayName } from '../../types';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { FileText, Download, FileSpreadsheet } from 'lucide-react';
@@ -11,6 +12,7 @@ import { it } from 'date-fns/locale';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
+import { getMeseLabel } from '../../constants/domini';
 
 type ReportType = 'scadenze' | 'pagamenti' | 'clienti';
 
@@ -60,22 +62,22 @@ export const ReportPage: React.FC = () => {
       if (filterCliente) {
         const cliente = clienti.find((c) => c.id === filterCliente);
         if (cliente) {
-          doc.text(`Cliente: ${cliente.ragioneSociale}`, 14, yPos);
+          doc.text(`Cliente: ${getClienteDisplayName(cliente)}`, 14, yPos);
           yPos += 6;
         }
       }
 
       // Tabella scadenze
       const tableData = scadenze.map((s) => [
-        format(new Date(s.dataScadenza), 'dd/MM/yyyy'),
-        s.veicolo?.cliente?.ragioneSociale || '-',
+        `${getMeseLabel(s.meseScadenza)} ${s.annoScadenza}`,
+        s.veicolo?.cliente ? getClienteDisplayName(s.veicolo.cliente) : '-',
         s.veicolo?.targa || '-',
         s.importoPrevisto ? `€ ${s.importoPrevisto}` : '-',
         s.stato.replace('_', ' '),
       ]);
 
       autoTable(doc, {
-        head: [['Data Scadenza', 'Cliente', 'Veicolo', 'Importo', 'Stato']],
+        head: [['Scadenza', 'Cliente', 'Veicolo', 'Importo', 'Stato']],
         body: tableData,
         startY: yPos + 5,
         styles: { fontSize: 9 },
@@ -190,15 +192,15 @@ export const ReportPage: React.FC = () => {
       );
 
       const tableData = clientiData.map((c) => [
-        c.ragioneSociale,
-        c.partitaIva || '-',
+        getClienteDisplayName(c),
+        c.partitaIva || c.codiceFiscale || '-',
         c.email || '-',
         c.telefono || '-',
         c.veicoli?.length || 0,
       ]);
 
       autoTable(doc, {
-        head: [['Ragione Sociale', 'P.IVA', 'Email', 'Telefono', 'Veicoli']],
+        head: [['Nome/Ragione Sociale', 'P.IVA/C.F.', 'Email', 'Telefono', 'Veicoli']],
         body: tableData,
         startY: 40,
         styles: { fontSize: 9 },
@@ -224,8 +226,8 @@ export const ReportPage: React.FC = () => {
       const scadenze = await scadenzeService.getAll(filterStato || undefined, filterCliente);
 
       const data = scadenze.map((s) => ({
-        'Data Scadenza': format(new Date(s.dataScadenza), 'dd/MM/yyyy'),
-        Cliente: s.veicolo?.cliente?.ragioneSociale || '-',
+        'Scadenza': `${getMeseLabel(s.meseScadenza)} ${s.annoScadenza}`,
+        Cliente: s.veicolo?.cliente ? getClienteDisplayName(s.veicolo.cliente) : '-',
         Veicolo: s.veicolo?.targa || '-',
         'Tipo Veicolo': s.veicolo?.tipoVeicolo || '-',
         'Importo Previsto': s.importoPrevisto || 0,
@@ -287,8 +289,8 @@ export const ReportPage: React.FC = () => {
       const clientiData = await clientiService.getAll();
 
       const data = clientiData.map((c) => ({
-        'Ragione Sociale': c.ragioneSociale,
-        'Partita IVA': c.partitaIva || '-',
+        'Nome/Ragione Sociale': getClienteDisplayName(c),
+        'P.IVA/C.F.': c.partitaIva || c.codiceFiscale || '-',
         Indirizzo: c.indirizzo || '-',
         Email: c.email || '-',
         Telefono: c.telefono || '-',
@@ -432,7 +434,7 @@ export const ReportPage: React.FC = () => {
                       <option value="">Tutti i clienti</option>
                       {clienti.map((cliente) => (
                         <option key={cliente.id} value={cliente.id}>
-                          {cliente.ragioneSociale}
+                          {getClienteDisplayName(cliente)}
                         </option>
                       ))}
                     </select>

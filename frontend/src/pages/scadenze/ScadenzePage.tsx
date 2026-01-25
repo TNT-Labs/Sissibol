@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { scadenzeService } from '../../services/scadenze.service';
-import { clientiService } from '../../services/clienti.service';
 import { veicoliService } from '../../services/veicoli.service';
 import { StatoScadenza, Periodicita, getClienteDisplayName } from '../../types';
 import type { Scadenza, Cliente, Veicolo } from '../../types';
@@ -29,7 +28,6 @@ interface ClienteConScadenze {
 
 export const ScadenzePage: React.FC = () => {
   const [scadenze, setScadenze] = useState<Scadenza[]>([]);
-  const [clienti, setClienti] = useState<Cliente[]>([]);
   const [veicoli, setVeicoli] = useState<Veicolo[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -66,13 +64,11 @@ export const ScadenzePage: React.FC = () => {
 
   const loadData = async () => {
     try {
-      const [scadenzeData, clientiData, veicoliData] = await Promise.all([
+      const [scadenzeData, veicoliData] = await Promise.all([
         scadenzeService.getAll(),
-        clientiService.getAll(),
         veicoliService.getAll(),
       ]);
       setScadenze(scadenzeData);
-      setClienti(clientiData);
       setVeicoli(veicoliData);
     } catch (error) {
       console.error('Errore nel caricamento dei dati:', error);

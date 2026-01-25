@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { pagamentiService } from '../../services/pagamenti.service';
 import { scadenzeService } from '../../services/scadenze.service';
-import { StatoScadenza } from '../../types';
+import { StatoScadenza, getClienteDisplayName } from '../../types';
 import type { Pagamento, Scadenza } from '../../types';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { Plus, X, CreditCard, Upload, FileText, Trash2, Edit } from 'lucide-react';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
+import { getMeseLabel } from '../../constants/domini';
 
 export const PagamentiPage: React.FC = () => {
   const [pagamenti, setPagamenti] = useState<Pagamento[]>([]);
@@ -204,7 +205,7 @@ export const PagamentiPage: React.FC = () => {
                     {format(new Date(pagamento.dataPagamento), 'dd/MM/yyyy', { locale: it })}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {pagamento.scadenza?.veicolo?.cliente?.ragioneSociale || '-'}
+                    {pagamento.scadenza?.veicolo?.cliente ? getClienteDisplayName(pagamento.scadenza.veicolo.cliente) : '-'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {pagamento.scadenza?.veicolo?.targa || '-'}
@@ -278,8 +279,8 @@ export const PagamentiPage: React.FC = () => {
                   <option value="">Seleziona una scadenza</option>
                   {scadenze.map((scadenza) => (
                     <option key={scadenza.id} value={scadenza.id}>
-                      {scadenza.veicolo?.targa} - {scadenza.veicolo?.cliente?.ragioneSociale} -{' '}
-                      {format(new Date(scadenza.dataScadenza), 'dd/MM/yyyy')}
+                      {scadenza.veicolo?.targa} - {scadenza.veicolo?.cliente ? getClienteDisplayName(scadenza.veicolo.cliente) : 'N/A'} -{' '}
+                      {getMeseLabel(scadenza.meseScadenza)} {scadenza.annoScadenza}
                     </option>
                   ))}
                   {editingPagamento && (
