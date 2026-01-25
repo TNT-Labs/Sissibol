@@ -20,6 +20,13 @@ export const Periodicita = {
 
 export type Periodicita = typeof Periodicita[keyof typeof Periodicita];
 
+export const TipoCliente = {
+  PERSONA_FISICA: 'PERSONA_FISICA',
+  PERSONA_GIURIDICA: 'PERSONA_GIURIDICA',
+} as const;
+
+export type TipoCliente = typeof TipoCliente[keyof typeof TipoCliente];
+
 export interface Utente {
   id: number;
   email: string;
@@ -30,8 +37,15 @@ export interface Utente {
 
 export interface Cliente {
   id: number;
-  ragioneSociale: string;
+  tipoCliente: TipoCliente;
+  // Persona Giuridica
+  ragioneSociale?: string;
   partitaIva?: string;
+  // Persona Fisica
+  nome?: string;
+  cognome?: string;
+  codiceFiscale?: string;
+  // Campi comuni
   indirizzo?: string;
   email?: string;
   telefono?: string;
@@ -40,6 +54,14 @@ export interface Cliente {
   updatedAt: string;
   veicoli?: Veicolo[];
 }
+
+// Helper per ottenere il nome visualizzato del cliente
+export const getClienteDisplayName = (cliente: Cliente): string => {
+  if (cliente.tipoCliente === TipoCliente.PERSONA_FISICA) {
+    return `${cliente.cognome || ''} ${cliente.nome || ''}`.trim() || 'N/A';
+  }
+  return cliente.ragioneSociale || 'N/A';
+};
 
 export interface Veicolo {
   id: number;

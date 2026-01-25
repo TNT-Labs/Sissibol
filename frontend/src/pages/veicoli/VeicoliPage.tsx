@@ -1,9 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { veicoliService } from '../../services/veicoli.service';
 import { clientiService } from '../../services/clienti.service';
+import { getClienteDisplayName } from '../../types';
 import type { Veicolo, Cliente } from '../../types';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
+import { SearchableSelect } from '../../components/common/SearchableSelect';
+import { TIPI_VEICOLO, CLASSI_AMBIENTALI, REGIONI_ITALIANE } from '../../constants/domini';
 import { Plus, Search, Edit, Trash2, X, Car } from 'lucide-react';
 
 export const VeicoliPage: React.FC = () => {
@@ -140,7 +143,7 @@ export const VeicoliPage: React.FC = () => {
               <option value="">Tutti i clienti</option>
               {clienti.map((cliente) => (
                 <option key={cliente.id} value={cliente.id}>
-                  {cliente.ragioneSociale}
+                  {getClienteDisplayName(cliente)}
                 </option>
               ))}
             </select>
@@ -191,7 +194,7 @@ export const VeicoliPage: React.FC = () => {
                     {veicolo.targa}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {veicolo.cliente?.ragioneSociale || '-'}
+                    {veicolo.cliente ? getClienteDisplayName(veicolo.cliente) : '-'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {veicolo.tipoVeicolo || '-'}
@@ -249,7 +252,7 @@ export const VeicoliPage: React.FC = () => {
                   <option value="">Seleziona un cliente</option>
                   {clienti.map((cliente) => (
                     <option key={cliente.id} value={cliente.id}>
-                      {cliente.ragioneSociale}
+                      {getClienteDisplayName(cliente)}
                     </option>
                   ))}
                 </select>
@@ -261,23 +264,28 @@ export const VeicoliPage: React.FC = () => {
                 required
                 placeholder="AA123BB"
               />
-              <Input
+              <SearchableSelect
                 label="Tipo Veicolo"
+                options={TIPI_VEICOLO}
                 value={formData.tipoVeicolo}
-                onChange={(e) => setFormData({ ...formData, tipoVeicolo: e.target.value })}
-                placeholder="es. Autotreno, Autocarro, Trattore stradale"
+                onChange={(value) => setFormData({ ...formData, tipoVeicolo: value })}
+                placeholder="Seleziona o cerca..."
+                allowCustom
               />
-              <Input
+              <SearchableSelect
                 label="Classe Ambientale"
+                options={CLASSI_AMBIENTALI}
                 value={formData.classeAmbientale}
-                onChange={(e) => setFormData({ ...formData, classeAmbientale: e.target.value })}
-                placeholder="es. Euro 6, Euro 5"
+                onChange={(value) => setFormData({ ...formData, classeAmbientale: value })}
+                placeholder="Seleziona o cerca..."
+                allowCustom
               />
-              <Input
+              <SearchableSelect
                 label="Regione"
+                options={REGIONI_ITALIANE}
                 value={formData.regione}
-                onChange={(e) => setFormData({ ...formData, regione: e.target.value })}
-                placeholder="es. Lombardia, Lazio"
+                onChange={(value) => setFormData({ ...formData, regione: value })}
+                placeholder="Seleziona o cerca..."
               />
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
