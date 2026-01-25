@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { clientiService } from '../../services/clienti.service';
+import { TipoCliente, getClienteDisplayName } from '../../types';
 import type { Cliente } from '../../types';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
-import { Plus, Search, Edit, Trash2, X } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, X, Building2, User } from 'lucide-react';
 
 export const ClientiPage: React.FC = () => {
   const [clienti, setClienti] = useState<Cliente[]>([]);
@@ -12,8 +13,12 @@ export const ClientiPage: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
   const [editingCliente, setEditingCliente] = useState<Cliente | null>(null);
   const [formData, setFormData] = useState({
+    tipoCliente: TipoCliente.PERSONA_GIURIDICA as TipoCliente,
     ragioneSociale: '',
     partitaIva: '',
+    nome: '',
+    cognome: '',
+    codiceFiscale: '',
     indirizzo: '',
     email: '',
     telefono: '',
@@ -43,8 +48,12 @@ export const ClientiPage: React.FC = () => {
     if (cliente) {
       setEditingCliente(cliente);
       setFormData({
-        ragioneSociale: cliente.ragioneSociale,
+        tipoCliente: cliente.tipoCliente,
+        ragioneSociale: cliente.ragioneSociale || '',
         partitaIva: cliente.partitaIva || '',
+        nome: cliente.nome || '',
+        cognome: cliente.cognome || '',
+        codiceFiscale: cliente.codiceFiscale || '',
         indirizzo: cliente.indirizzo || '',
         email: cliente.email || '',
         telefono: cliente.telefono || '',
@@ -53,8 +62,12 @@ export const ClientiPage: React.FC = () => {
     } else {
       setEditingCliente(null);
       setFormData({
+        tipoCliente: TipoCliente.PERSONA_GIURIDICA,
         ragioneSociale: '',
         partitaIva: '',
+        nome: '',
+        cognome: '',
+        codiceFiscale: '',
         indirizzo: '',
         email: '',
         telefono: '',
@@ -95,6 +108,8 @@ export const ClientiPage: React.FC = () => {
     }
   };
 
+  const isPF = formData.tipoCliente === TipoCliente.PERSONA_FISICA;
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -118,7 +133,7 @@ export const ClientiPage: React.FC = () => {
         <div className="flex space-x-2">
           <div className="flex-1">
             <Input
-              placeholder="Cerca per ragione sociale, P.IVA o email..."
+              placeholder="Cerca per nome, ragione sociale, P.IVA, C.F. o email..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
@@ -137,10 +152,13 @@ export const ClientiPage: React.FC = () => {
           <thead className="bg-gray-50">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Ragione Sociale
+                Tipo
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                P.IVA
+                Nome / Ragione Sociale
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                P.IVA / C.F.
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Email
@@ -154,36 +172,59 @@ export const ClientiPage: React.FC = () => {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {clienti.map((cliente) => (
-              <tr key={cliente.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  {cliente.ragioneSociale}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {cliente.partitaIva || '-'}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {cliente.email || '-'}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {cliente.telefono || '-'}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <button
-                    onClick={() => handleOpenModal(cliente)}
-                    className="text-blue-600 hover:text-blue-900 mr-4"
-                  >
-                    <Edit size={18} />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(cliente.id)}
-                    className="text-red-600 hover:text-red-900"
-                  >
-                    <Trash2 size={18} />
-                  </button>
+            {clienti.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+                  Nessun cliente trovato
                 </td>
               </tr>
-            ))}
+            ) : (
+              clienti.map((cliente) => (
+                <tr key={cliente.id} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {cliente.tipoCliente === TipoCliente.PERSONA_FISICA ? (
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                        <User size={12} className="mr-1" />
+                        PF
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                        <Building2 size={12} className="mr-1" />
+                        PG
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    {getClienteDisplayName(cliente)}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {cliente.tipoCliente === TipoCliente.PERSONA_FISICA
+                      ? cliente.codiceFiscale || '-'
+                      : cliente.partitaIva || '-'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {cliente.email || '-'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {cliente.telefono || '-'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <button
+                      onClick={() => handleOpenModal(cliente)}
+                      className="text-blue-600 hover:text-blue-900 mr-4"
+                    >
+                      <Edit size={18} />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(cliente.id)}
+                      className="text-red-600 hover:text-red-900"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
@@ -201,33 +242,99 @@ export const ClientiPage: React.FC = () => {
               </button>
             </div>
             <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
-              <Input
-                label="Ragione Sociale *"
-                value={formData.ragioneSociale}
-                onChange={(e) => setFormData({ ...formData, ragioneSociale: e.target.value })}
-                required
-              />
-              <Input
-                label="Partita IVA"
-                value={formData.partitaIva}
-                onChange={(e) => setFormData({ ...formData, partitaIva: e.target.value })}
-              />
+              {/* Tipo Cliente */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Tipo Cliente *
+                </label>
+                <div className="flex space-x-4">
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      name="tipoCliente"
+                      value={TipoCliente.PERSONA_GIURIDICA}
+                      checked={formData.tipoCliente === TipoCliente.PERSONA_GIURIDICA}
+                      onChange={(e) => setFormData({ ...formData, tipoCliente: e.target.value as TipoCliente })}
+                      className="mr-2"
+                    />
+                    <Building2 size={16} className="mr-1" />
+                    Persona Giuridica
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      name="tipoCliente"
+                      value={TipoCliente.PERSONA_FISICA}
+                      checked={formData.tipoCliente === TipoCliente.PERSONA_FISICA}
+                      onChange={(e) => setFormData({ ...formData, tipoCliente: e.target.value as TipoCliente })}
+                      className="mr-2"
+                    />
+                    <User size={16} className="mr-1" />
+                    Persona Fisica
+                  </label>
+                </div>
+              </div>
+
+              {/* Campi condizionali */}
+              {isPF ? (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <Input
+                      label="Cognome *"
+                      value={formData.cognome}
+                      onChange={(e) => setFormData({ ...formData, cognome: e.target.value })}
+                      required
+                    />
+                    <Input
+                      label="Nome *"
+                      value={formData.nome}
+                      onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <Input
+                    label="Codice Fiscale"
+                    value={formData.codiceFiscale}
+                    onChange={(e) => setFormData({ ...formData, codiceFiscale: e.target.value.toUpperCase() })}
+                    maxLength={16}
+                  />
+                </>
+              ) : (
+                <>
+                  <Input
+                    label="Ragione Sociale *"
+                    value={formData.ragioneSociale}
+                    onChange={(e) => setFormData({ ...formData, ragioneSociale: e.target.value })}
+                    required
+                  />
+                  <Input
+                    label="Partita IVA"
+                    value={formData.partitaIva}
+                    onChange={(e) => setFormData({ ...formData, partitaIva: e.target.value })}
+                    maxLength={11}
+                  />
+                </>
+              )}
+
+              {/* Campi comuni */}
               <Input
                 label="Indirizzo"
                 value={formData.indirizzo}
                 onChange={(e) => setFormData({ ...formData, indirizzo: e.target.value })}
               />
-              <Input
-                label="Email"
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              />
-              <Input
-                label="Telefono"
-                value={formData.telefono}
-                onChange={(e) => setFormData({ ...formData, telefono: e.target.value })}
-              />
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  label="Email"
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                />
+                <Input
+                  label="Telefono"
+                  value={formData.telefono}
+                  onChange={(e) => setFormData({ ...formData, telefono: e.target.value })}
+                />
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Note

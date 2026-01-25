@@ -26,16 +26,28 @@ enum Ruolo {
   OPERATORE
 }
 
+enum TipoCliente {
+  PERSONA_FISICA
+  PERSONA_GIURIDICA
+}
+
 model Cliente {
-  id              Int       @id @default(autoincrement())
-  ragioneSociale  String    @map("ragione_sociale")
-  partitaIva      String?   @map("partita_iva")
+  id              Int          @id @default(autoincrement())
+  tipoCliente     TipoCliente  @default(PERSONA_GIURIDICA) @map("tipo_cliente")
+  // Campi per Persona Giuridica
+  ragioneSociale  String?      @map("ragione_sociale")
+  partitaIva      String?      @map("partita_iva")
+  // Campi per Persona Fisica
+  nome            String?
+  cognome         String?
+  codiceFiscale   String?      @map("codice_fiscale")
+  // Campi comuni
   indirizzo       String?
   email           String?
   telefono        String?
   note            String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 
   veicoli         Veicolo[]
 

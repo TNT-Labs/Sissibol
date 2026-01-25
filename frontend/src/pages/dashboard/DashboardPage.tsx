@@ -2,14 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { scadenzeService } from '../../services/scadenze.service';
 import type { Scadenza } from '../../types';
+import { getClienteDisplayName } from '../../types';
 import { Calendar, AlertCircle, CheckCircle, Clock } from 'lucide-react';
-
-const MESI = [
-  'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
-  'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'
-];
-
-const getMeseLabel = (mese: number): string => MESI[mese - 1] || '';
+import { getMeseLabel } from '../../constants/domini';
 
 export const DashboardPage: React.FC = () => {
   const [scadenzeImminenti, setScadenzeImminenti] = useState<Scadenza[]>([]);
@@ -138,7 +133,7 @@ export const DashboardPage: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
                     <p className="font-medium text-gray-900">
-                      {scadenza.veicolo?.cliente?.ragioneSociale}
+                      {scadenza.veicolo?.cliente ? getClienteDisplayName(scadenza.veicolo.cliente) : 'N/A'}
                     </p>
                     <p className="text-sm text-gray-600">
                       Targa: {scadenza.veicolo?.targa}
