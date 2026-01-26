@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { scadenzeService } from '../../services/scadenze.service';
 import { veicoliService } from '../../services/veicoli.service';
+import { bolloService } from '../../services/bollo.service';
 import { StatoScadenza, Periodicita, getClienteDisplayName } from '../../types';
 import type { Scadenza, Cliente, Veicolo } from '../../types';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
-import { Plus, X, Calendar as CalendarIcon, ChevronDown, ChevronRight, Car, Edit, Trash2 } from 'lucide-react';
+import { Plus, X, Calendar as CalendarIcon, ChevronDown, ChevronRight, Car, Edit, Trash2, Calculator } from 'lucide-react';
 import { MESI, getMeseLabel } from '../../constants/domini';
 
 // Calcola il mese successivo
@@ -186,6 +187,16 @@ export const ScadenzePage: React.FC = () => {
     }
   };
 
+  const handleRicalcolaBollo = async (id: number) => {
+    try {
+      await scadenzeService.ricalcolaImporto(id);
+      loadData();
+    } catch (error) {
+      console.error('Errore nel ricalcolo del bollo:', error);
+      alert('Errore nel ricalcolo del bollo. Verifica che il veicolo abbia tutti i parametri necessari.');
+    }
+  };
+
   const getStatoColor = (stato: string) => {
     switch (stato) {
       case 'DA_PAGARE':
@@ -343,9 +354,20 @@ export const ScadenzePage: React.FC = () => {
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
+                                    handleRicalcolaBollo(scadenza.id);
+                                  }}
+                                  className="text-green-600 hover:text-green-900 mr-3"
+                                  title="Ricalcola importo bollo"
+                                >
+                                  <Calculator size={16} />
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
                                     handleOpenModal(scadenza);
                                   }}
                                   className="text-blue-600 hover:text-blue-900 mr-3"
+                                  title="Modifica scadenza"
                                 >
                                   <Edit size={16} />
                                 </button>
@@ -355,6 +377,7 @@ export const ScadenzePage: React.FC = () => {
                                     handleDelete(scadenza.id);
                                   }}
                                   className="text-red-600 hover:text-red-900"
+                                  title="Elimina scadenza"
                                 >
                                   <Trash2 size={16} />
                                 </button>
@@ -453,14 +476,19 @@ export const ScadenzePage: React.FC = () => {
                   <option value="QUADRIMESTRALE">Quadrimestrale (4 mesi)</option>
                 </select>
               </div>
-              <Input
-                label="Importo Previsto"
-                type="number"
-                step="0.01"
-                value={formData.importoPrevisto}
-                onChange={(e) => setFormData({ ...formData, importoPrevisto: e.target.value })}
-                placeholder="es. 150.00"
-              />
+              <div>
+                <Input
+                  label="Importo Previsto"
+                  type="number"
+                  step="0.01"
+                  value={formData.importoPrevisto}
+                  onChange={(e) => setFormData({ ...formData, importoPrevisto: e.target.value })}
+                  placeholder="es. 150.00"
+                />
+                <p className="mt-1 text-sm text-gray-500">
+                  Lascia vuoto per calcolare automaticamente in base alle tariffe configurate
+                </p>
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Stato *</label>
                 <select

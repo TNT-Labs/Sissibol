@@ -8,6 +8,7 @@ import {
   Calendar,
   CreditCard,
   FileText,
+  Settings,
   LogOut,
   Menu,
   X,
@@ -29,6 +30,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     { name: 'Scadenziario', href: '/scadenze', icon: Calendar },
     { name: 'Pagamenti', href: '/pagamenti', icon: CreditCard },
     { name: 'Report', href: '/report', icon: FileText },
+    { name: 'Tariffe Bollo', href: '/tariffe', icon: Settings },
   ];
 
   const isActive = (path: string) => location.pathname === path;
