@@ -2,41 +2,95 @@
 
 Progressive Web App per la gestione dello scadenziario bolli per autotrasporto.
 
-## 📋 Caratteristiche
+## Caratteristiche
 
-- ✅ **Gestione Clienti**: Anagrafica completa dei clienti
-- ✅ **Gestione Veicoli**: Catalogazione veicoli per cliente
-- ✅ **Scadenziario Bolli**: Tracking delle scadenze con stati (DA_PAGARE, PAGATO, SCADUTO)
-- ✅ **Pagamenti**: Registrazione pagamenti con upload ricevute
-- ✅ **Dashboard**: Vista riepilogativa delle scadenze imminenti
-- ✅ **Report**: Export PDF/Excel (in sviluppo)
-- ✅ **Notifiche**: Sistema di notifiche in-app (in sviluppo)
-- ✅ **PWA**: Installabile e funzionante offline
-- ✅ **Autenticazione**: JWT con ruoli (ADMIN, OPERATORE)
+### Gestione Clienti
+- **Persona Fisica (PF)**: Nome, Cognome, Codice Fiscale
+- **Persona Giuridica (PG)**: Ragione Sociale, Partita IVA
+- Campi comuni: Indirizzo, Email, Telefono, Note
+- Ricerca su tutti i campi (nome, cognome, ragione sociale, P.IVA, C.F., email)
 
-## 🛠️ Stack Tecnologico
+### Gestione Veicoli
+- Catalogazione veicoli per cliente
+- Dati tecnici completi per calcolo bollo:
+  - Tipo veicolo e classe ambientale (Euro 0-6)
+  - Alimentazione (Benzina, Diesel, GPL, Metano, Elettrico, Ibrido)
+  - Potenza (KW), Cilindrata (cc)
+  - Portata (KG), Peso complessivo (KG)
+  - Numero assi, Tipo sospensione
+  - Numero posti, Massa rimorchiabile
+  - Data immatricolazione (per ultratrentennali)
+
+### Scadenziario Bolli
+- Tracking scadenze con stati: DA_PAGARE, PAGATO, SCADUTO
+- Periodicità: ANNUALE o QUADRIMESTRALE
+- Aggiornamento automatico scadenze scadute
+- Notifiche scadenze imminenti (30 giorni)
+- Calcolo automatico importo previsto
+
+### Sistema Calcolo Bollo
+- **Tariffario configurabile** per regione e anno
+- Supporto tariffe Lombardia 2026 precaricate
+- Calcolo basato su:
+  - Tipo veicolo (Autovettura, Motociclo, Autocarro, Rimorchio, etc.)
+  - Categoria Euro (0, 1, 2, 3, 4-5-6)
+  - Potenza KW, Cilindrata, Portata, Peso, Assi
+  - Tipo sospensione (pneumatiche/non pneumatiche)
+- Gestione esenzioni e riduzioni:
+  - Veicoli elettrici (esenzione 5 anni)
+  - Veicoli GPL/Metano (riduzione 25%)
+  - Veicoli ultratrentennali (interesse storico)
+  - Sconto RID (domiciliazione bancaria)
+
+### Pagamenti
+- Registrazione pagamenti con data e importo
+- Upload ricevute (file allegati)
+- Metodi di pagamento configurabili
+- Aggiornamento automatico stato scadenza
+
+### Report
+- Export PDF con jsPDF
+- Export Excel con xlsx
+- Filtri per periodo, cliente, stato
+
+### PWA - Progressive Web App
+- Installabile su Desktop e Mobile
+- Funzionamento offline (Service Worker)
+- **Aggiornamento automatico**: prompt quando disponibile nuova versione
+- Cache intelligente (NetworkFirst per API)
+- Controllo aggiornamenti ogni 60 secondi
+
+### Autenticazione e Sicurezza
+- JWT con ruoli (ADMIN, OPERATORE)
+- Password criptate con bcrypt
+- Guards per protezione routes
+- Validazione input con class-validator
+
+## Stack Tecnologico
 
 ### Backend
-- **NestJS** - Framework Node.js
-- **Prisma ORM** - Database ORM
-- **PostgreSQL** - Database relazionale
-- **JWT** - Autenticazione
-- **Bcrypt** - Cifratura password
+- **NestJS 10** - Framework Node.js
+- **Prisma ORM 5** - Database ORM con migrations
+- **PostgreSQL 14+** - Database relazionale
+- **JWT** - Autenticazione stateless
+- **class-validator** - Validazione DTO
+- **Multer** - Upload file
 
 ### Frontend
 - **React 19** - UI Library
-- **TypeScript** - Type safety
-- **Vite** - Build tool
-- **Tailwind CSS** - Styling
-- **React Router** - Routing
+- **TypeScript 5.9** - Type safety
+- **Vite 7** - Build tool veloce
+- **Tailwind CSS 3** - Utility-first styling
+- **React Router 6** - Routing SPA
 - **Axios** - HTTP client
-- **date-fns** - Date manipulation
-- **lucide-react** - Icons
-- **vite-plugin-pwa** - PWA support
+- **date-fns** - Manipolazione date
+- **lucide-react** - Icone moderne
+- **vite-plugin-pwa** - PWA support con Workbox
+- **jsPDF / xlsx** - Export documenti
 
-## 🚀 Setup e Installazione
+## Setup e Installazione
 
-### 🐳 Metodo 1: Docker (Consigliato)
+### Metodo 1: Docker (Consigliato)
 
 **Prerequisiti:**
 - Docker >= 20.x
@@ -57,53 +111,39 @@ docker-compose up -d
 # - Frontend: http://localhost
 # - Backend API: http://localhost:3000
 # - Database: localhost:5432
-
-# Crea il primo utente amministratore
-make seed-admin
-# Oppure manualmente:
-curl -X POST http://localhost:3000/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"email":"admin@sissibol.com","password":"admin123","ruolo":"ADMIN"}'
 ```
 
-**Comandi utili (con Makefile):**
+**Comandi utili:**
 
 ```bash
-make help           # Mostra tutti i comandi disponibili
-make up             # Avvia tutti i servizi
-make down           # Ferma tutti i servizi
-make logs           # Mostra i log di tutti i servizi
-make restart        # Riavvia tutti i servizi
-make clean          # Rimuove tutti i container e volumi
-make rebuild        # Ricostruisce tutto da zero
-make prisma-studio  # Apri Prisma Studio
-make db-shell       # Apri shell PostgreSQL
+# Avvia i servizi
+docker-compose up -d
+
+# Ferma i servizi
+docker-compose down
+
+# Visualizza log
+docker-compose logs -f
+
+# Ricostruisci le immagini (dopo modifiche al codice)
+docker-compose build --no-cache
+docker-compose up -d
+
+# Accedi alla shell del backend
+docker-compose exec backend sh
+
+# Accedi al database
+docker-compose exec postgres psql -U sissibol -d sissibol
 ```
 
-**Configurazione personalizzata:**
-
-Per modificare le configurazioni, edita il file `docker-compose.yml`:
-- Cambia le porte esposte
-- Modifica le credenziali del database
-- Aggiorna il JWT_SECRET per produzione
-
----
-
-### 💻 Metodo 2: Installazione Locale
+### Metodo 2: Installazione Locale
 
 **Prerequisiti:**
 - Node.js >= 18.x
 - PostgreSQL >= 14.x
-- npm o yarn
+- npm
 
-### 1. Clona il repository
-
-```bash
-git clone <repository-url>
-cd Sissibol
-```
-
-### 2. Setup Backend
+#### 1. Setup Backend
 
 ```bash
 cd backend
@@ -119,10 +159,10 @@ cp .env.example .env
 npx prisma generate
 
 # Crea il database e esegui le migration
-npx prisma migrate dev --name init
+npx prisma migrate dev
 
-# (Opzionale) Apri Prisma Studio per visualizzare il database
-npx prisma studio
+# (Opzionale) Carica tariffe Lombardia 2026
+npx ts-node prisma/seed-tariffe-lombardia-2026.ts
 
 # Avvia il server in modalità sviluppo
 npm run start:dev
@@ -130,10 +170,10 @@ npm run start:dev
 
 Il backend sarà disponibile su `http://localhost:3000`
 
-### 3. Setup Frontend
+#### 2. Setup Frontend
 
 ```bash
-cd ../frontend
+cd frontend
 
 # Installa dipendenze
 npm install
@@ -147,7 +187,7 @@ npm run dev
 
 Il frontend sarà disponibile su `http://localhost:5173`
 
-## 📝 Variabili d'Ambiente
+## Variabili d'Ambiente
 
 ### Backend (.env)
 
@@ -165,149 +205,168 @@ NODE_ENV="development"
 VITE_API_URL=http://localhost:3000
 ```
 
-## 🗄️ Database Schema
+## Schema Database
 
-```sql
-- utenti (id, email, password, ruolo)
-- clienti (id, ragione_sociale, partita_iva, indirizzo, email, telefono, note)
-- veicoli (id, id_cliente, targa, tipo_veicolo, classe_ambientale, regione, note)
-- scadenze (id, id_veicolo, data_scadenza, importo_previsto, stato)
-- pagamenti (id, id_scadenza, data_pagamento, importo_pagato, metodo_pagamento, ricevuta_file)
+### Entità Principali
+
+```
+utenti
+├── id (PK)
+├── email (unique)
+├── password (bcrypt)
+├── ruolo (ADMIN | OPERATORE)
+└── timestamps
+
+clienti
+├── id (PK)
+├── tipoCliente (PERSONA_FISICA | PERSONA_GIURIDICA)
+├── ragioneSociale (per PG)
+├── partitaIva (per PG)
+├── nome, cognome (per PF)
+├── codiceFiscale (per PF)
+├── indirizzo, email, telefono, note
+└── timestamps
+
+veicoli
+├── id (PK)
+├── idCliente (FK -> clienti)
+├── targa
+├── tipoVeicolo, classeAmbientale, regione
+├── alimentazione, potenzaKw, cilindrata
+├── portataKg, pesoComplessivoKg
+├── numeroAssi, tipoSospensione
+├── numeroPosti, massaRimorchiabileKg
+├── dataImmatricolazione, note
+└── timestamps
+
+scadenze
+├── id (PK)
+├── idVeicolo (FK -> veicoli)
+├── meseScadenza (1-12), annoScadenza
+├── periodicita (ANNUALE | QUADRIMESTRALE)
+├── importoPrevisto
+├── stato (DA_PAGARE | PAGATO | SCADUTO)
+└── timestamps
+
+pagamenti
+├── id (PK)
+├── idScadenza (FK -> scadenze)
+├── dataPagamento, importoPagato
+├── metodoPagamento, ricevutaFile
+└── timestamps
 ```
 
-## 🔑 Primo Accesso
+### Configurazione Tariffe
 
-Per creare il primo utente amministratore:
+```
+configurazioni_bollo
+├── id (PK)
+├── annoValidita, regione
+├── scontoRid (% sconto domiciliazione)
+├── attivo, note
+└── timestamps
 
-```bash
-# Nel backend, usa Prisma Studio o esegui una query SQL
-npx prisma studio
+tariffe_bollo
+├── id (PK)
+├── idConfigurazione (FK)
+├── tipoVeicolo, categoriaEuro
+├── unitaMisura (KW | CC | KG | POSTI | ASSI | FISSO)
+├── sogliaMin, sogliaMax
+├── importoUnitario, importoFisso
+├── tipoSospensione, periodicita
+├── descrizione, ordine
+└── timestamps
 
-# Oppure usa l'endpoint /auth/register via API:
-POST http://localhost:3000/auth/register
-{
-  "email": "admin@example.com",
-  "password": "password123",
-  "ruolo": "ADMIN"
-}
+esenzioni_bollo
+├── id (PK)
+├── idConfigurazione (FK)
+├── tipoEsenzione (TOTALE | PARZIALE)
+├── percentualeRiduzione
+├── tipoVeicolo, alimentazione
+├── anniDaImmatricolazione
+├── descrizione, note
+└── timestamps
 ```
 
-## 📱 PWA - Progressive Web App
-
-L'applicazione è configurata come PWA e può essere installata su:
-- Desktop (Chrome, Edge, Firefox)
-- Mobile (iOS Safari, Android Chrome)
-
-Funzionalità offline:
-- Cache delle risorse statiche
-- Cache delle chiamate API (NetworkFirst strategy)
-- Service Worker auto-aggiornante
-
-## 🔒 Sicurezza
-
-- Password criptate con bcrypt (salt rounds: 10)
-- Autenticazione JWT
-- Guards per protezione routes
-- CORS configurato
-- Validazione input con class-validator
-- XSS protection
-
-## 📚 API Endpoints
+## API Endpoints
 
 ### Autenticazione
-- `POST /auth/login` - Login
-- `POST /auth/register` - Registrazione
-- `GET /auth/profile` - Profilo utente
+| Metodo | Endpoint | Descrizione |
+|--------|----------|-------------|
+| POST | `/auth/login` | Login utente |
+| POST | `/auth/register` | Registrazione nuovo utente |
+| GET | `/auth/profile` | Profilo utente corrente |
 
 ### Clienti
-- `GET /clienti` - Lista clienti (con ricerca)
-- `GET /clienti/:id` - Dettaglio cliente
-- `POST /clienti` - Crea cliente
-- `PATCH /clienti/:id` - Aggiorna cliente
-- `DELETE /clienti/:id` - Elimina cliente
+| Metodo | Endpoint | Descrizione |
+|--------|----------|-------------|
+| GET | `/clienti` | Lista clienti (con ricerca) |
+| GET | `/clienti/:id` | Dettaglio cliente con veicoli |
+| POST | `/clienti` | Crea nuovo cliente (PF o PG) |
+| PATCH | `/clienti/:id` | Aggiorna cliente |
+| DELETE | `/clienti/:id` | Elimina cliente |
 
 ### Veicoli
-- `GET /veicoli` - Lista veicoli (filtro per cliente)
-- `GET /veicoli/:id` - Dettaglio veicolo
-- `POST /veicoli` - Crea veicolo
-- `PATCH /veicoli/:id` - Aggiorna veicolo
-- `DELETE /veicoli/:id` - Elimina veicolo
+| Metodo | Endpoint | Descrizione |
+|--------|----------|-------------|
+| GET | `/veicoli` | Lista veicoli (filtro per cliente) |
+| GET | `/veicoli/:id` | Dettaglio veicolo con scadenze |
+| POST | `/veicoli` | Crea nuovo veicolo |
+| PATCH | `/veicoli/:id` | Aggiorna veicolo |
+| DELETE | `/veicoli/:id` | Elimina veicolo |
 
 ### Scadenze
-- `GET /scadenze` - Lista scadenze (filtro per stato/cliente)
-- `GET /scadenze/in-scadenza` - Scadenze imminenti
-- `GET /scadenze/:id` - Dettaglio scadenza
-- `POST /scadenze` - Crea scadenza
-- `PATCH /scadenze/:id` - Aggiorna scadenza
-- `DELETE /scadenze/:id` - Elimina scadenza
+| Metodo | Endpoint | Descrizione |
+|--------|----------|-------------|
+| GET | `/scadenze` | Lista scadenze (filtro stato/cliente) |
+| GET | `/scadenze/in-scadenza` | Scadenze imminenti (30 giorni) |
+| GET | `/scadenze/:id` | Dettaglio scadenza |
+| POST | `/scadenze` | Crea nuova scadenza |
+| PATCH | `/scadenze/:id` | Aggiorna scadenza |
+| POST | `/scadenze/:id/ricalcola` | Ricalcola importo |
+| DELETE | `/scadenze/:id` | Elimina scadenza |
 
 ### Pagamenti
-- `GET /pagamenti` - Lista pagamenti
-- `GET /pagamenti/:id` - Dettaglio pagamento
-- `POST /pagamenti` - Crea pagamento (con upload ricevuta)
-- `PATCH /pagamenti/:id` - Aggiorna pagamento
-- `DELETE /pagamenti/:id` - Elimina pagamento
+| Metodo | Endpoint | Descrizione |
+|--------|----------|-------------|
+| GET | `/pagamenti` | Lista pagamenti |
+| GET | `/pagamenti/:id` | Dettaglio pagamento |
+| POST | `/pagamenti` | Crea pagamento (con upload) |
+| PATCH | `/pagamenti/:id` | Aggiorna pagamento |
+| DELETE | `/pagamenti/:id` | Elimina pagamento |
 
-## 🧪 Testing
+### Calcolo Bollo
+| Metodo | Endpoint | Descrizione |
+|--------|----------|-------------|
+| GET | `/bollo/calcola/:idVeicolo` | Calcola bollo per veicolo |
+| GET | `/bollo/cliente/:idCliente` | Calcola bolli per tutti i veicoli cliente |
+| POST | `/bollo/aggiorna-scadenze/:idVeicolo` | Aggiorna importi scadenze future |
+| GET | `/bollo/configurazioni` | Lista configurazioni tariffe |
+| GET | `/bollo/configurazioni/:id` | Dettaglio configurazione |
+| POST | `/bollo/configurazioni` | Crea configurazione |
+| POST | `/bollo/configurazioni/:id/duplica` | Duplica per nuovo anno |
+| GET | `/bollo/configurazioni/:id/tariffe` | Lista tariffe configurazione |
+| POST | `/bollo/configurazioni/:id/tariffe` | Crea nuova tariffa |
+| POST | `/bollo/tariffe/:id` | Aggiorna tariffa |
 
-### Con Docker
-```bash
-# Backend tests
-docker-compose exec backend npm test
+## Tipi Veicolo Supportati
 
-# Frontend tests
-docker-compose exec frontend npm test
-```
+Il sistema supporta i seguenti tipi di veicolo con tariffe specifiche:
 
-### Senza Docker
-```bash
-# Backend
-cd backend
-npm test
+| Tipo Veicolo | Unità di Misura | Note |
+|--------------|-----------------|------|
+| Autovettura | KW | Tariffa per potenza |
+| Autoveicolo uso promiscuo | KW | Come autovettura |
+| Motociclo | KW | Oltre 50cc |
+| Ciclomotore | - | Importo fisso (< 50cc) |
+| Motocarri/Motofurgoni | CC | Per cilindrata |
+| Autocarro < 12 ton | KG | Per portata |
+| Autocarro >= 12 ton | ASSI | Per numero assi e sospensione |
+| Trattore stradale | ASSI | Con supplemento per rimorchio |
+| Rimorchio | KG/POSTI | Per portata o posti |
+| Autobus | KW | Per potenza |
 
-# Frontend
-cd frontend
-npm test
-```
-
-## 🏗️ Build per Produzione
-
-### 🐳 Con Docker (Consigliato)
-
-```bash
-# Build e avvio con docker-compose
-docker-compose up -d --build
-
-# Oppure usa il Makefile
-make rebuild
-
-# Per deployment su server:
-# 1. Modifica docker-compose.yml con le configurazioni di produzione
-# 2. Cambia JWT_SECRET con un valore sicuro
-# 3. Configura HTTPS con un reverse proxy (nginx/traefik)
-# 4. Esegui:
-docker-compose -f docker-compose.yml up -d
-```
-
-### 💻 Build Locale
-
-#### Backend
-
-```bash
-cd backend
-npm run build
-npm run start:prod
-```
-
-#### Frontend
-
-```bash
-cd frontend
-npm run build
-npm run preview  # Preview della build
-```
-
-## 🐳 Architettura Docker
+## Architettura Docker
 
 ```
 ┌─────────────────────────────────────────────────────┐
@@ -318,44 +377,135 @@ npm run preview  # Preview della build
 │  │   Port 80   │  │  Port 3000  │  │  Port 5432  │ │
 │  └─────────────┘  └─────────────┘  └─────────────┘ │
 │       │                  │                  │        │
-│       │                  │                  │        │
 │   Static Files      API Requests      Persistent    │
-│                                         Volume       │
+│   + PWA Assets                          Volume       │
 └─────────────────────────────────────────────────────┘
 ```
 
 ### Volumi Docker
 
 - `postgres_data`: Persistenza dati PostgreSQL
-- `./backend/uploads`: Upload file ricevute (montato come volume)
+- `./backend/uploads`: Upload file ricevute
 
-### Variabili d'Ambiente Docker
+## PWA - Funzionalità Offline
 
-Configurate in `docker-compose.yml`:
-- `DATABASE_URL`: Connection string PostgreSQL
-- `JWT_SECRET`: Chiave segreta JWT
-- `VITE_API_URL`: URL API per il frontend
+L'applicazione è una Progressive Web App completa:
 
-## 🔄 Funzionalità Future
+### Installazione
+- **Desktop**: Chrome, Edge, Firefox (menu "Installa app")
+- **Mobile**: iOS Safari ("Aggiungi a Home"), Android Chrome
 
-- [ ] Completamento pagine Veicoli, Scadenze, Pagamenti, Report
-- [ ] Sistema di notifiche email
-- [ ] Export PDF/Excel avanzati
-- [ ] Gestione allegati multipli
-- [ ] Dashboard con grafici e statistiche
-- [ ] Filtri avanzati e ricerca globale
-- [ ] Backup automatici
+### Caching
+- **Risorse statiche**: Pre-cached al primo caricamento
+- **API calls**: NetworkFirst con fallback cache (24h)
+- **Immagini/Font**: Cache with revalidation
+
+### Aggiornamento Automatico
+- Controllo nuove versioni ogni 60 secondi
+- Prompt utente quando disponibile aggiornamento
+- Possibilità di aggiornare subito o rimandare
+- Timestamp build visibile nel prompt
+
+## Build per Produzione
+
+### Con Docker
+
+```bash
+# Build e avvio
+docker-compose up -d --build
+
+# Per deployment su server:
+# 1. Modifica docker-compose.yml con configurazioni produzione
+# 2. Cambia JWT_SECRET con valore sicuro
+# 3. Configura HTTPS con reverse proxy (nginx/traefik)
+docker-compose -f docker-compose.yml up -d
+```
+
+### Build Locale
+
+```bash
+# Backend
+cd backend
+npm run build
+npm run start:prod
+
+# Frontend
+cd frontend
+npm run build
+npm run preview  # Preview della build
+```
+
+## Sicurezza
+
+- Password criptate con bcrypt (salt rounds: 10)
+- Autenticazione JWT con scadenza configurabile
+- Guards NestJS per protezione routes
+- Validazione input con class-validator e decoratori
+- CORS configurato per origini specifiche
+- Sanitizzazione input per prevenzione XSS/SQL injection
+- Upload file con validazione tipo e dimensione
+
+## Primo Accesso
+
+Dopo l'installazione, crea il primo utente amministratore:
+
+```bash
+# Via API
+curl -X POST http://localhost:3000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "admin@sissibol.com",
+    "password": "admin123",
+    "ruolo": "ADMIN"
+  }'
+```
+
+Oppure usa il seed automatico (Docker):
+```bash
+docker-compose exec backend npm run prisma:seed
+```
+
+## Funzionalità Future
+
+- [ ] Sistema notifiche email automatiche
 - [ ] Integrazione calendario Google/Outlook
+- [ ] Dashboard con grafici e statistiche avanzate
+- [ ] Gestione allegati multipli per pagamento
+- [ ] Backup automatici schedulati
 - [ ] App mobile nativa (React Native)
+- [ ] Integrazione PagoPA per pagamenti online
+- [ ] OCR per lettura automatica documenti
 
-## 📄 Licenza
+## Troubleshooting
+
+### Errore "Cannot find module dist/main.js"
+```bash
+# Ricostruisci le immagini Docker
+docker-compose build --no-cache backend
+docker-compose up -d
+```
+
+### Errore connessione database
+```bash
+# Verifica che PostgreSQL sia avviato
+docker-compose ps
+docker-compose logs postgres
+```
+
+### PWA non si aggiorna
+1. Chiudi tutte le tab dell'applicazione
+2. Riapri l'applicazione
+3. Attendi il prompt di aggiornamento
+4. Oppure: DevTools > Application > Service Workers > Update
+
+## Licenza
 
 MIT
 
-## 👥 Supporto
+## Supporto
 
 Per problemi o domande, apri una issue su GitHub.
 
 ---
 
-**Sviluppato con ❤️ per la gestione efficiente dello scadenziario bolli**
+**Sviluppato per la gestione efficiente dello scadenziario bolli nel settore autotrasporto**
