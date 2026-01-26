@@ -14,6 +14,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: any) {
-    return { id: payload.sub, email: payload.email, ruolo: payload.ruolo };
+    // Include jti per supportare logout/revoca token
+    return {
+      id: payload.sub,
+      email: payload.email,
+      ruolo: payload.ruolo,
+      jti: payload.jti,
+    };
   }
 }
