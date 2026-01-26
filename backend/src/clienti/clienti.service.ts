@@ -18,7 +18,10 @@ export class ClientiService {
       ? {
           OR: [
             { ragioneSociale: { contains: search, mode: 'insensitive' as const } },
+            { nome: { contains: search, mode: 'insensitive' as const } },
+            { cognome: { contains: search, mode: 'insensitive' as const } },
             { partitaIva: { contains: search, mode: 'insensitive' as const } },
+            { codiceFiscale: { contains: search, mode: 'insensitive' as const } },
             { email: { contains: search, mode: 'insensitive' as const } },
           ],
         }
@@ -29,9 +32,11 @@ export class ClientiService {
       include: {
         veicoli: true,
       },
-      orderBy: {
-        ragioneSociale: 'asc',
-      },
+      orderBy: [
+        { ragioneSociale: 'asc' },
+        { cognome: 'asc' },
+        { nome: 'asc' },
+      ],
     });
   }
 
