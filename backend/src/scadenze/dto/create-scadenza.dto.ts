@@ -1,5 +1,5 @@
 import { IsNotEmpty, IsInt, IsEnum, IsOptional, Min, Max } from 'class-validator';
-import { StatoScadenza, Periodicita } from '@prisma/client';
+import { StatoScadenza, Periodicita } from '../../prisma/types';
 import { Type } from 'class-transformer';
 
 export class CreateScadenzaDto {
