@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePagamentoDto } from './dto/create-pagamento.dto';
 import { UpdatePagamentoDto } from './dto/update-pagamento.dto';
-import { StatoScadenza } from '@prisma/client';
+import { StatoScadenza } from '../prisma/types';
 
 @Injectable()
 export class PagamentiService {
