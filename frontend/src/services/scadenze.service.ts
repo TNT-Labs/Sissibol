@@ -34,4 +34,9 @@ export const scadenzeService = {
   async delete(id: number): Promise<void> {
     await api.delete(`/scadenze/${id}`);
   },
+
+  async ricalcolaImporto(id: number): Promise<Scadenza> {
+    const response = await api.post<Scadenza>(`/scadenze/${id}/ricalcola`);
+    return response.data;
+  },
 };
