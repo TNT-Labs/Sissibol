@@ -11,14 +11,39 @@ datasource db {
 }
 
 model Utente {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  password  String
-  ruolo     Ruolo    @default(OPERATORE)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            Int            @id @default(autoincrement())
+  email         String         @unique
+  password      String
+  ruolo         Ruolo          @default(OPERATORE)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  refreshTokens RefreshToken[]
 
   @@map("utenti")
+}
+
+// =====================================================
+// REFRESH TOKEN (Sicurezza JWT)
+// =====================================================
+
+/// Gestisce i refresh token per il rinnovo sicuro delle sessioni
+/// Supporta revoca token e logout da tutti i dispositivi
+model RefreshToken {
+  id          Int       @id @default(autoincrement())
+  userId      Int       @map("user_id")
+  tokenHash   String    @map("token_hash")       // Hash bcrypt del token
+  jti         String    @unique                  // JWT ID univoco per revoca
+  userAgent   String?   @map("user_agent")       // Browser/dispositivo
+  ipAddress   String?   @map("ip_address")       // IP di origine
+  expiresAt   DateTime  @map("expires_at")
+  revokedAt   DateTime? @map("revoked_at")       // null = attivo
+  createdAt   DateTime  @default(now())
+
+  user        Utente    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@map("refresh_tokens")
 }
 
 enum Ruolo {
@@ -117,12 +142,50 @@ model Pagamento {
   importoPagato     Decimal   @map("importo_pagato") @db.Decimal(10, 2)
   metodoPagamento   String?   @map("metodo_pagamento")
   ricevutaFile      String?   @map("ricevuta_file")
+  // Optimistic locking per gestione concorrenza
+  version           Int       @default(0)
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
   scadenza          Scadenza  @relation(fields: [idScadenza], references: [id], onDelete: Cascade)
+  snapshotCalcolo   SnapshotCalcoloBollo?
 
   @@map("pagamenti")
+}
+
+// =====================================================
+// SNAPSHOT CALCOLO BOLLO (Versionamento Tariffario)
+// =====================================================
+
+/// Conserva lo snapshot immutabile delle tariffe applicate al momento del pagamento
+/// Questo garantisce che i report storici non vengano alterati da modifiche alle tariffe
+model SnapshotCalcoloBollo {
+  id                    Int       @id @default(autoincrement())
+  idPagamento           Int       @unique @map("id_pagamento")
+
+  // Snapshot dati veicolo al momento del calcolo
+  veicoloSnapshot       Json      @map("veicolo_snapshot")
+
+  // Snapshot tariffe applicate
+  tariffeApplicate      Json      @map("tariffe_applicate")
+  esenzioniApplicate    Json      @map("esenzioni_applicate")
+
+  // Dettaglio calcolo
+  importoBase           Decimal   @map("importo_base") @db.Decimal(10, 2)
+  importoRidotto        Decimal?  @map("importo_ridotto") @db.Decimal(10, 2)
+  scontoRidApplicato    Decimal   @map("sconto_rid_applicato") @db.Decimal(5, 2)
+  dettaglioCalcolo      String    @map("dettaglio_calcolo") @db.Text
+
+  // Riferimento configurazione (per audit)
+  idConfigurazione      Int       @map("id_configurazione")
+  annoConfigurazione    Int       @map("anno_configurazione")
+  regioneConfigurazione String    @map("regione_configurazione")
+
+  createdAt             DateTime  @default(now())
+
+  pagamento             Pagamento @relation(fields: [idPagamento], references: [id], onDelete: Cascade)
+
+  @@map("snapshot_calcolo_bollo")
 }
 
 // =====================================================

@@ -166,6 +166,12 @@ export class BolloService {
 
   /**
    * Verifica le esenzioni applicabili al veicolo
+   *
+   * LOGICA PRIORITÀ ESENZIONI:
+   * 1. Le esenzioni TOTALI hanno priorità sulle PARZIALI
+   * 2. Solo UNA esenzione TOTALE può essere applicata
+   * 3. Per le PARZIALI, la riduzione cumulativa non può superare il 100%
+   * 4. Conflitto elettrico+ultratrentennale: priorità all'esenzione più vantaggiosa
    */
   private async verificaEsenzioni(
     veicolo: any,
@@ -173,40 +179,122 @@ export class BolloService {
   ): Promise<EsenzioneApplicata[]> {
     const esenzioniApplicate: EsenzioneApplicata[] = [];
 
-    // Recupera tutte le esenzioni per questa configurazione
+    // Recupera tutte le esenzioni ordinate per priorità:
+    // - TOTALE prima di PARZIALE
+    // - Percentuale riduzione decrescente (100% = più vantaggioso)
     const esenzioni = await this.prisma.$queryRaw<any[]>`
-      SELECT * FROM "esenzioni_bollo" WHERE "id_configurazione" = ${idConfigurazione}
+      SELECT * FROM "esenzioni_bollo"
+      WHERE "id_configurazione" = ${idConfigurazione}
+      ORDER BY
+        CASE WHEN tipo_esenzione = 'TOTALE' THEN 0 ELSE 1 END,
+        COALESCE(percentuale_riduzione, 100) DESC
     `;
 
-    for (const esenzione of esenzioni) {
-      let applicabile = false;
+    const anniVeicolo = veicolo.dataImmatricolazione
+      ? this.calcolaAnniVeicolo(veicolo.dataImmatricolazione)
+      : 0;
 
-      // Verifica per alimentazione
-      if (esenzione.alimentazione && veicolo.alimentazione === esenzione.alimentazione) {
-        applicabile = true;
+    // Tracciamento per evitare conflitti
+    let esenzioneTotaleApplicata = false;
+    let percentualeRiduzioneCumulativa = 0;
+    const motiviApplicati = new Set<string>(); // Evita duplicazioni per stesso motivo
+
+    for (const esenzione of esenzioni) {
+      // Se già applicata esenzione TOTALE, salta tutte le altre
+      if (esenzioneTotaleApplicata) {
+        break;
       }
 
-      // Verifica per anzianità veicolo
-      if (esenzione.anni_da_immatricolazione && veicolo.dataImmatricolazione) {
-        const anniVeicolo = this.calcolaAnniVeicolo(veicolo.dataImmatricolazione);
-        if (anniVeicolo >= esenzione.anni_da_immatricolazione) {
+      let applicabile = false;
+      let motivoApplicazione = '';
+      let priorita = 0; // Usato per determinare quale esenzione prevale
+
+      // Verifica per alimentazione (es. Elettrico, GPL, Metano)
+      if (esenzione.alimentazione && veicolo.alimentazione === esenzione.alimentazione) {
+        // Per veicoli elettrici: verifica se rientra nei 5 anni di esenzione
+        if (veicolo.alimentazione === 'Elettrico') {
+          // Esenzione elettrico valida solo per primi 5 anni
+          if (esenzione.anni_da_immatricolazione && anniVeicolo <= esenzione.anni_da_immatricolazione) {
+            applicabile = true;
+            motivoApplicazione = `Veicolo elettrico (${anniVeicolo} anni dall'immatricolazione)`;
+            priorita = 100; // Massima priorità per elettrico entro 5 anni
+          } else if (!esenzione.anni_da_immatricolazione) {
+            // Esenzione generica per alimentazione elettrica
+            applicabile = true;
+            motivoApplicazione = `Alimentazione: ${veicolo.alimentazione}`;
+            priorita = 80;
+          }
+        } else {
+          // GPL, Metano, Ibrido, etc.
           applicabile = true;
+          motivoApplicazione = `Alimentazione: ${veicolo.alimentazione}`;
+          priorita = 50;
+        }
+      }
+
+      // Verifica per anzianità veicolo (ultratrentennali, interesse storico)
+      if (!applicabile && esenzione.anni_da_immatricolazione && veicolo.dataImmatricolazione) {
+        // CONFLITTO: Se veicolo è elettrico E ultratrentennale
+        // - Se elettrico entro 5 anni: usa esenzione elettrico (già gestito sopra)
+        // - Se elettrico oltre 5 anni E ultratrentennale: usa ultratrentennale
+        if (veicolo.alimentazione === 'Elettrico' && anniVeicolo <= 5) {
+          // Già coperto da esenzione elettrico, salta
+          continue;
+        }
+
+        if (anniVeicolo >= esenzione.anni_da_immatricolazione) {
+          // Evita di applicare ultratrentennale se già applicata esenzione per alimentazione
+          const motivoAlimentazione = `Alimentazione: ${veicolo.alimentazione}`;
+          if (!motiviApplicati.has(motivoAlimentazione)) {
+            applicabile = true;
+            motivoApplicazione = `Veicolo storico (${anniVeicolo} anni, soglia: ${esenzione.anni_da_immatricolazione})`;
+            priorita = 60;
+          }
         }
       }
 
       // Verifica per tipo veicolo
-      if (esenzione.tipo_veicolo && veicolo.tipoVeicolo === esenzione.tipo_veicolo) {
-        applicabile = true;
+      if (!applicabile && esenzione.tipo_veicolo && veicolo.tipoVeicolo === esenzione.tipo_veicolo) {
+        // Solo se non già coperto da altre esenzioni
+        if (motiviApplicati.size === 0) {
+          applicabile = true;
+          motivoApplicazione = `Tipo veicolo: ${veicolo.tipoVeicolo}`;
+          priorita = 30;
+        }
       }
 
       if (applicabile) {
-        esenzioniApplicate.push({
-          tipo: esenzione.tipo_esenzione,
-          descrizione: esenzione.descrizione,
-          percentualeRiduzione: esenzione.percentuale_riduzione
+        // Gestione conflitti per esenzioni TOTALI
+        if (esenzione.tipo_esenzione === 'TOTALE') {
+          esenzioneTotaleApplicata = true;
+          esenzioniApplicate.push({
+            tipo: 'TOTALE',
+            descrizione: `${esenzione.descrizione} (${motivoApplicazione})`,
+            percentualeRiduzione: null,
+          });
+          motiviApplicati.add(motivoApplicazione);
+          // Con esenzione TOTALE, non servono altre esenzioni
+          break;
+        }
+
+        // Gestione esenzioni PARZIALI con limite cumulativo
+        if (esenzione.tipo_esenzione === 'PARZIALE') {
+          const percentuale = esenzione.percentuale_riduzione
             ? parseFloat(esenzione.percentuale_riduzione)
-            : null,
-        });
+            : 0;
+
+          // Verifica che non si superi il 100% cumulativo
+          if (percentualeRiduzioneCumulativa + percentuale <= 100) {
+            percentualeRiduzioneCumulativa += percentuale;
+            esenzioniApplicate.push({
+              tipo: 'PARZIALE',
+              descrizione: `${esenzione.descrizione} (${motivoApplicazione})`,
+              percentualeRiduzione: percentuale,
+            });
+            motiviApplicati.add(motivoApplicazione);
+          }
+          // Se supererebbe il 100%, salta questa esenzione
+        }
       }
     }
 
@@ -451,6 +539,24 @@ export class BolloService {
     const portata = veicolo.portataKg || 0;
     const numeroAssi = veicolo.numeroAssi || 2;
     const tipoSospensione = veicolo.tipoSospensione || 'Pneumatiche';
+
+    // VALIDAZIONE: Verifica che i parametri necessari siano presenti
+    if (pesoComplessivo === 0 && portata === 0) {
+      result.note.push(
+        'ATTENZIONE: Peso complessivo e portata non specificati. ' +
+        'Per gli autocarri è necessario almeno uno di questi valori per il calcolo corretto del bollo.',
+      );
+      dettagli.push('Autocarro - dati insufficienti per il calcolo');
+      return 0;
+    }
+
+    // Per autocarri pesanti (>=12t) verificare anche assi
+    if (pesoComplessivo >= 12000 && (!numeroAssi || numeroAssi < 2)) {
+      result.note.push(
+        'ATTENZIONE: Numero assi non specificato per autocarro pesante. ' +
+        'Valore predefinito: 2 assi.',
+      );
+    }
 
     // Autocarri >= 12 tonnellate: tariffa per assi e sospensioni
     if (pesoComplessivo >= 12000) {
