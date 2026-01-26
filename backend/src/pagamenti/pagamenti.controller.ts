@@ -20,6 +20,19 @@ import { CreatePagamentoDto } from './dto/create-pagamento.dto';
 import { UpdatePagamentoDto } from './dto/update-pagamento.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
+// Tipo per file uploadato tramite multer
+interface MulterFile {
+  fieldname: string;
+  originalname: string;
+  encoding: string;
+  mimetype: string;
+  size: number;
+  destination: string;
+  filename: string;
+  path: string;
+  buffer: Buffer;
+}
+
 @Controller('pagamenti')
 @UseGuards(JwtAuthGuard)
 export class PagamentiController {
@@ -43,7 +56,7 @@ export class PagamentiController {
   )
   create(
     @Body() createPagamentoDto: CreatePagamentoDto,
-    @UploadedFile() file?: Express.Multer.File,
+    @UploadedFile() file?: MulterFile,
   ) {
     if (file) {
       createPagamentoDto.ricevutaFile = file.path;

@@ -10,6 +10,7 @@ import { ScadenzePage } from './pages/scadenze/ScadenzePage';
 import { PagamentiPage } from './pages/pagamenti/PagamentiPage';
 import { ReportPage } from './pages/report/ReportPage';
 import { TariffePage } from './pages/tariffe/TariffePage';
+import { UpdatePrompt } from './components/UpdatePrompt';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
@@ -114,6 +115,7 @@ function App() {
     <BrowserRouter>
       <AuthProvider>
         <AppRoutes />
+        <UpdatePrompt />
       </AuthProvider>
     </BrowserRouter>
   );

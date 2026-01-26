@@ -3,18 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateScadenzaDto } from './dto/create-scadenza.dto';
 import { UpdateScadenzaDto } from './dto/update-scadenza.dto';
 import { BolloService } from '../bollo/bollo.service';
-
-// Definiamo le costanti localmente per evitare problemi con il client Prisma non generato
-const StatoScadenza = {
-  DA_PAGARE: 'DA_PAGARE',
-  PAGATO: 'PAGATO',
-  SCADUTO: 'SCADUTO',
-} as const;
-
-const Periodicita = {
-  ANNUALE: 'ANNUALE',
-  QUADRIMESTRALE: 'QUADRIMESTRALE',
-} as const;
+import { StatoScadenza, Periodicita } from '../prisma/types';
 
 @Injectable()
 export class ScadenzeService {
