@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { Ruolo } from '../../types';
 import {
   LayoutDashboard,
   Users,
@@ -12,6 +13,7 @@ import {
   LogOut,
   Menu,
   X,
+  UserCog,
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -23,6 +25,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  const isAdmin = user?.ruolo === Ruolo.ADMIN;
+
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { name: 'Clienti', href: '/clienti', icon: Users },
@@ -31,6 +35,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     { name: 'Pagamenti', href: '/pagamenti', icon: CreditCard },
     { name: 'Report', href: '/report', icon: FileText },
     { name: 'Tariffe Bollo', href: '/tariffe', icon: Settings },
+    // Sezione Admin (solo per utenti ADMIN)
+    ...(isAdmin ? [{ name: 'Gestione Utenti', href: '/utenti', icon: UserCog }] : []),
   ];
 
   const isActive = (path: string) => location.pathname === path;
