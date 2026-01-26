@@ -10,7 +10,9 @@ import { ScadenzePage } from './pages/scadenze/ScadenzePage';
 import { PagamentiPage } from './pages/pagamenti/PagamentiPage';
 import { ReportPage } from './pages/report/ReportPage';
 import { TariffePage } from './pages/tariffe/TariffePage';
+import { UtentiPage } from './pages/utenti/UtentiPage';
 import { UpdatePrompt } from './components/UpdatePrompt';
+import { Ruolo } from './types';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
@@ -24,6 +26,28 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   }
 
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" />;
+};
+
+const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { isAuthenticated, loading, user } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" />;
+  }
+
+  if (user?.ruolo !== Ruolo.ADMIN) {
+    return <Navigate to="/dashboard" />;
+  }
+
+  return <>{children}</>;
 };
 
 const AppRoutes: React.FC = () => {
@@ -103,6 +127,16 @@ const AppRoutes: React.FC = () => {
               <TariffePage />
             </Layout>
           </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/utenti"
+        element={
+          <AdminRoute>
+            <Layout>
+              <UtentiPage />
+            </Layout>
+          </AdminRoute>
         }
       />
       <Route path="/" element={<Navigate to="/dashboard" />} />

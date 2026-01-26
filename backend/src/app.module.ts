@@ -7,6 +7,7 @@ import { VeicoliModule } from './veicoli/veicoli.module';
 import { ScadenzeModule } from './scadenze/scadenze.module';
 import { PagamentiModule } from './pagamenti/pagamenti.module';
 import { BolloModule } from './bollo/bollo.module';
+import { UtentiModule } from './utenti/utenti.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { BolloModule } from './bollo/bollo.module';
     ScadenzeModule,
     PagamentiModule,
     BolloModule,
+    UtentiModule,
   ],
 })
 export class AppModule {}
