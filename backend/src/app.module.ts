@@ -6,6 +6,7 @@ import { ClientiModule } from './clienti/clienti.module';
 import { VeicoliModule } from './veicoli/veicoli.module';
 import { ScadenzeModule } from './scadenze/scadenze.module';
 import { PagamentiModule } from './pagamenti/pagamenti.module';
+import { BolloModule } from './bollo/bollo.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { PagamentiModule } from './pagamenti/pagamenti.module';
     VeicoliModule,
     ScadenzeModule,
     PagamentiModule,
+    BolloModule,
   ],
 })
 export class AppModule {}

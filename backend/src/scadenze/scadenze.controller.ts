@@ -14,7 +14,9 @@ import { ScadenzeService } from './scadenze.service';
 import { CreateScadenzaDto } from './dto/create-scadenza.dto';
 import { UpdateScadenzaDto } from './dto/update-scadenza.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { StatoScadenza } from '@prisma/client';
+
+// Definiamo il tipo localmente
+type StatoScadenza = 'DA_PAGARE' | 'PAGATO' | 'SCADUTO';
 
 @Controller('scadenze')
 @UseGuards(JwtAuthGuard)
@@ -57,5 +59,14 @@ export class ScadenzeController {
   @Delete(':id')
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.scadenzeService.remove(id);
+  }
+
+  /**
+   * Ricalcola l'importo di una scadenza in base alle tariffe configurate
+   * POST /scadenze/:id/ricalcola
+   */
+  @Post(':id/ricalcola')
+  ricalcolaImporto(@Param('id', ParseIntPipe) id: number) {
+    return this.scadenzeService.ricalcolaImporto(id);
   }
 }
