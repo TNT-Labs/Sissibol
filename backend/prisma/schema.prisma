@@ -103,8 +103,47 @@ model Veicolo {
 
   cliente               Cliente   @relation(fields: [idCliente], references: [id], onDelete: Cascade)
   scadenze              Scadenza[]
+  storico               StoricoVeicolo[]
 
   @@map("veicoli")
+}
+
+// =====================================================
+// STORICO VEICOLO (Cambio Targa/Proprietario)
+// =====================================================
+
+/// Tiene traccia dei cambi di targa e/o proprietario di un veicolo.
+/// Essenziale per: contestazioni, storici bollo, verifiche fiscali.
+model StoricoVeicolo {
+  id                Int       @id @default(autoincrement())
+  idVeicolo         Int       @map("id_veicolo")
+
+  // Tipo di modifica
+  tipoModifica      TipoModificaVeicolo @map("tipo_modifica")
+
+  // Dati PRIMA della modifica
+  targaPrecedente   String?   @map("targa_precedente")
+  idClientePrecedente Int?    @map("id_cliente_precedente")
+
+  // Dati DOPO la modifica
+  targaNuova        String?   @map("targa_nuova")
+  idClienteNuovo    Int?      @map("id_cliente_nuovo")
+
+  // Metadata
+  dataModifica      DateTime  @default(now()) @map("data_modifica")
+  motivazione       String?                    // Motivo del cambio (es. "Vendita", "Reimmatricolazione")
+  utenteModifica    String?   @map("utente_modifica")  // Email utente che ha effettuato la modifica
+
+  veicolo           Veicolo   @relation(fields: [idVeicolo], references: [id], onDelete: Cascade)
+
+  @@index([idVeicolo, dataModifica])
+  @@map("storico_veicoli")
+}
+
+enum TipoModificaVeicolo {
+  CAMBIO_TARGA
+  CAMBIO_PROPRIETARIO
+  CAMBIO_TARGA_E_PROPRIETARIO
 }
 
 model Scadenza {

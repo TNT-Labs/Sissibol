@@ -273,6 +273,119 @@ export class ScadenzeService {
     });
   }
 
+  /**
+   * Versione paginata di findAll per dataset grandi (report, export).
+   * Previene memory overflow caricando i dati in chunk.
+   *
+   * @param options - Opzioni di paginazione e filtro
+   * @returns Pagina di scadenze con metadata paginazione
+   */
+  async findAllPaginated(options: {
+    page?: number;
+    pageSize?: number;
+    stato?: StatoScadenza;
+    idCliente?: number;
+    annoFrom?: number;
+    annoTo?: number;
+  }) {
+    const {
+      page = 1,
+      pageSize = 100,
+      stato,
+      idCliente,
+      annoFrom,
+      annoTo,
+    } = options;
+
+    // Aggiorna scadenze scadute (non fare in ogni request se impatta performance)
+    // await this.updateScaduteAutomaticamente();
+
+    const where: any = {};
+
+    if (stato) {
+      where.stato = stato;
+    }
+
+    if (idCliente) {
+      where.veicolo = {
+        idCliente: idCliente,
+      };
+    }
+
+    // Filtro per intervallo anni (utile per report annuali)
+    if (annoFrom || annoTo) {
+      where.annoScadenza = {};
+      if (annoFrom) where.annoScadenza.gte = annoFrom;
+      if (annoTo) where.annoScadenza.lte = annoTo;
+    }
+
+    // Query parallele per dati e conteggio totale
+    const [data, totalCount] = await Promise.all([
+      this.prisma.scadenza.findMany({
+        where,
+        include: {
+          veicolo: {
+            include: {
+              cliente: true,
+            },
+          },
+          pagamenti: true,
+        },
+        orderBy: [
+          { annoScadenza: 'desc' },
+          { meseScadenza: 'desc' },
+        ],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.scadenza.count({ where }),
+    ]);
+
+    const totalPages = Math.ceil(totalCount / pageSize);
+
+    return {
+      data,
+      pagination: {
+        page,
+        pageSize,
+        totalCount,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1,
+      },
+    };
+  }
+
+  /**
+   * Conta scadenze raggruppate per stato (per dashboard e summary)
+   * Più efficiente di caricare tutti i dati
+   */
+  async getStatsCounts(idCliente?: number) {
+    const where: any = {};
+
+    if (idCliente) {
+      where.veicolo = { idCliente };
+    }
+
+    const [daPagare, pagato, scaduto, totaleImporto] = await Promise.all([
+      this.prisma.scadenza.count({ where: { ...where, stato: StatoScadenza.DA_PAGARE } }),
+      this.prisma.scadenza.count({ where: { ...where, stato: StatoScadenza.PAGATO } }),
+      this.prisma.scadenza.count({ where: { ...where, stato: StatoScadenza.SCADUTO } }),
+      this.prisma.scadenza.aggregate({
+        where,
+        _sum: { importoPrevisto: true },
+      }),
+    ]);
+
+    return {
+      daPagare,
+      pagato,
+      scaduto,
+      totale: daPagare + pagato + scaduto,
+      importoTotale: totaleImporto._sum.importoPrevisto?.toNumber() || 0,
+    };
+  }
+
   async findOne(id: number) {
     const scadenza = await this.prisma.scadenza.findUnique({
       where: { id },

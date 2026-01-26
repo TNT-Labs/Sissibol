@@ -164,6 +164,98 @@ export class PagamentiService {
     });
   }
 
+  /**
+   * Versione paginata di findAll per dataset grandi (report, export).
+   * Previene memory overflow caricando i dati in chunk.
+   *
+   * @param options - Opzioni di paginazione e filtro
+   * @returns Pagina di pagamenti con metadata paginazione
+   */
+  async findAllPaginated(options: {
+    page?: number;
+    pageSize?: number;
+    idScadenza?: number;
+    dateFrom?: Date;
+    dateTo?: Date;
+    idCliente?: number;
+  }) {
+    const {
+      page = 1,
+      pageSize = 100,
+      idScadenza,
+      dateFrom,
+      dateTo,
+      idCliente,
+    } = options;
+
+    const where: any = {};
+
+    if (idScadenza) {
+      where.idScadenza = idScadenza;
+    }
+
+    // Filtro per intervallo date
+    if (dateFrom || dateTo) {
+      where.dataPagamento = {};
+      if (dateFrom) where.dataPagamento.gte = dateFrom;
+      if (dateTo) where.dataPagamento.lte = dateTo;
+    }
+
+    // Filtro per cliente (attraverso relazione)
+    if (idCliente) {
+      where.scadenza = {
+        veicolo: {
+          idCliente,
+        },
+      };
+    }
+
+    // Query parallele per dati e conteggio totale
+    const [data, totalCount, totaleImporto] = await Promise.all([
+      this.prisma.pagamento.findMany({
+        where,
+        include: {
+          scadenza: {
+            include: {
+              veicolo: {
+                include: {
+                  cliente: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: {
+          dataPagamento: 'desc',
+        },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.pagamento.count({ where }),
+      this.prisma.pagamento.aggregate({
+        where,
+        _sum: { importoPagato: true },
+      }),
+    ]);
+
+    const totalPages = Math.ceil(totalCount / pageSize);
+
+    return {
+      data,
+      pagination: {
+        page,
+        pageSize,
+        totalCount,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1,
+      },
+      summary: {
+        importoTotale: totaleImporto._sum.importoPagato?.toNumber() || 0,
+      },
+    };
+  }
+
   async findOne(id: number) {
     const pagamento = await this.prisma.pagamento.findUnique({
       where: { id },
@@ -187,29 +279,57 @@ export class PagamentiService {
     return pagamento;
   }
 
+  /**
+   * Aggiorna un pagamento con optimistic locking.
+   * Previene race condition verificando che la versione sia invariata.
+   *
+   * @throws ConflictException se il pagamento è stato modificato da un altro utente
+   */
   async update(id: number, updatePagamentoDto: UpdatePagamentoDto) {
-    await this.findOne(id); // Check if exists
+    const pagamentoCorrente = await this.findOne(id);
 
-    const data: any = { ...updatePagamentoDto };
-    if ((updatePagamentoDto as any).dataPagamento) {
-      data.dataPagamento = new Date((updatePagamentoDto as any).dataPagamento);
+    // Estrai la versione dal DTO (deve essere fornita dal client)
+    const { version: clientVersion, ...updateData } = updatePagamentoDto as any;
+
+    // Se il client fornisce una versione, verifica che corrisponda
+    if (clientVersion !== undefined) {
+      if (clientVersion !== pagamentoCorrente.version) {
+        throw new ConflictException(
+          `Il pagamento è stato modificato da un altro utente. ` +
+            `Versione attesa: ${clientVersion}, versione corrente: ${pagamentoCorrente.version}. ` +
+            `Ricarica i dati e riprova.`,
+        );
+      }
     }
 
-    return this.prisma.pagamento.update({
-      where: { id },
-      data,
-      include: {
-        scadenza: {
-          include: {
-            veicolo: {
-              include: {
-                cliente: true,
-              },
-            },
-          },
-        },
+    // Prepara i dati per l'update
+    const data: any = { ...updateData };
+    if (updateData.dataPagamento) {
+      data.dataPagamento = new Date(updateData.dataPagamento);
+    }
+
+    // Incrementa la versione
+    data.version = pagamentoCorrente.version + 1;
+
+    // Usa updateMany con WHERE version per garantire atomicità
+    const result = await this.prisma.pagamento.updateMany({
+      where: {
+        id,
+        version: pagamentoCorrente.version, // Solo se la versione è ancora quella attesa
       },
+      data,
     });
+
+    // Se nessuna riga è stata aggiornata, c'è stata una race condition
+    if (result.count === 0) {
+      throw new ConflictException(
+        `Il pagamento è stato modificato da un altro utente mentre lo stavi aggiornando. ` +
+          `Ricarica i dati e riprova.`,
+      );
+    }
+
+    // Ritorna il pagamento aggiornato
+    return this.findOne(id);
   }
 
   async remove(id: number) {

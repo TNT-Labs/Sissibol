@@ -37,6 +37,44 @@ export class ScadenzeController {
     return this.scadenzeService.findAll(stato, parsedIdCliente);
   }
 
+  /**
+   * Versione paginata per report e export di grandi dataset.
+   * Previene memory overflow caricando i dati in chunk.
+   *
+   * GET /scadenze/paginated?page=1&pageSize=100&stato=DA_PAGARE&idCliente=1&annoFrom=2024&annoTo=2026
+   */
+  @Get('paginated')
+  findAllPaginated(
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Query('stato') stato?: StatoScadenza,
+    @Query('idCliente') idCliente?: string,
+    @Query('annoFrom') annoFrom?: string,
+    @Query('annoTo') annoTo?: string,
+  ) {
+    return this.scadenzeService.findAllPaginated({
+      page: page ? parseInt(page, 10) : 1,
+      pageSize: pageSize ? parseInt(pageSize, 10) : 100,
+      stato,
+      idCliente: idCliente ? parseInt(idCliente, 10) : undefined,
+      annoFrom: annoFrom ? parseInt(annoFrom, 10) : undefined,
+      annoTo: annoTo ? parseInt(annoTo, 10) : undefined,
+    });
+  }
+
+  /**
+   * Statistiche aggregate per scadenze (per dashboard).
+   * Più efficiente di caricare tutti i dati.
+   *
+   * GET /scadenze/stats?idCliente=1
+   */
+  @Get('stats')
+  getStats(@Query('idCliente') idCliente?: string) {
+    return this.scadenzeService.getStatsCounts(
+      idCliente ? parseInt(idCliente, 10) : undefined,
+    );
+  }
+
   @Get('in-scadenza')
   getScadenzeInScadenza(@Query('giorni') giorni?: string) {
     const parsedGiorni = giorni ? parseInt(giorni, 10) : undefined;
