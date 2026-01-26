@@ -1,4 +1,4 @@
-import api from './api';
+import { api } from './api';
 import type { ConfigurazioneBollo, TariffaBollo, CalcoloBolloResult, Veicolo } from '../types';
 
 export const bolloService = {
