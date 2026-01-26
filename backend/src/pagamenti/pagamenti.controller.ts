@@ -166,6 +166,31 @@ export class PagamentiController {
     return this.pagamentiService.findAll(parsedIdScadenza);
   }
 
+  /**
+   * Versione paginata per report e export di grandi dataset.
+   * Previene memory overflow caricando i dati in chunk.
+   *
+   * GET /pagamenti/paginated?page=1&pageSize=100&dateFrom=2024-01-01&dateTo=2024-12-31&idCliente=1
+   */
+  @Get('paginated')
+  findAllPaginated(
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Query('idScadenza') idScadenza?: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+    @Query('idCliente') idCliente?: string,
+  ) {
+    return this.pagamentiService.findAllPaginated({
+      page: page ? parseInt(page, 10) : 1,
+      pageSize: pageSize ? parseInt(pageSize, 10) : 100,
+      idScadenza: idScadenza ? parseInt(idScadenza, 10) : undefined,
+      dateFrom: dateFrom ? new Date(dateFrom) : undefined,
+      dateTo: dateTo ? new Date(dateTo) : undefined,
+      idCliente: idCliente ? parseInt(idCliente, 10) : undefined,
+    });
+  }
+
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.pagamentiService.findOne(id);

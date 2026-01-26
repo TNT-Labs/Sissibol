@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   ParseIntPipe,
+  Request,
 } from '@nestjs/common';
 import { VeicoliService } from './veicoli.service';
 import { CreateVeicoloDto } from './dto/create-veicolo.dto';
@@ -36,12 +37,23 @@ export class VeicoliController {
     return this.veicoliService.findOne(id);
   }
 
+  /**
+   * Recupera lo storico modifiche di un veicolo (targa/proprietario)
+   */
+  @Get(':id/storico')
+  getStorico(@Param('id', ParseIntPipe) id: number) {
+    return this.veicoliService.getStorico(id);
+  }
+
   @Patch(':id')
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateVeicoloDto: UpdateVeicoloDto,
+    @Query('motivazione') motivazione: string | undefined,
+    @Request() req: any,
   ) {
-    return this.veicoliService.update(id, updateVeicoloDto);
+    const utenteEmail = req.user?.email;
+    return this.veicoliService.update(id, updateVeicoloDto, utenteEmail, motivazione);
   }
 
   @Delete(':id')
