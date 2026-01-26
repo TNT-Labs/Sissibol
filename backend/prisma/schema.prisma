@@ -124,3 +124,79 @@ model Pagamento {
 
   @@map("pagamenti")
 }
+
+// =====================================================
+// CONFIGURAZIONE TARIFFE BOLLO
+// =====================================================
+
+// Configurazione generale per anno/regione
+model ConfigurazioneBollo {
+  id                    Int       @id @default(autoincrement())
+  annoValidita          Int       @map("anno_validita")
+  regione               String    // "Lombardia", "Piemonte", etc. o "DEFAULT" per tariffa nazionale
+  scontoRid             Decimal   @map("sconto_rid") @db.Decimal(5, 2) @default(0) // Sconto domiciliazione bancaria (es. 15%)
+  attivo                Boolean   @default(true)
+  note                  String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  tariffe               TariffaBollo[]
+
+  @@unique([annoValidita, regione])
+  @@map("configurazioni_bollo")
+}
+
+// Tariffe specifiche per tipo veicolo
+model TariffaBollo {
+  id                    Int       @id @default(autoincrement())
+  idConfigurazione      Int       @map("id_configurazione")
+
+  // Criteri di applicabilità
+  tipoVeicolo           String    @map("tipo_veicolo")           // Autovettura, Motociclo, Autocarro, etc.
+  categoriaEuro         String?   @map("categoria_euro")         // Euro 0, Euro 1, Euro 2, Euro 3, Euro 4-5-6, etc.
+
+  // Soglie (per tariffe a scaglioni)
+  unitaMisura           String    @map("unita_misura")           // KW, CC, KG, POSTI, ASSI, FISSO
+  sogliaMin             Decimal?  @map("soglia_min") @db.Decimal(10, 2) // Valore minimo (incluso)
+  sogliaMax             Decimal?  @map("soglia_max") @db.Decimal(10, 2) // Valore massimo (escluso), null = illimitato
+
+  // Importi
+  importoUnitario       Decimal   @map("importo_unitario") @db.Decimal(10, 4) // Importo per unità (es. €/KW)
+  importoFisso          Decimal?  @map("importo_fisso") @db.Decimal(10, 2)    // Importo fisso aggiuntivo
+
+  // Condizioni aggiuntive
+  tipoSospensione       String?   @map("tipo_sospensione")       // Per autocarri: Pneumatiche, Non pneumatiche
+  periodicita           String    @default("ANNUALE")            // ANNUALE, QUADRIMESTRALE
+
+  // Metadata
+  descrizione           String?
+  ordine                Int       @default(0)                    // Ordine di valutazione (per priorità)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  configurazione        ConfigurazioneBollo @relation(fields: [idConfigurazione], references: [id], onDelete: Cascade)
+
+  @@map("tariffe_bollo")
+}
+
+// Esenzioni e riduzioni
+model EsenzioneBollo {
+  id                    Int       @id @default(autoincrement())
+  idConfigurazione      Int       @map("id_configurazione")
+
+  // Tipo esenzione
+  tipoEsenzione         String    @map("tipo_esenzione")         // TOTALE, PARZIALE
+  percentualeRiduzione  Decimal?  @map("percentuale_riduzione") @db.Decimal(5, 2) // Per riduzioni parziali
+
+  // Criteri di applicabilità
+  tipoVeicolo           String?   @map("tipo_veicolo")
+  alimentazione         String?                                  // Elettrico, GPL, Metano
+  anniDaImmatricolazione Int?     @map("anni_da_immatricolazione") // Per ultratrentennali
+
+  descrizione           String
+  note                  String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@map("esenzioni_bollo")
+}

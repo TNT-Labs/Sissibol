@@ -129,3 +129,61 @@ export interface RegisterRequest {
   password: string;
   ruolo: Ruolo;
 }
+
+// =====================================================
+// TIPI PER CALCOLO BOLLO E TARIFFE
+// =====================================================
+
+export interface ConfigurazioneBollo {
+  id: number;
+  annoValidita: number;
+  regione: string;
+  scontoRid: number;
+  attivo: boolean;
+  note?: string;
+  createdAt: string;
+  updatedAt: string;
+  tariffe?: TariffaBollo[];
+  _count?: { tariffe: number };
+}
+
+export interface TariffaBollo {
+  id: number;
+  idConfigurazione: number;
+  tipoVeicolo: string;
+  categoriaEuro?: string;
+  unitaMisura: string;
+  sogliaMin?: number;
+  sogliaMax?: number;
+  importoUnitario: number;
+  importoFisso?: number;
+  tipoSospensione?: string;
+  periodicita: string;
+  descrizione?: string;
+  ordine: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TariffaApplicata {
+  descrizione: string;
+  importo: number;
+  unitaMisura: string;
+  valore: number | null;
+}
+
+export interface EsenzioneApplicata {
+  tipo: string;
+  descrizione: string;
+  percentualeRiduzione: number | null;
+}
+
+export interface CalcoloBolloResult {
+  importoBase: number;
+  importoRidotto: number | null;
+  scontoRid: number;
+  tariffeApplicate: TariffaApplicata[];
+  esenzioni: EsenzioneApplicata[];
+  note: string[];
+  dettaglioCalcolo: string;
+}

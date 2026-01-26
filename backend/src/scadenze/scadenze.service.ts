@@ -2,11 +2,26 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateScadenzaDto } from './dto/create-scadenza.dto';
 import { UpdateScadenzaDto } from './dto/update-scadenza.dto';
-import { StatoScadenza, Periodicita } from '@prisma/client';
+import { BolloService } from '../bollo/bollo.service';
+
+// Definiamo le costanti localmente per evitare problemi con il client Prisma non generato
+const StatoScadenza = {
+  DA_PAGARE: 'DA_PAGARE',
+  PAGATO: 'PAGATO',
+  SCADUTO: 'SCADUTO',
+} as const;
+
+const Periodicita = {
+  ANNUALE: 'ANNUALE',
+  QUADRIMESTRALE: 'QUADRIMESTRALE',
+} as const;
 
 @Injectable()
 export class ScadenzeService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private bolloService: BolloService,
+  ) {}
 
   // Utility: ottiene l'ultimo giorno del mese
   private getUltimoGiornoMese(anno: number, mese: number): Date {
@@ -21,13 +36,30 @@ export class ScadenzeService {
   }
 
   async create(createScadenzaDto: CreateScadenzaDto) {
+    let importoPrevisto = createScadenzaDto.importoPrevisto;
+
+    // Se l'importo non è specificato, calcolalo automaticamente
+    if (importoPrevisto === undefined || importoPrevisto === null) {
+      try {
+        const calcolo = await this.bolloService.calcolaBollo(
+          createScadenzaDto.idVeicolo,
+          createScadenzaDto.annoScadenza,
+          (createScadenzaDto.periodicita as 'ANNUALE' | 'QUADRIMESTRALE') || 'ANNUALE',
+        );
+        importoPrevisto = calcolo.importoBase;
+      } catch (error) {
+        // Se il calcolo fallisce, lascia l'importo nullo
+        console.warn(`Impossibile calcolare il bollo per veicolo ${createScadenzaDto.idVeicolo}:`, error.message);
+      }
+    }
+
     return this.prisma.scadenza.create({
       data: {
         idVeicolo: createScadenzaDto.idVeicolo,
         meseScadenza: createScadenzaDto.meseScadenza,
         annoScadenza: createScadenzaDto.annoScadenza,
         periodicita: createScadenzaDto.periodicita || Periodicita.ANNUALE,
-        importoPrevisto: createScadenzaDto.importoPrevisto,
+        importoPrevisto: importoPrevisto,
         stato: createScadenzaDto.stato,
       },
       include: {
@@ -38,6 +70,31 @@ export class ScadenzeService {
         },
       },
     });
+  }
+
+  /**
+   * Ricalcola l'importo di una scadenza esistente
+   */
+  async ricalcolaImporto(id: number) {
+    const scadenza = await this.findOne(id);
+
+    try {
+      const calcolo = await this.bolloService.calcolaBollo(
+        scadenza.idVeicolo,
+        scadenza.annoScadenza,
+        scadenza.periodicita as 'ANNUALE' | 'QUADRIMESTRALE',
+      );
+
+      return this.prisma.scadenza.update({
+        where: { id },
+        data: { importoPrevisto: calcolo.importoBase },
+        include: {
+          veicolo: { include: { cliente: true } },
+        },
+      });
+    } catch (error) {
+      throw new Error(`Impossibile ricalcolare il bollo: ${error.message}`);
+    }
   }
 
   async findAll(stato?: StatoScadenza, idCliente?: number) {
