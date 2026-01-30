@@ -30,5 +30,5 @@ Thumbs.db
 tmp/
 temp/
 
-# Import CSV (generated from MDB)
-import/csv/
+# Import CSV - NOTA: i CSV sono versionati per permettere import su Windows
+# import/csv/
