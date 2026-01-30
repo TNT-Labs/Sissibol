@@ -15,6 +15,7 @@
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:seed": "node prisma/seed.js",
     "prisma:studio": "prisma studio",
+    "prisma:import-mdb": "npx ts-node prisma/import-mdb.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "prisma": {
