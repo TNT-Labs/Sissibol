@@ -2,6 +2,20 @@
 
 Questa cartella contiene gli strumenti per importare dati da un database Microsoft Access (.mdb) in Sissibol.
 
+## Quick Start (Windows + Docker)
+
+```powershell
+# 1. Avvia i container Docker
+docker-compose up -d
+
+# 2. Esegui l'import dal container backend
+docker exec -it sissibol-backend npm run prisma:import-mdb
+```
+
+I file CSV sono già inclusi nel repository, quindi non serve esportarli manualmente.
+
+---
+
 ## Struttura
 
 ```
@@ -101,6 +115,49 @@ Lo stato della scadenza viene determinato automaticamente:
 - `PAGATO` se presente Data_pagamento
 - `SCADUTO` se la scadenza è nel passato
 - `DA_PAGARE` altrimenti
+
+## Windows + Docker
+
+Su Windows non è necessario installare `mdbtools` perché i file CSV sono già inclusi nel repository.
+
+### Passi:
+
+1. **Avvia i container Docker** (se non già avviati):
+   ```powershell
+   docker-compose up -d
+   ```
+
+2. **Verifica che le migrazioni siano applicate**:
+   ```powershell
+   docker exec -it sissibol-backend npm run prisma:migrate:deploy
+   ```
+
+3. **Esegui l'import**:
+   ```powershell
+   docker exec -it sissibol-backend npm run prisma:import-mdb
+   ```
+
+4. **Verifica i dati** (opzionale):
+   ```powershell
+   docker exec -it sissibol-backend npm run prisma:studio
+   ```
+   Poi apri http://localhost:5555 nel browser.
+
+### Aggiornare i CSV (se il file MDB cambia)
+
+Se hai bisogno di ri-esportare i CSV da un nuovo file MDB:
+
+**Opzione A - Da Linux/WSL:**
+```bash
+apt-get install mdbtools
+mdb-export "DB - Scadenziario Bolli.mdb" Ditte > csv/ditte.csv
+# ... (vedi sezione Linux sotto)
+```
+
+**Opzione B - Da Microsoft Access:**
+1. Apri il file .mdb con Access
+2. Esporta ogni tabella in formato CSV (File → Esporta → CSV)
+3. Assicurati che i nomi file corrispondano: `ditte.csv`, `mezzi.csv`, etc.
 
 ## Note
 
