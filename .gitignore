@@ -29,3 +29,6 @@ Thumbs.db
 # Temporary files
 tmp/
 temp/
+
+# Import CSV (generated from MDB)
+import/csv/
