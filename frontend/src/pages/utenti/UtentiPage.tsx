@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { utentiService, CreateUtenteRequest, UpdateUtenteRequest } from '../../services/utenti.service';
+import { utentiService } from '../../services/utenti.service';
+import type { CreateUtenteRequest, UpdateUtenteRequest } from '../../services/utenti.service';
 import { Ruolo } from '../../types';
 import type { Utente } from '../../types';
 import { useAuth } from '../../context/AuthContext';

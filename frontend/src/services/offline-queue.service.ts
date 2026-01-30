@@ -156,7 +156,7 @@ class OfflineQueueService {
     const result: SyncResult = { success: true, synced: 0, failed: 0, errors: [] };
 
     try {
-      const db = await this.initDB();
+      await this.initDB(); // Ensure DB is initialized
       const requests = await this.getAllPendingRequests();
 
       for (const request of requests) {
