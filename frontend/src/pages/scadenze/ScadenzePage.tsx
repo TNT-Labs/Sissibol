@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { scadenzeService } from '../../services/scadenze.service';
 import { veicoliService } from '../../services/veicoli.service';
-import { bolloService } from '../../services/bollo.service';
 import { StatoScadenza, Periodicita, getClienteDisplayName } from '../../types';
 import type { Scadenza, Cliente, Veicolo } from '../../types';
 import { Button } from '../../components/common/Button';

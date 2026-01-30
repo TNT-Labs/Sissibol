@@ -30,7 +30,41 @@ export class ScadenzeService {
     private bolloService: BolloService,
   ) {}
 
-  // Utility: ottiene l'ultimo giorno del mese
+  // =====================================================
+  // UTILITY DATE - Timezone-safe
+  // =====================================================
+
+  /**
+   * Ottiene la data odierna normalizzata a mezzanotte UTC.
+   * Questo garantisce consistenza indipendentemente dal timezone del server.
+   */
+  private getOggiNormalizzato(): Date {
+    const now = new Date();
+    return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0));
+  }
+
+  /**
+   * Crea una data normalizzata a mezzanotte UTC.
+   * Utile per confronti consistenti tra date.
+   */
+  private creaDataNormalizzata(anno: number, mese: number, giorno: number): Date {
+    return new Date(Date.UTC(anno, mese - 1, giorno, 0, 0, 0, 0));
+  }
+
+  /**
+   * Ottiene l'ultimo giorno del mese (gestisce anni bisestili).
+   * @param anno - Anno (es. 2024)
+   * @param mese - Mese 1-12
+   * @returns Numero del giorno (28, 29, 30 o 31)
+   */
+  private getUltimoGiornoDelMese(anno: number, mese: number): number {
+    // Date(anno, mese, 0) restituisce l'ultimo giorno del mese precedente
+    // Quindi Date(2024, 2, 0) → 29 febbraio 2024 (bisestile)
+    //       Date(2025, 2, 0) → 28 febbraio 2025 (non bisestile)
+    return new Date(anno, mese, 0).getDate();
+  }
+
+  // Utility legacy: ottiene l'ultimo giorno del mese come Date
   private getUltimoGiornoMese(anno: number, mese: number): Date {
     // mese è 1-12, Date usa 0-11, quindi mese senza -1 dà il primo giorno del mese successivo
     // sottraendo 1 giorno otteniamo l'ultimo giorno del mese desiderato
@@ -43,7 +77,8 @@ export class ScadenzeService {
   }
 
   /**
-   * Calcola la data effettiva di scadenza considerando la periodicità
+   * Calcola la data effettiva di scadenza considerando la periodicità.
+   * Restituisce date normalizzate UTC per consistenza nei confronti.
    *
    * Per periodicità ANNUALE: ultimo giorno del mese di scadenza
    * Per periodicità QUADRIMESTRALE: date specifiche secondo normativa
@@ -51,10 +86,14 @@ export class ScadenzeService {
    *   - Maggio: 31 maggio
    *   - Settembre: 30 settembre
    *
+   * Gestisce correttamente:
+   * - Anni bisestili (febbraio 29 vs 28 giorni)
+   * - Mesi con 30 vs 31 giorni
+   *
    * @param anno - Anno di scadenza
    * @param mese - Mese di scadenza (1-12)
    * @param periodicita - 'ANNUALE' o 'QUADRIMESTRALE'
-   * @returns Data effettiva di scadenza
+   * @returns Data effettiva di scadenza (normalizzata UTC a mezzanotte)
    */
   getDataScadenzaEffettiva(
     anno: number,
@@ -74,32 +113,32 @@ export class ScadenzeService {
       // Usa la data specifica per il quadrimestre
       const configData = DATE_SCADENZA_QUADRIMESTRALE[mese];
       if (configData) {
-        // Verifica che il giorno sia valido per il mese (es. febbraio bisestile)
-        const ultimoGiornoMese = new Date(anno, mese, 0).getDate();
+        // Verifica che il giorno sia valido per il mese (gestisce anni bisestili)
+        const ultimoGiornoMese = this.getUltimoGiornoDelMese(anno, mese);
         const giornoEffettivo = Math.min(configData.giorno, ultimoGiornoMese);
-        return new Date(anno, mese - 1, giornoEffettivo, 23, 59, 59);
+        // Usa UTC per consistenza
+        return this.creaDataNormalizzata(anno, mese, giornoEffettivo);
       }
     }
 
     // Default: ultimo giorno del mese per periodicità ANNUALE
-    const ultimoGiorno = this.getUltimoGiornoMese(anno, mese);
-    ultimoGiorno.setHours(23, 59, 59);
-    return ultimoGiorno;
+    const ultimoGiorno = this.getUltimoGiornoDelMese(anno, mese);
+    return this.creaDataNormalizzata(anno, mese, ultimoGiorno);
   }
 
   /**
-   * Verifica se una scadenza è in scadenza considerando la periodicità
+   * Verifica se una scadenza è in scadenza considerando la periodicità.
+   * Usa date normalizzate UTC per evitare problemi di timezone e DST.
    *
    * @param scadenza - Oggetto scadenza
-   * @param giorniAnticipo - Giorni di anticipo per la notifica
+   * @param giorniAnticipo - Giorni di anticipo per la notifica (default: 30)
    * @returns true se la scadenza è imminente
    */
   isScadenzaImminente(
     scadenza: { annoScadenza: number; meseScadenza: number; periodicita: string },
     giorniAnticipo: number = 30,
   ): boolean {
-    const oggi = new Date();
-    oggi.setHours(0, 0, 0, 0);
+    const oggi = this.getOggiNormalizzato();
 
     const dataScadenza = this.getDataScadenzaEffettiva(
       scadenza.annoScadenza,
@@ -107,17 +146,19 @@ export class ScadenzeService {
       scadenza.periodicita as 'ANNUALE' | 'QUADRIMESTRALE',
     );
 
-    const dataLimite = new Date(oggi);
-    dataLimite.setDate(dataLimite.getDate() + giorniAnticipo);
+    // Calcola data limite usando millisecondi per evitare problemi con DST
+    const MILLISECONDI_PER_GIORNO = 24 * 60 * 60 * 1000;
+    const dataLimite = new Date(oggi.getTime() + (giorniAnticipo * MILLISECONDI_PER_GIORNO));
 
     // La scadenza è imminente se:
     // - Non è ancora passata (dataScadenza >= oggi)
     // - È entro il limite di anticipo (dataScadenza <= dataLimite)
-    return dataScadenza >= oggi && dataScadenza <= dataLimite;
+    return dataScadenza.getTime() >= oggi.getTime() && dataScadenza.getTime() <= dataLimite.getTime();
   }
 
   /**
-   * Calcola i giorni rimanenti alla scadenza
+   * Calcola i giorni rimanenti alla scadenza.
+   * Usa calcolo basato su millisecondi per precisione con anni bisestili e DST.
    *
    * @param scadenza - Oggetto scadenza
    * @returns Numero di giorni rimanenti (negativo se scaduta)
@@ -125,18 +166,17 @@ export class ScadenzeService {
   getGiorniAllaScadenza(
     scadenza: { annoScadenza: number; meseScadenza: number; periodicita: string },
   ): number {
-    const oggi = new Date();
-    oggi.setHours(0, 0, 0, 0);
+    const oggi = this.getOggiNormalizzato();
 
     const dataScadenza = this.getDataScadenzaEffettiva(
       scadenza.annoScadenza,
       scadenza.meseScadenza,
       scadenza.periodicita as 'ANNUALE' | 'QUADRIMESTRALE',
     );
-    dataScadenza.setHours(0, 0, 0, 0);
 
+    const MILLISECONDI_PER_GIORNO = 24 * 60 * 60 * 1000;
     const diffTime = dataScadenza.getTime() - oggi.getTime();
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return Math.ceil(diffTime / MILLISECONDI_PER_GIORNO);
   }
 
   /**
