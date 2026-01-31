@@ -1,4 +1,50 @@
-import { PartialType } from '../../common/partial-type';
-import { CreateClienteDto } from './create-cliente.dto';
+import { IsString, IsOptional, IsEmail, IsEnum, ValidateIf } from 'class-validator';
+import { TipoCliente } from '../../prisma/types';
 
-export class UpdateClienteDto extends PartialType(CreateClienteDto) {}
+export class UpdateClienteDto {
+  @IsEnum(TipoCliente)
+  @IsOptional()
+  tipoCliente?: TipoCliente;
+
+  // Campi Persona Giuridica
+  @ValidateIf(o => o.tipoCliente === 'PERSONA_GIURIDICA')
+  @IsString()
+  @IsOptional()
+  ragioneSociale?: string;
+
+  @IsString()
+  @IsOptional()
+  partitaIva?: string;
+
+  // Campi Persona Fisica
+  @ValidateIf(o => o.tipoCliente === 'PERSONA_FISICA')
+  @IsString()
+  @IsOptional()
+  nome?: string;
+
+  @ValidateIf(o => o.tipoCliente === 'PERSONA_FISICA')
+  @IsString()
+  @IsOptional()
+  cognome?: string;
+
+  @IsString()
+  @IsOptional()
+  codiceFiscale?: string;
+
+  // Campi comuni
+  @IsString()
+  @IsOptional()
+  indirizzo?: string;
+
+  @IsEmail({}, { message: 'Email non valida' })
+  @IsOptional()
+  email?: string;
+
+  @IsString()
+  @IsOptional()
+  telefono?: string;
+
+  @IsString()
+  @IsOptional()
+  note?: string;
+}
