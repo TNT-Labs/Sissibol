@@ -105,6 +105,8 @@ model Veicolo {
   scadenze              Scadenza[]
   storico               StoricoVeicolo[]
 
+  @@index([idCliente])
+  @@index([targa])
   @@map("veicoli")
 }
 
@@ -160,6 +162,9 @@ model Scadenza {
   veicolo         Veicolo   @relation(fields: [idVeicolo], references: [id], onDelete: Cascade)
   pagamenti       Pagamento[]
 
+  @@index([idVeicolo])
+  @@index([stato, annoScadenza])
+  @@index([annoScadenza, meseScadenza])
   @@map("scadenze")
 }
 
@@ -189,6 +194,8 @@ model Pagamento {
   scadenza          Scadenza  @relation(fields: [idScadenza], references: [id], onDelete: Cascade)
   snapshotCalcolo   SnapshotCalcoloBollo?
 
+  @@index([idScadenza])
+  @@index([dataPagamento])
   @@map("pagamenti")
 }
 
@@ -278,6 +285,8 @@ model TariffaBollo {
 
   configurazione        ConfigurazioneBollo @relation(fields: [idConfigurazione], references: [id], onDelete: Cascade)
 
+  @@index([idConfigurazione])
+  @@index([tipoVeicolo])
   @@map("tariffe_bollo")
 }
 

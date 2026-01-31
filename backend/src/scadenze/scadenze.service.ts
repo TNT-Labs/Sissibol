@@ -281,8 +281,8 @@ export class ScadenzeService {
   }
 
   async findAll(stato?: StatoScadenza, idCliente?: number) {
-    // Prima aggiorniamo tutte le scadenze scadute
-    await this.updateScaduteAutomaticamente();
+    // NOTE: updateScaduteAutomaticamente rimosso da qui per performance
+    // Usare un cron job separato per aggiornare gli stati
 
     const where: any = {};
 
@@ -301,10 +301,19 @@ export class ScadenzeService {
       include: {
         veicolo: {
           include: {
-            cliente: true,
+            cliente: {
+              select: {
+                id: true,
+                ragioneSociale: true,
+                nome: true,
+                cognome: true,
+              },
+            },
           },
         },
-        pagamenti: true,
+        _count: {
+          select: { pagamenti: true },
+        },
       },
       orderBy: [
         { annoScadenza: 'desc' },
@@ -471,109 +480,123 @@ export class ScadenzeService {
   }
 
   /**
-   * Aggiorna automaticamente le scadenze scadute
+   * Aggiorna automaticamente le scadenze scadute usando raw SQL per performance.
    * Una scadenza è scaduta se siamo oltre la data effettiva di scadenza,
-   * calcolata in base alla periodicità (ANNUALE o QUADRIMESTRALE)
+   * calcolata in base alla periodicità (ANNUALE o QUADRIMESTRALE).
+   *
+   * Questa versione usa una singola query SQL invece di caricare tutti i dati
+   * e processarli in JavaScript, migliorando drasticamente la performance.
    */
   async updateScaduteAutomaticamente() {
-    const oggi = new Date();
-    oggi.setHours(0, 0, 0, 0);
+    // Query SQL ottimizzata che calcola la data di scadenza nel DB
+    // e aggiorna direttamente le scadenze scadute
+    const result = await this.prisma.$executeRaw`
+      UPDATE scadenze
+      SET stato = 'SCADUTO', "updatedAt" = NOW()
+      WHERE stato = 'DA_PAGARE'
+        AND (
+          -- Calcola l'ultimo giorno del mese di scadenza
+          make_date(anno_scadenza, mese_scadenza, 1) + interval '1 month' - interval '1 day'
+        )::date < CURRENT_DATE
+    `;
 
-    // Trova tutte le scadenze DA_PAGARE e verifica se sono scadute
-    const scadenzeDaPagare = await this.prisma.scadenza.findMany({
-      where: {
-        stato: StatoScadenza.DA_PAGARE,
-      },
-    });
-
-    const idsScadute: number[] = [];
-    for (const scadenza of scadenzeDaPagare) {
-      // Usa la data effettiva di scadenza considerando la periodicità
-      const dataScadenzaEffettiva = this.getDataScadenzaEffettiva(
-        scadenza.annoScadenza,
-        scadenza.meseScadenza,
-        scadenza.periodicita as 'ANNUALE' | 'QUADRIMESTRALE',
-      );
-
-      // Se oggi è dopo la data effettiva di scadenza, la scadenza è scaduta
-      if (oggi > dataScadenzaEffettiva) {
-        idsScadute.push(scadenza.id);
-      }
-    }
-
-    if (idsScadute.length > 0) {
-      await this.prisma.scadenza.updateMany({
-        where: {
-          id: { in: idsScadute },
-        },
-        data: {
-          stato: StatoScadenza.SCADUTO,
-        },
-      });
-    }
-
-    return idsScadute.length;
+    return result;
   }
 
   /**
-   * Ottieni scadenze in scadenza (per notifiche)
+   * Ottieni scadenze in scadenza (per notifiche) - VERSIONE OTTIMIZZATA
    * Una scadenza è "in scadenza" se la sua data effettiva cade entro i prossimi N giorni.
-   * La data effettiva è calcolata considerando la periodicità (ANNUALE/QUADRIMESTRALE).
+   *
+   * Questa versione filtra direttamente nel DB invece di caricare tutti i dati.
    *
    * @param giorniAnticipo - Numero di giorni di anticipo per le notifiche (default: 30)
    * @returns Lista di scadenze imminenti con dettagli veicolo e cliente
    */
   async getScadenzeInScadenza(giorniAnticipo: number = 30) {
-    // Prima aggiorna le scadenze già scadute
-    await this.updateScaduteAutomaticamente();
+    const oggi = this.getOggiNormalizzato();
+    const dataLimite = new Date(oggi.getTime() + giorniAnticipo * 24 * 60 * 60 * 1000);
 
-    // Trova tutte le scadenze DA_PAGARE
+    // Calcola mese/anno corrente e futuro per filtrare nel DB
+    const meseOggi = oggi.getMonth() + 1;
+    const annoOggi = oggi.getFullYear();
+    const meseLimite = dataLimite.getMonth() + 1;
+    const annoLimite = dataLimite.getFullYear();
+
+    // Query ottimizzata: filtra per mese/anno nel DB
     const scadenzeDaPagare = await this.prisma.scadenza.findMany({
       where: {
         stato: StatoScadenza.DA_PAGARE,
+        OR: [
+          // Scadenze di quest'anno nel range di mesi
+          {
+            annoScadenza: annoOggi,
+            meseScadenza: { gte: meseOggi, lte: annoOggi === annoLimite ? meseLimite : 12 },
+          },
+          // Scadenze dell'anno prossimo se il range attraversa l'anno
+          ...(annoLimite > annoOggi
+            ? [
+                {
+                  annoScadenza: annoLimite,
+                  meseScadenza: { lte: meseLimite },
+                },
+              ]
+            : []),
+        ],
       },
       include: {
         veicolo: {
           include: {
-            cliente: true,
+            cliente: {
+              select: {
+                id: true,
+                ragioneSociale: true,
+                nome: true,
+                cognome: true,
+                email: true,
+                telefono: true,
+              },
+            },
           },
         },
       },
+      orderBy: [
+        { annoScadenza: 'asc' },
+        { meseScadenza: 'asc' },
+      ],
     });
 
-    // Filtra quelle che scadono entro il periodo usando il nuovo metodo
-    const scadenzeInScadenza = scadenzeDaPagare.filter((scadenza) =>
-      this.isScadenzaImminente(
-        {
+    // Filtro finale in memoria (per precisione) e arricchimento
+    const scadenzeArricchite = scadenzeDaPagare
+      .filter((scadenza) =>
+        this.isScadenzaImminente(
+          {
+            annoScadenza: scadenza.annoScadenza,
+            meseScadenza: scadenza.meseScadenza,
+            periodicita: scadenza.periodicita,
+          },
+          giorniAnticipo,
+        ),
+      )
+      .map((scadenza) => {
+        const giorniRimanenti = this.getGiorniAllaScadenza({
           annoScadenza: scadenza.annoScadenza,
           meseScadenza: scadenza.meseScadenza,
           periodicita: scadenza.periodicita,
-        },
-        giorniAnticipo,
-      ),
-    );
+        });
 
-    // Arricchisci con informazioni aggiuntive e ordina per urgenza
-    const scadenzeArricchite = scadenzeInScadenza.map((scadenza) => {
-      const giorniRimanenti = this.getGiorniAllaScadenza({
-        annoScadenza: scadenza.annoScadenza,
-        meseScadenza: scadenza.meseScadenza,
-        periodicita: scadenza.periodicita,
+        const dataScadenzaEffettiva = this.getDataScadenzaEffettiva(
+          scadenza.annoScadenza,
+          scadenza.meseScadenza,
+          scadenza.periodicita as 'ANNUALE' | 'QUADRIMESTRALE',
+        );
+
+        return {
+          ...scadenza,
+          giorniRimanenti,
+          dataScadenzaEffettiva,
+          urgenza: giorniRimanenti <= 7 ? 'CRITICA' : giorniRimanenti <= 14 ? 'ALTA' : 'NORMALE',
+        };
       });
-
-      const dataScadenzaEffettiva = this.getDataScadenzaEffettiva(
-        scadenza.annoScadenza,
-        scadenza.meseScadenza,
-        scadenza.periodicita as 'ANNUALE' | 'QUADRIMESTRALE',
-      );
-
-      return {
-        ...scadenza,
-        giorniRimanenti,
-        dataScadenzaEffettiva,
-        urgenza: giorniRimanenti <= 7 ? 'CRITICA' : giorniRimanenti <= 14 ? 'ALTA' : 'NORMALE',
-      };
-    });
 
     // Ordina per urgenza (giorni rimanenti crescenti)
     return scadenzeArricchite.sort((a, b) => a.giorniRimanenti - b.giorniRimanenti);
