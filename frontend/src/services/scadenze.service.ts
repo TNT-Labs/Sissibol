@@ -31,6 +31,16 @@ export const scadenzeService = {
   },
 
   /**
+   * Carica scadenze filtrate per mese/anno (ottimizzato per scadenziario)
+   */
+  async getByMeseAnno(meseScadenza: number, annoScadenza: number): Promise<Scadenza[]> {
+    const response = await api.get<Scadenza[]>('/scadenze', {
+      params: { meseScadenza, annoScadenza },
+    });
+    return response.data;
+  },
+
+  /**
    * Versione paginata per report e export di grandi dataset.
    * Previene memory overflow caricando i dati in chunk.
    */

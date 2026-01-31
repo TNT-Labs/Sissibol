@@ -280,7 +280,12 @@ export class ScadenzeService {
     }
   }
 
-  async findAll(stato?: StatoScadenza, idCliente?: number) {
+  async findAll(
+    stato?: StatoScadenza,
+    idCliente?: number,
+    meseScadenza?: number,
+    annoScadenza?: number,
+  ) {
     // NOTE: updateScaduteAutomaticamente rimosso da qui per performance
     // Usare un cron job separato per aggiornare gli stati
 
@@ -294,6 +299,15 @@ export class ScadenzeService {
       where.veicolo = {
         idCliente: idCliente,
       };
+    }
+
+    // Filtro per mese/anno (ottimizzazione per scadenziario)
+    if (meseScadenza) {
+      where.meseScadenza = meseScadenza;
+    }
+
+    if (annoScadenza) {
+      where.annoScadenza = annoScadenza;
     }
 
     return this.prisma.scadenza.findMany({
