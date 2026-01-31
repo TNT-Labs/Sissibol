@@ -27,9 +27,27 @@ export class VeicoliController {
   }
 
   @Get()
-  findAll(@Query('idCliente') idCliente?: string) {
+  findAll(
+    @Query('idCliente') idCliente?: string,
+    @Query('search') search?: string,
+  ) {
     const parsedIdCliente = idCliente ? parseInt(idCliente, 10) : undefined;
-    return this.veicoliService.findAll(parsedIdCliente);
+    return this.veicoliService.findAll(parsedIdCliente, search);
+  }
+
+  @Get('paginated')
+  findAllPaginated(
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Query('idCliente') idCliente?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.veicoliService.findAllPaginated(
+      page ? parseInt(page, 10) : 1,
+      pageSize ? parseInt(pageSize, 10) : 50,
+      idCliente ? parseInt(idCliente, 10) : undefined,
+      search,
+    );
   }
 
   @Get(':id')

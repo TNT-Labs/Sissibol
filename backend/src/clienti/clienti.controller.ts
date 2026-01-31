@@ -30,6 +30,19 @@ export class ClientiController {
     return this.clientiService.findAll(search);
   }
 
+  @Get('paginated')
+  findAllPaginated(
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.clientiService.findAllPaginated(
+      page ? parseInt(page, 10) : 1,
+      pageSize ? parseInt(pageSize, 10) : 50,
+      search,
+    );
+  }
+
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.clientiService.findOne(id);

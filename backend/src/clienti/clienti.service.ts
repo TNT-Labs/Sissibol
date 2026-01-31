@@ -30,7 +30,15 @@ export class ClientiService {
     return this.prisma.cliente.findMany({
       where,
       include: {
-        veicoli: true,
+        veicoli: {
+          select: {
+            id: true,
+            targa: true,
+          },
+        },
+        _count: {
+          select: { veicoli: true },
+        },
       },
       orderBy: [
         { ragioneSociale: 'asc' },
@@ -38,6 +46,65 @@ export class ClientiService {
         { nome: 'asc' },
       ],
     });
+  }
+
+  async findAllPaginated(
+    page: number = 1,
+    pageSize: number = 50,
+    search?: string,
+  ) {
+    const skip = (page - 1) * pageSize;
+
+    const where = search
+      ? {
+          OR: [
+            { ragioneSociale: { contains: search, mode: 'insensitive' as const } },
+            { nome: { contains: search, mode: 'insensitive' as const } },
+            { cognome: { contains: search, mode: 'insensitive' as const } },
+            { partitaIva: { contains: search, mode: 'insensitive' as const } },
+            { codiceFiscale: { contains: search, mode: 'insensitive' as const } },
+            { email: { contains: search, mode: 'insensitive' as const } },
+          ],
+        }
+      : {};
+
+    const [data, total] = await Promise.all([
+      this.prisma.cliente.findMany({
+        where,
+        select: {
+          id: true,
+          tipoCliente: true,
+          ragioneSociale: true,
+          partitaIva: true,
+          nome: true,
+          cognome: true,
+          codiceFiscale: true,
+          email: true,
+          telefono: true,
+          _count: {
+            select: { veicoli: true },
+          },
+        },
+        orderBy: [
+          { ragioneSociale: 'asc' },
+          { cognome: 'asc' },
+          { nome: 'asc' },
+        ],
+        skip,
+        take: pageSize,
+      }),
+      this.prisma.cliente.count({ where }),
+    ]);
+
+    return {
+      data,
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.ceil(total / pageSize),
+      },
+    };
   }
 
   async findOne(id: number) {

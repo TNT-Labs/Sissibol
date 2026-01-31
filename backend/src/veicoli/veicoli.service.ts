@@ -19,24 +19,112 @@ export class VeicoliService {
     });
   }
 
-  async findAll(idCliente?: number) {
-    const where = idCliente ? { idCliente } : {};
+  async findAll(idCliente?: number, search?: string) {
+    const where: any = {};
+
+    if (idCliente) {
+      where.idCliente = idCliente;
+    }
+
+    if (search) {
+      where.OR = [
+        { targa: { contains: search, mode: 'insensitive' } },
+        { cliente: { ragioneSociale: { contains: search, mode: 'insensitive' } } },
+        { cliente: { nome: { contains: search, mode: 'insensitive' } } },
+        { cliente: { cognome: { contains: search, mode: 'insensitive' } } },
+      ];
+    }
 
     return this.prisma.veicolo.findMany({
       where,
-      include: {
-        cliente: true,
-        scadenze: {
-          orderBy: [
-            { annoScadenza: 'desc' },
-            { meseScadenza: 'desc' },
-          ],
+      select: {
+        id: true,
+        targa: true,
+        tipoVeicolo: true,
+        regione: true,
+        potenzaKw: true,
+        alimentazione: true,
+        cliente: {
+          select: {
+            id: true,
+            ragioneSociale: true,
+            nome: true,
+            cognome: true,
+          },
+        },
+        _count: {
+          select: { scadenze: true },
         },
       },
       orderBy: {
         targa: 'asc',
       },
     });
+  }
+
+  async findAllPaginated(
+    page: number = 1,
+    pageSize: number = 50,
+    idCliente?: number,
+    search?: string,
+  ) {
+    const skip = (page - 1) * pageSize;
+
+    const where: any = {};
+
+    if (idCliente) {
+      where.idCliente = idCliente;
+    }
+
+    if (search) {
+      where.OR = [
+        { targa: { contains: search, mode: 'insensitive' } },
+        { cliente: { ragioneSociale: { contains: search, mode: 'insensitive' } } },
+        { cliente: { nome: { contains: search, mode: 'insensitive' } } },
+        { cliente: { cognome: { contains: search, mode: 'insensitive' } } },
+      ];
+    }
+
+    const [data, total] = await Promise.all([
+      this.prisma.veicolo.findMany({
+        where,
+        select: {
+          id: true,
+          targa: true,
+          tipoVeicolo: true,
+          regione: true,
+          potenzaKw: true,
+          alimentazione: true,
+          cliente: {
+            select: {
+              id: true,
+              ragioneSociale: true,
+              nome: true,
+              cognome: true,
+            },
+          },
+          _count: {
+            select: { scadenze: true },
+          },
+        },
+        orderBy: {
+          targa: 'asc',
+        },
+        skip,
+        take: pageSize,
+      }),
+      this.prisma.veicolo.count({ where }),
+    ]);
+
+    return {
+      data,
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.ceil(total / pageSize),
+      },
+    };
   }
 
   async findOne(id: number) {
