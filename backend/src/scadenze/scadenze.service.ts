@@ -690,31 +690,40 @@ export class ScadenzeService {
       risultato.veicoliProcessati++;
 
       try {
-        // Determina mese di scadenza e periodicità
+        // Il mese di scadenza dipende SEMPRE dalla data di immatricolazione
         let meseScadenza: number;
         let meseImmatricolazione: number | null = null;
         let periodicita: 'ANNUALE' | 'QUADRIMESTRALE';
 
-        // Estrai il mese di immatricolazione se disponibile
+        // Estrai il mese di immatricolazione (obbligatorio per calcolare la scadenza)
         if (veicolo.dataImmatricolazione) {
           const dataImm = new Date(veicolo.dataImmatricolazione);
           meseImmatricolazione = dataImm.getMonth() + 1;
         }
 
+        // Determina la periodicità dalla scadenza più recente o default ANNUALE
         if (veicolo.scadenze.length > 0) {
-          // Usa i dati dalla scadenza più recente
           periodicita = veicolo.scadenze[0].periodicita as 'ANNUALE' | 'QUADRIMESTRALE';
+        } else {
+          periodicita = 'ANNUALE';
+        }
 
-          if (periodicita === 'QUADRIMESTRALE' && meseImmatricolazione) {
-            // Per quadrimestrale, calcola il mese in base all'immatricolazione
+        // Calcola il mese di scadenza in base alla data di immatricolazione
+        if (meseImmatricolazione) {
+          if (periodicita === 'QUADRIMESTRALE') {
+            // Per quadrimestrale: mese calcolato in base al periodo di immatricolazione
             meseScadenza = getMeseScadenzaQuadrimestrale(meseImmatricolazione);
           } else {
-            meseScadenza = veicolo.scadenze[0].meseScadenza;
+            // Per annuale: il mese di scadenza coincide con il mese di immatricolazione
+            meseScadenza = meseImmatricolazione;
           }
+        } else if (veicolo.scadenze.length > 0) {
+          // Fallback: usa il mese dalla scadenza esistente se non c'è data immatricolazione
+          meseScadenza = veicolo.scadenze[0].meseScadenza;
         } else {
-          // Default: usa mese immatricolazione o mese corrente
-          meseScadenza = meseImmatricolazione || meseCorrente;
-          periodicita = 'ANNUALE';
+          // Nessuna data immatricolazione e nessuna scadenza esistente: salta con avviso
+          risultato.errori.push(`Veicolo ${veicolo.targa}: data immatricolazione mancante, impossibile calcolare scadenza`);
+          continue;
         }
 
         // Genera scadenze per ogni periodo fino all'anno target
