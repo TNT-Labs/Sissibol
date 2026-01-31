@@ -11,11 +11,28 @@
  * - Scadenziario → scadenze + pagamenti
  */
 
-import { PrismaClient, TipoCliente, Periodicita, StatoScadenza } from '@prisma/client';
-import * as fs from 'fs';
-import * as path from 'path';
+const { PrismaClient } = require('@prisma/client');
+const fs = require('fs');
+const path = require('path');
 
 const prisma = new PrismaClient();
+
+// Enums (copiati da Prisma per evitare problemi di import)
+const TipoCliente = {
+  PERSONA_FISICA: 'PERSONA_FISICA',
+  PERSONA_GIURIDICA: 'PERSONA_GIURIDICA'
+};
+
+const Periodicita = {
+  QUADRIMESTRALE: 'QUADRIMESTRALE',
+  ANNUALE: 'ANNUALE'
+};
+
+const StatoScadenza = {
+  DA_PAGARE: 'DA_PAGARE',
+  PAGATO: 'PAGATO',
+  SCADUTO: 'SCADUTO'
+};
 
 // Path ai file CSV
 const CSV_DIR = path.join(__dirname, '../../import/csv');
@@ -24,16 +41,16 @@ const CSV_DIR = path.join(__dirname, '../../import/csv');
 // UTILITIES
 // =====================================================
 
-function parseCSV(content: string): Record<string, string>[] {
+function parseCSV(content) {
   const lines = content.split('\n').filter(line => line.trim());
   if (lines.length === 0) return [];
 
   const headers = parseCSVLine(lines[0]);
-  const records: Record<string, string>[] = [];
+  const records = [];
 
   for (let i = 1; i < lines.length; i++) {
     const values = parseCSVLine(lines[i]);
-    const record: Record<string, string> = {};
+    const record = {};
     headers.forEach((header, idx) => {
       record[header] = values[idx] || '';
     });
@@ -43,8 +60,8 @@ function parseCSV(content: string): Record<string, string>[] {
   return records;
 }
 
-function parseCSVLine(line: string): string[] {
-  const values: string[] = [];
+function parseCSVLine(line) {
+  const values = [];
   let current = '';
   let inQuotes = false;
 
@@ -70,7 +87,7 @@ function parseCSVLine(line: string): string[] {
   return values;
 }
 
-function parseMDBDate(dateStr: string): Date | null {
+function parseMDBDate(dateStr) {
   if (!dateStr || dateStr === '') return null;
 
   // Formato MDB: "MM/DD/YY HH:MM:SS" o "MM/DD/YYYY HH:MM:SS"
@@ -89,13 +106,13 @@ function parseMDBDate(dateStr: string): Date | null {
   return new Date(year, month - 1, day);
 }
 
-function parseDecimal(value: string): number | null {
+function parseDecimal(value) {
   if (!value || value === '') return null;
   const num = parseFloat(value.replace(',', '.'));
   return isNaN(num) ? null : num;
 }
 
-function parseInt2(value: string): number | null {
+function parseInt2(value) {
   if (!value || value === '') return null;
   const num = parseInt(value, 10);
   return isNaN(num) ? null : num;
@@ -105,14 +122,8 @@ function parseInt2(value: string): number | null {
 // LOOKUP TABLES
 // =====================================================
 
-interface LookupMaps {
-  tipoMezzi: Map<number, string>;
-  regioni: Map<number, string>;
-  marche: Map<number, string>;
-}
-
-function loadLookupTables(): LookupMaps {
-  const maps: LookupMaps = {
+function loadLookupTables() {
+  const maps = {
     tipoMezzi: new Map(),
     regioni: new Map(),
     marche: new Map(),
@@ -157,14 +168,14 @@ function loadLookupTables(): LookupMaps {
 // IMPORT DITTE → CLIENTI
 // =====================================================
 
-async function importDitte(): Promise<Map<number, number>> {
+async function importDitte() {
   console.log('\n📁 Importazione Ditte → Clienti...');
 
   const content = fs.readFileSync(path.join(CSV_DIR, 'ditte.csv'), 'utf-8');
   const records = parseCSV(content);
 
   // Mappa Cod_ditta MDB → id Sissibol
-  const ditteMap = new Map<number, number>();
+  const ditteMap = new Map();
 
   let imported = 0;
   let errors = 0;
@@ -188,7 +199,7 @@ async function importDitte(): Promise<Map<number, number>> {
       ditteMap.set(codDitta, cliente.id);
       imported++;
     } catch (err) {
-      console.error(`  Errore ditta ${codDitta} (${ragioneSociale}):`, err);
+      console.error(`  Errore ditta ${codDitta} (${ragioneSociale}):`, err.message);
       errors++;
     }
   }
@@ -203,17 +214,14 @@ async function importDitte(): Promise<Map<number, number>> {
 // IMPORT MEZZI → VEICOLI
 // =====================================================
 
-async function importMezzi(
-  ditteMap: Map<number, number>,
-  lookups: LookupMaps
-): Promise<Map<string, number>> {
+async function importMezzi(ditteMap, lookups) {
   console.log('\n🚗 Importazione Mezzi → Veicoli...');
 
   const content = fs.readFileSync(path.join(CSV_DIR, 'mezzi.csv'), 'utf-8');
   const records = parseCSV(content);
 
   // Mappa Targa → id Veicolo Sissibol
-  const veicoliMap = new Map<string, number>();
+  const veicoliMap = new Map();
 
   let imported = 0;
   let skipped = 0;
@@ -271,7 +279,7 @@ async function importMezzi(
       veicoliMap.set(targa, veicolo.id);
       imported++;
     } catch (err) {
-      console.error(`  Errore veicolo ${targa}:`, err);
+      console.error(`  Errore veicolo ${targa}:`, err.message);
       errors++;
     }
   }
@@ -283,8 +291,8 @@ async function importMezzi(
   return veicoliMap;
 }
 
-function normalizeTipoVeicolo(tipo: string): string {
-  const map: Record<string, string> = {
+function normalizeTipoVeicolo(tipo) {
+  const map = {
     'Trattore': 'Trattore stradale',
     'Motrice': 'Motrice',
     'Autocarro': 'Autocarro',
@@ -304,7 +312,7 @@ function normalizeTipoVeicolo(tipo: string): string {
 // IMPORT SCADENZIARIO → SCADENZE + PAGAMENTI
 // =====================================================
 
-async function importScadenziario(veicoliMap: Map<string, number>): Promise<void> {
+async function importScadenziario(veicoliMap) {
   console.log('\n📅 Importazione Scadenziario → Scadenze + Pagamenti...');
 
   const content = fs.readFileSync(path.join(CSV_DIR, 'scadenziario.csv'), 'utf-8');
@@ -316,14 +324,7 @@ async function importScadenziario(veicoliMap: Map<string, number>): Promise<void
   let errors = 0;
 
   // Raggruppa per targa per evitare duplicati di scadenza stesso mese/anno
-  const scadenzeCreate: Map<string, {
-    idVeicolo: number;
-    meseScadenza: number;
-    annoScadenza: number;
-    importoPrevisto: number | null;
-    dataPagamento: Date | null;
-    importoPagato: number | null;
-  }[]> = new Map();
+  const scadenzeCreate = new Map();
 
   for (const row of records) {
     const targa = row['Targa']?.trim().toUpperCase();
@@ -357,7 +358,7 @@ async function importScadenziario(veicoliMap: Map<string, number>): Promise<void
       scadenzeCreate.set(key, []);
     }
 
-    scadenzeCreate.get(key)!.push({
+    scadenzeCreate.get(key).push({
       idVeicolo,
       meseScadenza,
       annoScadenza,
@@ -384,7 +385,7 @@ async function importScadenziario(veicoliMap: Map<string, number>): Promise<void
         // Determina lo stato
         const now = new Date();
         const scadenzaDate = new Date(first.annoScadenza, first.meseScadenza - 1, 1);
-        let stato: StatoScadenza;
+        let stato;
 
         if (hasPagamento) {
           stato = StatoScadenza.PAGATO;
@@ -410,12 +411,12 @@ async function importScadenziario(veicoliMap: Map<string, number>): Promise<void
 
         // Crea pagamento se presente
         if (hasPagamento) {
-          const paidItem = items.find(item => item.dataPagamento !== null)!;
+          const paidItem = items.find(item => item.dataPagamento !== null);
 
           await prisma.pagamento.create({
             data: {
               idScadenza: scadenza.id,
-              dataPagamento: paidItem.dataPagamento!,
+              dataPagamento: paidItem.dataPagamento,
               importoPagato: paidItem.importoPagato || paidItem.importoPrevisto || 0,
               metodoPagamento: 'Importato da archivio',
             },
@@ -426,7 +427,7 @@ async function importScadenziario(veicoliMap: Map<string, number>): Promise<void
       } catch (err) {
         errors++;
         if (errors <= 10) {
-          console.error(`  Errore scadenza ${key}:`, err);
+          console.error(`  Errore scadenza ${key}:`, err.message);
         }
       }
     }
