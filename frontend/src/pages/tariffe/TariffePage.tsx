@@ -135,9 +135,11 @@ export const TariffePage: React.FC = () => {
     {} as Record<string, TariffaBollo[]>
   );
 
-  const formatImporto = (value: number | undefined, decimali: number = 2) => {
+  const formatImporto = (value: number | string | undefined | null, decimali: number = 2) => {
     if (value === undefined || value === null) return '-';
-    return `€ ${value.toFixed(decimali)}`;
+    const numValue = typeof value === 'string' ? parseFloat(value) : value;
+    if (isNaN(numValue)) return '-';
+    return `€ ${numValue.toFixed(decimali)}`;
   };
 
   if (loading) {
