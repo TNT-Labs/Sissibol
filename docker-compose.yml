@@ -37,6 +37,7 @@ services:
       - "3000:3000"
     volumes:
       - ./backend/uploads:/app/uploads
+      - ./import/csv:/app/import/csv
     depends_on:
       postgres:
         condition: service_healthy
