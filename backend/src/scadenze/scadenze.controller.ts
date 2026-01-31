@@ -32,9 +32,15 @@ export class ScadenzeController {
   findAll(
     @Query('stato') stato?: StatoScadenza,
     @Query('idCliente') idCliente?: string,
+    @Query('meseScadenza') meseScadenza?: string,
+    @Query('annoScadenza') annoScadenza?: string,
   ) {
-    const parsedIdCliente = idCliente ? parseInt(idCliente, 10) : undefined;
-    return this.scadenzeService.findAll(stato, parsedIdCliente);
+    return this.scadenzeService.findAll(
+      stato,
+      idCliente ? parseInt(idCliente, 10) : undefined,
+      meseScadenza ? parseInt(meseScadenza, 10) : undefined,
+      annoScadenza ? parseInt(annoScadenza, 10) : undefined,
+    );
   }
 
   /**

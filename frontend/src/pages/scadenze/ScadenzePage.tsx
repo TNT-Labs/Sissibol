@@ -58,37 +58,43 @@ export const ScadenzePage: React.FC = () => {
     stato: StatoScadenza.DA_PAGARE,
   });
 
+  // Carica veicoli una volta sola (per il modal)
   useEffect(() => {
-    loadData();
+    loadVeicoli();
   }, []);
 
-  const loadData = async () => {
+  // Ricarica scadenze quando cambia mese/anno
+  useEffect(() => {
+    loadScadenze();
+  }, [meseSelezionato, annoSelezionato]);
+
+  const loadVeicoli = async () => {
     try {
-      const [scadenzeData, veicoliData] = await Promise.all([
-        scadenzeService.getAll(),
-        veicoliService.getAll(),
-      ]);
-      setScadenze(scadenzeData);
+      const veicoliData = await veicoliService.getAll();
       setVeicoli(veicoliData);
     } catch (error) {
-      console.error('Errore nel caricamento dei dati:', error);
+      console.error('Errore nel caricamento dei veicoli:', error);
+    }
+  };
+
+  const loadScadenze = async () => {
+    setLoading(true);
+    try {
+      // Carica solo le scadenze del mese/anno selezionato (ottimizzato)
+      const scadenzeData = await scadenzeService.getByMeseAnno(meseSelezionato, annoSelezionato);
+      setScadenze(scadenzeData);
+    } catch (error) {
+      console.error('Errore nel caricamento delle scadenze:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  // Filtra scadenze per mese/anno selezionato e raggruppa per cliente
+  // Raggruppa scadenze per cliente (già filtrate dal server)
   const clientiConScadenze = useMemo((): ClienteConScadenze[] => {
-    // Filtra scadenze per il mese/anno selezionato
-    // Usa Number() per garantire il confronto numerico
-    const scadenzeFiltrate = scadenze.filter(
-      (s) => Number(s.meseScadenza) === meseSelezionato && Number(s.annoScadenza) === annoSelezionato
-    );
-
-    // Raggruppa per cliente
     const clienteMap = new Map<number, ClienteConScadenze>();
 
-    scadenzeFiltrate.forEach((scadenza) => {
+    scadenze.forEach((scadenza) => {
       const clienteId = scadenza.veicolo?.cliente?.id;
       // Se non c'è cliente associato, usa un ID fittizio per raggruppare
       const effectiveClienteId = clienteId || -1;
@@ -114,18 +120,6 @@ export const ScadenzePage: React.FC = () => {
     return Array.from(clienteMap.values()).sort((a, b) =>
       getClienteDisplayName(a.cliente).localeCompare(getClienteDisplayName(b.cliente))
     );
-  }, [scadenze, meseSelezionato, annoSelezionato]);
-
-  // Calcola statistiche per i mesi disponibili
-  const mesiDisponibili = useMemo(() => {
-    const mesiSet = new Map<string, number>();
-    scadenze.forEach(s => {
-      const key = `${s.annoScadenza}-${String(s.meseScadenza).padStart(2, '0')}`;
-      mesiSet.set(key, (mesiSet.get(key) || 0) + 1);
-    });
-    return Array.from(mesiSet.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .slice(0, 12); // Mostra solo i primi 12 mesi
   }, [scadenze]);
 
   const toggleExpanded = (clienteId: number) => {
@@ -187,7 +181,7 @@ export const ScadenzePage: React.FC = () => {
         await scadenzeService.create(data);
       }
       handleCloseModal();
-      loadData();
+      loadScadenze();
     } catch (error) {
       console.error('Errore nel salvataggio della scadenza:', error);
     }
@@ -197,7 +191,7 @@ export const ScadenzePage: React.FC = () => {
     if (confirm('Sei sicuro di voler eliminare questa scadenza?')) {
       try {
         await scadenzeService.delete(id);
-        loadData();
+        loadScadenze();
       } catch (error) {
         console.error('Errore nell\'eliminazione della scadenza:', error);
       }
@@ -207,7 +201,7 @@ export const ScadenzePage: React.FC = () => {
   const handleRicalcolaBollo = async (id: number) => {
     try {
       await scadenzeService.ricalcolaImporto(id);
-      loadData();
+      loadScadenze();
     } catch (error) {
       console.error('Errore nel ricalcolo del bollo:', error);
       alert('Errore nel ricalcolo del bollo. Verifica che il veicolo abbia tutti i parametri necessari.');
@@ -285,37 +279,8 @@ export const ScadenzePage: React.FC = () => {
           <div className="flex-1"></div>
           <div className="text-sm text-gray-600">
             <span className="font-semibold text-lg text-blue-600">{totaleVeicoli}</span> veicoli in scadenza
-            <span className="ml-2 text-gray-400">({scadenze.length} totali)</span>
           </div>
         </div>
-        {/* Mesi con scadenze disponibili */}
-        {scadenze.length > 0 && mesiDisponibili.length > 0 && totaleVeicoli === 0 && (
-          <div className="mt-3 pt-3 border-t border-gray-200">
-            <p className="text-sm text-gray-500 mb-2">Scadenze disponibili in altri periodi:</p>
-            <div className="flex flex-wrap gap-2">
-              {mesiDisponibili.map(([key, count]) => {
-                const [anno, mese] = key.split('-').map(Number);
-                const isSelected = mese === meseSelezionato && anno === annoSelezionato;
-                return (
-                  <button
-                    key={key}
-                    onClick={() => {
-                      setMeseSelezionato(mese);
-                      setAnnoSelezionato(anno);
-                    }}
-                    className={`px-3 py-1 text-sm rounded-full transition-colors ${
-                      isSelected
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    {getMeseLabel(mese)} {anno} ({count})
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Lista raggruppata per cliente */}
