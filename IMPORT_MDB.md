@@ -14,3 +14,12 @@ docker exec -it sissibol-backend npm run prisma:seed
 
 # 5. Esegui l'import
 docker exec -it sissibol-backend npm run prisma:import-mdb
+
+
+
+## Installazione Pulita con Docker
+# 1. Reset completo del database (elimina, ricrea schema, applica seed)
+docker exec -it sissibol-backend npx prisma migrate reset --force
+
+# 2. Importa i dati dai CSV
+docker exec -it sissibol-backend npm run prisma:import-mdb
