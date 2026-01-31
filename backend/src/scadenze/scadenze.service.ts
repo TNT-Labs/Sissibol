@@ -14,6 +14,23 @@ import { StatoScadenza, Periodicita } from '../prisma/types';
 const MESI_QUADRIMESTRE = [1, 5, 9];
 
 /**
+ * Calcola il mese di scadenza quadrimestrale in base al mese di immatricolazione.
+ * Secondo la normativa italiana:
+ * - Immatricolazione Gen-Apr (1-4) → scadenza Maggio (5)
+ * - Immatricolazione Mag-Ago (5-8) → scadenza Settembre (9)
+ * - Immatricolazione Set-Dic (9-12) → scadenza Gennaio (1)
+ */
+function getMeseScadenzaQuadrimestrale(meseImmatricolazione: number): number {
+  if (meseImmatricolazione >= 1 && meseImmatricolazione <= 4) {
+    return 5; // Maggio
+  } else if (meseImmatricolazione >= 5 && meseImmatricolazione <= 8) {
+    return 9; // Settembre
+  } else {
+    return 1; // Gennaio
+  }
+}
+
+/**
  * Date specifiche di scadenza per periodicità quadrimestrale
  * secondo normativa regionale Lombardia 2026
  */
@@ -675,20 +692,28 @@ export class ScadenzeService {
       try {
         // Determina mese di scadenza e periodicità
         let meseScadenza: number;
+        let meseImmatricolazione: number | null = null;
         let periodicita: 'ANNUALE' | 'QUADRIMESTRALE';
+
+        // Estrai il mese di immatricolazione se disponibile
+        if (veicolo.dataImmatricolazione) {
+          const dataImm = new Date(veicolo.dataImmatricolazione);
+          meseImmatricolazione = dataImm.getMonth() + 1;
+        }
 
         if (veicolo.scadenze.length > 0) {
           // Usa i dati dalla scadenza più recente
-          meseScadenza = veicolo.scadenze[0].meseScadenza;
           periodicita = veicolo.scadenze[0].periodicita as 'ANNUALE' | 'QUADRIMESTRALE';
+
+          if (periodicita === 'QUADRIMESTRALE' && meseImmatricolazione) {
+            // Per quadrimestrale, calcola il mese in base all'immatricolazione
+            meseScadenza = getMeseScadenzaQuadrimestrale(meseImmatricolazione);
+          } else {
+            meseScadenza = veicolo.scadenze[0].meseScadenza;
+          }
         } else {
           // Default: usa mese immatricolazione o mese corrente
-          if (veicolo.dataImmatricolazione) {
-            const dataImm = new Date(veicolo.dataImmatricolazione);
-            meseScadenza = dataImm.getMonth() + 1;
-          } else {
-            meseScadenza = meseCorrente;
-          }
+          meseScadenza = meseImmatricolazione || meseCorrente;
           periodicita = 'ANNUALE';
         }
 

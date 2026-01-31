@@ -11,8 +11,14 @@ export class VeicoliService {
   constructor(private prisma: PrismaService) {}
 
   async create(createVeicoloDto: CreateVeicoloDto) {
+    // Converti dataImmatricolazione da stringa a Date se presente
+    const data: any = { ...createVeicoloDto };
+    if (data.dataImmatricolazione) {
+      data.dataImmatricolazione = new Date(data.dataImmatricolazione);
+    }
+
     return this.prisma.veicolo.create({
-      data: createVeicoloDto,
+      data,
       include: {
         cliente: true,
       },
@@ -173,6 +179,12 @@ export class VeicoliService {
   ) {
     const veicoloCorrente = await this.findOne(id);
 
+    // Converti dataImmatricolazione da stringa a Date se presente
+    const updateData: any = { ...updateVeicoloDto };
+    if (updateData.dataImmatricolazione) {
+      updateData.dataImmatricolazione = new Date(updateData.dataImmatricolazione);
+    }
+
     // Rileva cambiamenti significativi
     const cambioTarga =
       updateVeicoloDto.targa !== undefined &&
@@ -216,7 +228,7 @@ export class VeicoliService {
         // Aggiorna il veicolo
         return tx.veicolo.update({
           where: { id },
-          data: updateVeicoloDto,
+          data: updateData,
           include: {
             cliente: true,
           },
@@ -227,7 +239,7 @@ export class VeicoliService {
     // Nessun cambio significativo: update semplice
     return this.prisma.veicolo.update({
       where: { id },
-      data: updateVeicoloDto,
+      data: updateData,
       include: {
         cliente: true,
       },
