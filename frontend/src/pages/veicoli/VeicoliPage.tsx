@@ -59,6 +59,7 @@ export const VeicoliPage: React.FC = () => {
   const [clienti, setClienti] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterCliente, setFilterCliente] = useState<number | undefined>();
+  const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingVeicolo, setEditingVeicolo] = useState<Veicolo | null>(null);
   const [formData, setFormData] = useState<VeicoloFormData>(emptyFormData);
@@ -79,7 +80,7 @@ export const VeicoliPage: React.FC = () => {
 
   const loadVeicoli = async () => {
     try {
-      const data = await veicoliService.getAll(filterCliente);
+      const data = await veicoliService.getAll(filterCliente, search || undefined);
       setVeicoli(data);
     } catch (error) {
       console.error('Errore nel caricamento dei veicoli:', error);
@@ -88,7 +89,7 @@ export const VeicoliPage: React.FC = () => {
     }
   };
 
-  const handleFilter = () => {
+  const handleSearch = () => {
     loadVeicoli();
   };
 
@@ -224,10 +225,18 @@ export const VeicoliPage: React.FC = () => {
         </Button>
       </div>
 
-      {/* Filter Bar */}
+      {/* Search and Filter Bar */}
       <div className="bg-white rounded-lg shadow p-4">
         <div className="flex space-x-2">
           <div className="flex-1">
+            <Input
+              placeholder="Cerca per targa o nome cliente..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+            />
+          </div>
+          <div className="w-64">
             <select
               className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={filterCliente || ''}
@@ -241,9 +250,9 @@ export const VeicoliPage: React.FC = () => {
               ))}
             </select>
           </div>
-          <Button onClick={handleFilter}>
+          <Button onClick={handleSearch}>
             <Search size={20} className="mr-2" />
-            Filtra
+            Cerca
           </Button>
         </div>
       </div>

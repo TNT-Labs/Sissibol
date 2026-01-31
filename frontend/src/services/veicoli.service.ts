@@ -2,9 +2,9 @@ import { api } from './api';
 import type { Veicolo } from '../types';
 
 export const veicoliService = {
-  async getAll(idCliente?: number): Promise<Veicolo[]> {
+  async getAll(idCliente?: number, search?: string): Promise<Veicolo[]> {
     const response = await api.get<Veicolo[]>('/veicoli', {
-      params: { idCliente },
+      params: { idCliente, search },
     });
     return response.data;
   },

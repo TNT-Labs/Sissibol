@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { scadenzeService } from '../../services/scadenze.service';
+import { scadenzeService, type ScadenzeStats } from '../../services/scadenze.service';
 import type { Scadenza } from '../../types';
 import { getClienteDisplayName } from '../../types';
 import { Calendar, AlertCircle, CheckCircle, Clock } from 'lucide-react';
@@ -8,18 +8,23 @@ import { getMeseLabel } from '../../constants/domini';
 
 export const DashboardPage: React.FC = () => {
   const [scadenzeImminenti, setScadenzeImminenti] = useState<Scadenza[]>([]);
+  const [stats, setStats] = useState<ScadenzeStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadScadenzeImminenti();
+    loadData();
   }, []);
 
-  const loadScadenzeImminenti = async () => {
+  const loadData = async () => {
     try {
-      const data = await scadenzeService.getInScadenza(30);
-      setScadenzeImminenti(data);
+      const [scadenzeData, statsData] = await Promise.all([
+        scadenzeService.getInScadenza(30),
+        scadenzeService.getStats(),
+      ]);
+      setScadenzeImminenti(scadenzeData);
+      setStats(statsData);
     } catch (error) {
-      console.error('Errore nel caricamento delle scadenze:', error);
+      console.error('Errore nel caricamento dei dati:', error);
     } finally {
       setLoading(false);
     }
@@ -87,8 +92,8 @@ export const DashboardPage: React.FC = () => {
               <CheckCircle size={24} />
             </div>
             <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Pagati questo mese</p>
-              <p className="text-2xl font-semibold text-gray-900">0</p>
+              <p className="text-sm font-medium text-gray-600">Pagati</p>
+              <p className="text-2xl font-semibold text-gray-900">{stats?.pagato || 0}</p>
             </div>
           </div>
         </div>
@@ -100,7 +105,7 @@ export const DashboardPage: React.FC = () => {
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Scaduti</p>
-              <p className="text-2xl font-semibold text-gray-900">0</p>
+              <p className="text-2xl font-semibold text-gray-900">{stats?.scaduto || 0}</p>
             </div>
           </div>
         </div>

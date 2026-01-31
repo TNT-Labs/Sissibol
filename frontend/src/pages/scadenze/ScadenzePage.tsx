@@ -80,8 +80,9 @@ export const ScadenzePage: React.FC = () => {
   // Filtra scadenze per mese/anno selezionato e raggruppa per cliente
   const clientiConScadenze = useMemo((): ClienteConScadenze[] => {
     // Filtra scadenze per il mese/anno selezionato
+    // Usa Number() per garantire il confronto numerico
     const scadenzeFiltrate = scadenze.filter(
-      (s) => s.meseScadenza === meseSelezionato && s.annoScadenza === annoSelezionato
+      (s) => Number(s.meseScadenza) === meseSelezionato && Number(s.annoScadenza) === annoSelezionato
     );
 
     // Raggruppa per cliente
@@ -89,17 +90,22 @@ export const ScadenzePage: React.FC = () => {
 
     scadenzeFiltrate.forEach((scadenza) => {
       const clienteId = scadenza.veicolo?.cliente?.id;
-      if (!clienteId) return;
+      // Se non c'è cliente associato, usa un ID fittizio per raggruppare
+      const effectiveClienteId = clienteId || -1;
 
-      if (!clienteMap.has(clienteId)) {
-        clienteMap.set(clienteId, {
-          cliente: scadenza.veicolo!.cliente!,
+      if (!clienteMap.has(effectiveClienteId)) {
+        clienteMap.set(effectiveClienteId, {
+          cliente: scadenza.veicolo?.cliente || {
+            id: -1,
+            tipoCliente: 'PERSONA_GIURIDICA' as any,
+            ragioneSociale: 'Cliente non associato',
+          } as Cliente,
           scadenze: [],
           veicoliCount: 0,
         });
       }
 
-      const entry = clienteMap.get(clienteId)!;
+      const entry = clienteMap.get(effectiveClienteId)!;
       entry.scadenze.push(scadenza);
       entry.veicoliCount = entry.scadenze.length;
     });
@@ -109,6 +115,18 @@ export const ScadenzePage: React.FC = () => {
       getClienteDisplayName(a.cliente).localeCompare(getClienteDisplayName(b.cliente))
     );
   }, [scadenze, meseSelezionato, annoSelezionato]);
+
+  // Calcola statistiche per i mesi disponibili
+  const mesiDisponibili = useMemo(() => {
+    const mesiSet = new Map<string, number>();
+    scadenze.forEach(s => {
+      const key = `${s.annoScadenza}-${String(s.meseScadenza).padStart(2, '0')}`;
+      mesiSet.set(key, (mesiSet.get(key) || 0) + 1);
+    });
+    return Array.from(mesiSet.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .slice(0, 12); // Mostra solo i primi 12 mesi
+  }, [scadenze]);
 
   const toggleExpanded = (clienteId: number) => {
     setExpandedClienti((prev) => {
@@ -267,8 +285,37 @@ export const ScadenzePage: React.FC = () => {
           <div className="flex-1"></div>
           <div className="text-sm text-gray-600">
             <span className="font-semibold text-lg text-blue-600">{totaleVeicoli}</span> veicoli in scadenza
+            <span className="ml-2 text-gray-400">({scadenze.length} totali)</span>
           </div>
         </div>
+        {/* Mesi con scadenze disponibili */}
+        {scadenze.length > 0 && mesiDisponibili.length > 0 && totaleVeicoli === 0 && (
+          <div className="mt-3 pt-3 border-t border-gray-200">
+            <p className="text-sm text-gray-500 mb-2">Scadenze disponibili in altri periodi:</p>
+            <div className="flex flex-wrap gap-2">
+              {mesiDisponibili.map(([key, count]) => {
+                const [anno, mese] = key.split('-').map(Number);
+                const isSelected = mese === meseSelezionato && anno === annoSelezionato;
+                return (
+                  <button
+                    key={key}
+                    onClick={() => {
+                      setMeseSelezionato(mese);
+                      setAnnoSelezionato(anno);
+                    }}
+                    className={`px-3 py-1 text-sm rounded-full transition-colors ${
+                      isSelected
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {getMeseLabel(mese)} {anno} ({count})
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Lista raggruppata per cliente */}
