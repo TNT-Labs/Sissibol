@@ -6,39 +6,26 @@ import { BolloService } from '../bollo/bollo.service';
 import { StatoScadenza, Periodicita } from '../prisma/types';
 
 /**
- * MESI DI SCADENZA QUADRIMESTRALE secondo normativa:
- * - Gennaio (mese 1): scadenza ultimo giorno mese
- * - Maggio (mese 5): scadenza 31 maggio
- * - Settembre (mese 9): scadenza 30 settembre
+ * Calcola i 3 mesi di scadenza quadrimestrale partendo dal mese di immatricolazione.
+ * Le scadenze sono ogni 4 mesi a partire dal mese di immatricolazione.
+ *
+ * Esempio: immatricolazione Marzo (3)
+ * - Scadenza 1: Marzo (3)
+ * - Scadenza 2: Luglio (3 + 4 = 7)
+ * - Scadenza 3: Novembre (3 + 8 = 11)
+ *
+ * @param meseImmatricolazione - Mese di immatricolazione (1-12)
+ * @returns Array di 3 mesi di scadenza
  */
-const MESI_QUADRIMESTRE = [1, 5, 9];
-
-/**
- * Calcola il mese di scadenza quadrimestrale in base al mese di immatricolazione.
- * Secondo la normativa italiana:
- * - Immatricolazione Gen-Apr (1-4) → scadenza Maggio (5)
- * - Immatricolazione Mag-Ago (5-8) → scadenza Settembre (9)
- * - Immatricolazione Set-Dic (9-12) → scadenza Gennaio (1)
- */
-function getMeseScadenzaQuadrimestrale(meseImmatricolazione: number): number {
-  if (meseImmatricolazione >= 1 && meseImmatricolazione <= 4) {
-    return 5; // Maggio
-  } else if (meseImmatricolazione >= 5 && meseImmatricolazione <= 8) {
-    return 9; // Settembre
-  } else {
-    return 1; // Gennaio
+function getMesiScadenzaQuadrimestrale(meseImmatricolazione: number): number[] {
+  const mesi: number[] = [];
+  for (let i = 0; i < 3; i++) {
+    let mese = meseImmatricolazione + (i * 4);
+    if (mese > 12) mese -= 12;
+    mesi.push(mese);
   }
+  return mesi;
 }
-
-/**
- * Date specifiche di scadenza per periodicità quadrimestrale
- * secondo normativa regionale Lombardia 2026
- */
-const DATE_SCADENZA_QUADRIMESTRALE: Record<number, { giorno: number }> = {
-  1: { giorno: 31 },  // Gennaio: 31 gennaio
-  5: { giorno: 31 },  // Maggio: 31 maggio
-  9: { giorno: 30 },  // Settembre: 30 settembre
-};
 
 @Injectable()
 export class ScadenzeService {
@@ -97,11 +84,8 @@ export class ScadenzeService {
    * Calcola la data effettiva di scadenza considerando la periodicità.
    * Restituisce date normalizzate UTC per consistenza nei confronti.
    *
-   * Per periodicità ANNUALE: ultimo giorno del mese di scadenza
-   * Per periodicità QUADRIMESTRALE: date specifiche secondo normativa
-   *   - Gennaio: 31 gennaio
-   *   - Maggio: 31 maggio
-   *   - Settembre: 30 settembre
+   * La scadenza cade sempre l'ultimo giorno del mese di scadenza,
+   * sia per periodicità ANNUALE che QUADRIMESTRALE.
    *
    * Gestisce correttamente:
    * - Anni bisestili (febbraio 29 vs 28 giorni)
@@ -117,28 +101,7 @@ export class ScadenzeService {
     mese: number,
     periodicita: 'ANNUALE' | 'QUADRIMESTRALE' = 'ANNUALE',
   ): Date {
-    if (periodicita === 'QUADRIMESTRALE') {
-      // Verifica che il mese sia valido per la periodicità quadrimestrale
-      if (!MESI_QUADRIMESTRE.includes(mese)) {
-        // Trova il prossimo mese quadrimestrale valido
-        const prossimoMese = MESI_QUADRIMESTRE.find((m) => m >= mese) || MESI_QUADRIMESTRE[0];
-        const annoEffettivo = prossimoMese < mese ? anno + 1 : anno;
-        mese = prossimoMese;
-        anno = annoEffettivo;
-      }
-
-      // Usa la data specifica per il quadrimestre
-      const configData = DATE_SCADENZA_QUADRIMESTRALE[mese];
-      if (configData) {
-        // Verifica che il giorno sia valido per il mese (gestisce anni bisestili)
-        const ultimoGiornoMese = this.getUltimoGiornoDelMese(anno, mese);
-        const giornoEffettivo = Math.min(configData.giorno, ultimoGiornoMese);
-        // Usa UTC per consistenza
-        return this.creaDataNormalizzata(anno, mese, giornoEffettivo);
-      }
-    }
-
-    // Default: ultimo giorno del mese per periodicità ANNUALE
+    // La scadenza cade sempre l'ultimo giorno del mese
     const ultimoGiorno = this.getUltimoGiornoDelMese(anno, mese);
     return this.creaDataNormalizzata(anno, mese, ultimoGiorno);
   }
@@ -197,26 +160,22 @@ export class ScadenzeService {
   }
 
   /**
-   * Valida il mese di scadenza per la periodicità selezionata
+   * Valida il mese di scadenza.
+   *
+   * Il mese di scadenza dipende dalla data di immatricolazione del veicolo:
+   * - Per ANNUALE: il mese è quello di immatricolazione
+   * - Per QUADRIMESTRALE: i mesi sono ogni 4 mesi a partire da quello di immatricolazione
+   *
+   * Quindi qualsiasi mese (1-12) è valido, a seconda della data di immatricolazione.
    *
    * @param mese - Mese di scadenza (1-12)
    * @param periodicita - 'ANNUALE' o 'QUADRIMESTRALE'
-   * @returns Oggetto con validazione e suggerimenti
+   * @returns Oggetto con validazione
    */
   validaMeseScadenza(
     mese: number,
     periodicita: 'ANNUALE' | 'QUADRIMESTRALE',
-  ): { valido: boolean; messaggio?: string; mesiValidi?: number[] } {
-    if (periodicita === 'QUADRIMESTRALE') {
-      if (!MESI_QUADRIMESTRE.includes(mese)) {
-        return {
-          valido: false,
-          messaggio: `Per la periodicità quadrimestrale, i mesi validi sono: Gennaio (1), Maggio (5), Settembre (9)`,
-          mesiValidi: MESI_QUADRIMESTRE,
-        };
-      }
-    }
-
+  ): { valido: boolean; messaggio?: string } {
     if (mese < 1 || mese > 12) {
       return {
         valido: false,
@@ -710,13 +669,9 @@ export class ScadenzeService {
 
         // Calcola il mese di scadenza in base alla data di immatricolazione
         if (meseImmatricolazione) {
-          if (periodicita === 'QUADRIMESTRALE') {
-            // Per quadrimestrale: mese calcolato in base al periodo di immatricolazione
-            meseScadenza = getMeseScadenzaQuadrimestrale(meseImmatricolazione);
-          } else {
-            // Per annuale: il mese di scadenza coincide con il mese di immatricolazione
-            meseScadenza = meseImmatricolazione;
-          }
+          // Il mese di scadenza per ANNUALE è il mese di immatricolazione
+          // Per QUADRIMESTRALE useremo meseImmatricolazione per calcolare i 3 mesi
+          meseScadenza = meseImmatricolazione;
         } else if (veicolo.scadenze.length > 0) {
           // Fallback: usa il mese dalla scadenza esistente se non c'è data immatricolazione
           meseScadenza = veicolo.scadenze[0].meseScadenza;
@@ -729,7 +684,7 @@ export class ScadenzeService {
         // Genera scadenze per ogni periodo fino all'anno target
         const scadenzeDaCreare = this.calcolaScadenzeDaCreare(
           veicolo.id,
-          meseScadenza,
+          meseScadenza, // Per QUADRIMESTRALE questo è il meseImmatricolazione
           periodicita,
           annoCorrente,
           meseCorrente,
@@ -795,11 +750,21 @@ export class ScadenzeService {
   }
 
   /**
-   * Calcola le scadenze da creare per un veicolo in base alla periodicità
+   * Calcola le scadenze da creare per un veicolo in base alla periodicità.
+   *
+   * Per ANNUALE: una scadenza all'anno nel mese di immatricolazione
+   * Per QUADRIMESTRALE: 3 scadenze all'anno, ogni 4 mesi a partire dal mese di immatricolazione
+   *
+   * @param idVeicolo - ID del veicolo
+   * @param meseImmatricolazione - Mese di immatricolazione (usato per calcolare i mesi di scadenza)
+   * @param periodicita - ANNUALE o QUADRIMESTRALE
+   * @param annoCorrente - Anno corrente
+   * @param meseCorrente - Mese corrente
+   * @param annoTarget - Anno fino al quale generare le scadenze
    */
   private calcolaScadenzeDaCreare(
     idVeicolo: number,
-    meseScadenza: number,
+    meseImmatricolazione: number,
     periodicita: 'ANNUALE' | 'QUADRIMESTRALE',
     annoCorrente: number,
     meseCorrente: number,
@@ -808,21 +773,21 @@ export class ScadenzeService {
     const scadenze: { meseScadenza: number; annoScadenza: number }[] = [];
 
     if (periodicita === 'ANNUALE') {
-      // Una scadenza all'anno
+      // Una scadenza all'anno nel mese di immatricolazione
       for (let anno = annoCorrente; anno <= annoTarget; anno++) {
         // Salta se la scadenza è già passata nell'anno corrente
-        if (anno === annoCorrente && meseScadenza < meseCorrente) {
+        if (anno === annoCorrente && meseImmatricolazione < meseCorrente) {
           continue;
         }
-        scadenze.push({ meseScadenza, annoScadenza: anno });
+        scadenze.push({ meseScadenza: meseImmatricolazione, annoScadenza: anno });
       }
     } else {
-      // QUADRIMESTRALE: 3 scadenze all'anno (1, 5, 9)
-      // Trova il mese quadrimestrale corrispondente
-      const meseQuadrimestrale = MESI_QUADRIMESTRE.find(m => m >= meseScadenza) || MESI_QUADRIMESTRE[0];
+      // QUADRIMESTRALE: 3 scadenze all'anno, ogni 4 mesi dal mese di immatricolazione
+      // Es: immatricolazione Marzo (3) → scadenze a Marzo (3), Luglio (7), Novembre (11)
+      const mesiQuadrimestrali = getMesiScadenzaQuadrimestrale(meseImmatricolazione);
 
       for (let anno = annoCorrente; anno <= annoTarget; anno++) {
-        for (const mese of MESI_QUADRIMESTRE) {
+        for (const mese of mesiQuadrimestrali) {
           // Salta se la scadenza è già passata
           if (anno === annoCorrente && mese < meseCorrente) {
             continue;
