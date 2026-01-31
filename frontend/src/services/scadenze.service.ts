@@ -133,4 +133,26 @@ export const scadenzeService = {
     const response = await api.post<Scadenza>(`/scadenze/${id}/ricalcola`);
     return response.data;
   },
+
+  /**
+   * Genera scadenze future per tutti i veicoli fino all'anno specificato.
+   * Evita duplicati: non crea scadenze che esistono già.
+   *
+   * @param annoTarget - Anno fino al quale generare le scadenze (incluso)
+   * @returns Statistiche sulla generazione
+   */
+  async generaScadenzeFuture(annoTarget: number): Promise<{
+    veicoliProcessati: number;
+    scadenzeCreate: number;
+    scadenzeSaltate: number;
+    errori: string[];
+  }> {
+    const response = await api.post<{
+      veicoliProcessati: number;
+      scadenzeCreate: number;
+      scadenzeSaltate: number;
+      errori: string[];
+    }>('/scadenze/genera-future', { annoTarget });
+    return response.data;
+  },
 };

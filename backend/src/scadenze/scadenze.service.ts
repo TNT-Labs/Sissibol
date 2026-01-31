@@ -14,6 +14,23 @@ import { StatoScadenza, Periodicita } from '../prisma/types';
 const MESI_QUADRIMESTRE = [1, 5, 9];
 
 /**
+ * Calcola il mese di scadenza quadrimestrale in base al mese di immatricolazione.
+ * Secondo la normativa italiana:
+ * - Immatricolazione Gen-Apr (1-4) → scadenza Maggio (5)
+ * - Immatricolazione Mag-Ago (5-8) → scadenza Settembre (9)
+ * - Immatricolazione Set-Dic (9-12) → scadenza Gennaio (1)
+ */
+function getMeseScadenzaQuadrimestrale(meseImmatricolazione: number): number {
+  if (meseImmatricolazione >= 1 && meseImmatricolazione <= 4) {
+    return 5; // Maggio
+  } else if (meseImmatricolazione >= 5 && meseImmatricolazione <= 8) {
+    return 9; // Settembre
+  } else {
+    return 1; // Gennaio
+  }
+}
+
+/**
  * Date specifiche di scadenza per periodicità quadrimestrale
  * secondo normativa regionale Lombardia 2026
  */
@@ -614,5 +631,207 @@ export class ScadenzeService {
 
     // Ordina per urgenza (giorni rimanenti crescenti)
     return scadenzeArricchite.sort((a, b) => a.giorniRimanenti - b.giorniRimanenti);
+  }
+
+  /**
+   * Genera scadenze future per tutti i veicoli fino all'anno specificato.
+   *
+   * Per ogni veicolo:
+   * - Determina il mese di scadenza dalla scadenza più recente, o dal mese di immatricolazione
+   * - Determina la periodicità dalla scadenza più recente, o default ANNUALE
+   * - Genera le scadenze mancanti fino all'anno target
+   * - Calcola automaticamente l'importo previsto
+   *
+   * @param annoTarget - Anno fino al quale generare le scadenze (incluso)
+   * @returns Statistiche sulla generazione
+   */
+  async generaScadenzeFuture(annoTarget: number): Promise<{
+    veicoliProcessati: number;
+    scadenzeCreate: number;
+    scadenzeSaltate: number;
+    errori: string[];
+  }> {
+    const oggi = this.getOggiNormalizzato();
+    const annoCorrente = oggi.getFullYear();
+    const meseCorrente = oggi.getMonth() + 1;
+
+    if (annoTarget < annoCorrente) {
+      throw new Error(`L'anno target (${annoTarget}) non può essere inferiore all'anno corrente (${annoCorrente})`);
+    }
+
+    if (annoTarget > annoCorrente + 10) {
+      throw new Error(`L'anno target non può essere superiore a ${annoCorrente + 10}`);
+    }
+
+    const risultato = {
+      veicoliProcessati: 0,
+      scadenzeCreate: 0,
+      scadenzeSaltate: 0,
+      errori: [] as string[],
+    };
+
+    // Recupera tutti i veicoli con le loro scadenze esistenti
+    const veicoli = await this.prisma.veicolo.findMany({
+      include: {
+        scadenze: {
+          orderBy: [
+            { annoScadenza: 'desc' },
+            { meseScadenza: 'desc' },
+          ],
+          take: 1, // Solo la più recente
+        },
+        cliente: {
+          select: { id: true, ragioneSociale: true, nome: true, cognome: true },
+        },
+      },
+    });
+
+    for (const veicolo of veicoli) {
+      risultato.veicoliProcessati++;
+
+      try {
+        // Il mese di scadenza dipende SEMPRE dalla data di immatricolazione
+        let meseScadenza: number;
+        let meseImmatricolazione: number | null = null;
+        let periodicita: 'ANNUALE' | 'QUADRIMESTRALE';
+
+        // Estrai il mese di immatricolazione (obbligatorio per calcolare la scadenza)
+        if (veicolo.dataImmatricolazione) {
+          const dataImm = new Date(veicolo.dataImmatricolazione);
+          meseImmatricolazione = dataImm.getMonth() + 1;
+        }
+
+        // Determina la periodicità dalla scadenza più recente o default ANNUALE
+        if (veicolo.scadenze.length > 0) {
+          periodicita = veicolo.scadenze[0].periodicita as 'ANNUALE' | 'QUADRIMESTRALE';
+        } else {
+          periodicita = 'ANNUALE';
+        }
+
+        // Calcola il mese di scadenza in base alla data di immatricolazione
+        if (meseImmatricolazione) {
+          if (periodicita === 'QUADRIMESTRALE') {
+            // Per quadrimestrale: mese calcolato in base al periodo di immatricolazione
+            meseScadenza = getMeseScadenzaQuadrimestrale(meseImmatricolazione);
+          } else {
+            // Per annuale: il mese di scadenza coincide con il mese di immatricolazione
+            meseScadenza = meseImmatricolazione;
+          }
+        } else if (veicolo.scadenze.length > 0) {
+          // Fallback: usa il mese dalla scadenza esistente se non c'è data immatricolazione
+          meseScadenza = veicolo.scadenze[0].meseScadenza;
+        } else {
+          // Nessuna data immatricolazione e nessuna scadenza esistente: salta con avviso
+          risultato.errori.push(`Veicolo ${veicolo.targa}: data immatricolazione mancante, impossibile calcolare scadenza`);
+          continue;
+        }
+
+        // Genera scadenze per ogni periodo fino all'anno target
+        const scadenzeDaCreare = this.calcolaScadenzeDaCreare(
+          veicolo.id,
+          meseScadenza,
+          periodicita,
+          annoCorrente,
+          meseCorrente,
+          annoTarget,
+        );
+
+        // Verifica quali scadenze esistono già
+        const scadenzeEsistenti = await this.prisma.scadenza.findMany({
+          where: {
+            idVeicolo: veicolo.id,
+            annoScadenza: { gte: annoCorrente, lte: annoTarget },
+          },
+          select: { meseScadenza: true, annoScadenza: true },
+        });
+
+        const esistentiSet = new Set(
+          scadenzeEsistenti.map(s => `${s.annoScadenza}-${s.meseScadenza}`)
+        );
+
+        // Crea solo le scadenze che non esistono
+        for (const scadenza of scadenzeDaCreare) {
+          const chiave = `${scadenza.annoScadenza}-${scadenza.meseScadenza}`;
+
+          if (esistentiSet.has(chiave)) {
+            risultato.scadenzeSaltate++;
+            continue;
+          }
+
+          // Calcola importo previsto
+          let importoPrevisto: number | undefined;
+          try {
+            const calcolo = await this.bolloService.calcolaBollo(
+              veicolo.id,
+              scadenza.annoScadenza,
+              periodicita,
+            );
+            importoPrevisto = calcolo.importoBase;
+          } catch (error) {
+            // Se il calcolo fallisce, lascia l'importo nullo
+            console.warn(`Impossibile calcolare bollo per veicolo ${veicolo.targa}:`, error.message);
+          }
+
+          // Crea la scadenza
+          await this.prisma.scadenza.create({
+            data: {
+              idVeicolo: veicolo.id,
+              meseScadenza: scadenza.meseScadenza,
+              annoScadenza: scadenza.annoScadenza,
+              periodicita: periodicita,
+              importoPrevisto: importoPrevisto,
+              stato: StatoScadenza.DA_PAGARE,
+            },
+          });
+
+          risultato.scadenzeCreate++;
+        }
+      } catch (error) {
+        risultato.errori.push(`Veicolo ${veicolo.targa}: ${error.message}`);
+      }
+    }
+
+    return risultato;
+  }
+
+  /**
+   * Calcola le scadenze da creare per un veicolo in base alla periodicità
+   */
+  private calcolaScadenzeDaCreare(
+    idVeicolo: number,
+    meseScadenza: number,
+    periodicita: 'ANNUALE' | 'QUADRIMESTRALE',
+    annoCorrente: number,
+    meseCorrente: number,
+    annoTarget: number,
+  ): { meseScadenza: number; annoScadenza: number }[] {
+    const scadenze: { meseScadenza: number; annoScadenza: number }[] = [];
+
+    if (periodicita === 'ANNUALE') {
+      // Una scadenza all'anno
+      for (let anno = annoCorrente; anno <= annoTarget; anno++) {
+        // Salta se la scadenza è già passata nell'anno corrente
+        if (anno === annoCorrente && meseScadenza < meseCorrente) {
+          continue;
+        }
+        scadenze.push({ meseScadenza, annoScadenza: anno });
+      }
+    } else {
+      // QUADRIMESTRALE: 3 scadenze all'anno (1, 5, 9)
+      // Trova il mese quadrimestrale corrispondente
+      const meseQuadrimestrale = MESI_QUADRIMESTRE.find(m => m >= meseScadenza) || MESI_QUADRIMESTRE[0];
+
+      for (let anno = annoCorrente; anno <= annoTarget; anno++) {
+        for (const mese of MESI_QUADRIMESTRE) {
+          // Salta se la scadenza è già passata
+          if (anno === annoCorrente && mese < meseCorrente) {
+            continue;
+          }
+          scadenze.push({ meseScadenza: mese, annoScadenza: anno });
+        }
+      }
+    }
+
+    return scadenze;
   }
 }
