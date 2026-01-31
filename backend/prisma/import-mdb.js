@@ -34,8 +34,10 @@ const StatoScadenza = {
   SCADUTO: 'SCADUTO'
 };
 
-// Path ai file CSV
-const CSV_DIR = path.join(__dirname, '../../import/csv');
+// Path ai file CSV (in Docker: /app/import/csv, in locale: ../../import/csv)
+const CSV_DIR = process.env.NODE_ENV === 'production'
+  ? '/app/import/csv'
+  : path.join(__dirname, '../../import/csv');
 
 // =====================================================
 // UTILITIES
