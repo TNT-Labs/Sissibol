@@ -87,6 +87,20 @@ export class ScadenzeController {
     return this.scadenzeService.getScadenzeInScadenza(parsedGiorni);
   }
 
+  /**
+   * Genera scadenze future per tutti i veicoli fino all'anno specificato.
+   * Evita duplicati: non crea scadenze che esistono già.
+   *
+   * POST /scadenze/genera-future
+   * Body: { annoTarget: 2027 }
+   *
+   * @returns Statistiche sulla generazione (veicoli processati, scadenze create/saltate, errori)
+   */
+  @Post('genera-future')
+  generaScadenzeFuture(@Body() body: { annoTarget: number }) {
+    return this.scadenzeService.generaScadenzeFuture(body.annoTarget);
+  }
+
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.scadenzeService.findOne(id);

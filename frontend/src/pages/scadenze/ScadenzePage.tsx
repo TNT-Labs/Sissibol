@@ -5,7 +5,7 @@ import { StatoScadenza, Periodicita, getClienteDisplayName } from '../../types';
 import type { Scadenza, Cliente, Veicolo } from '../../types';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
-import { Plus, X, Calendar as CalendarIcon, ChevronDown, ChevronRight, Car, Edit, Trash2, Calculator } from 'lucide-react';
+import { Plus, X, Calendar as CalendarIcon, ChevronDown, ChevronRight, Car, Edit, Trash2, Calculator, Wand2 } from 'lucide-react';
 import { MESI, getMeseLabel } from '../../constants/domini';
 
 // Calcola il mese successivo
@@ -42,6 +42,18 @@ export const ScadenzePage: React.FC = () => {
   // Modal per nuova/modifica scadenza
   const [showModal, setShowModal] = useState(false);
   const [editingScadenza, setEditingScadenza] = useState<Scadenza | null>(null);
+
+  // Modal per generazione scadenze future
+  const [showGeneraModal, setShowGeneraModal] = useState(false);
+  const [annoTarget, setAnnoTarget] = useState(new Date().getFullYear() + 1);
+  const [generaLoading, setGeneraLoading] = useState(false);
+  const [generaResult, setGeneraResult] = useState<{
+    veicoliProcessati: number;
+    scadenzeCreate: number;
+    scadenzeSaltate: number;
+    errori: string[];
+  } | null>(null);
+
   const [formData, setFormData] = useState<{
     idVeicolo: number;
     meseScadenza: number;
@@ -208,6 +220,27 @@ export const ScadenzePage: React.FC = () => {
     }
   };
 
+  const handleGeneraScadenze = async () => {
+    setGeneraLoading(true);
+    setGeneraResult(null);
+    try {
+      const result = await scadenzeService.generaScadenzeFuture(annoTarget);
+      setGeneraResult(result);
+      // Ricarica le scadenze dopo la generazione
+      loadScadenze();
+    } catch (error: any) {
+      console.error('Errore nella generazione delle scadenze:', error);
+      setGeneraResult({
+        veicoliProcessati: 0,
+        scadenzeCreate: 0,
+        scadenzeSaltate: 0,
+        errori: [error.message || 'Errore sconosciuto'],
+      });
+    } finally {
+      setGeneraLoading(false);
+    }
+  };
+
   const getStatoColor = (stato: string) => {
     switch (stato) {
       case 'DA_PAGARE':
@@ -239,10 +272,16 @@ export const ScadenzePage: React.FC = () => {
           <CalendarIcon className="mr-3" size={32} />
           Scadenziario
         </h1>
-        <Button onClick={() => handleOpenModal()}>
-          <Plus size={20} className="mr-2" />
-          Nuova Scadenza
-        </Button>
+        <div className="flex space-x-2">
+          <Button variant="secondary" onClick={() => setShowGeneraModal(true)}>
+            <Wand2 size={20} className="mr-2" />
+            Genera Scadenze
+          </Button>
+          <Button onClick={() => handleOpenModal()}>
+            <Plus size={20} className="mr-2" />
+            Nuova Scadenza
+          </Button>
+        </div>
       </div>
 
       {/* Filtro Mese/Anno */}
@@ -522,6 +561,132 @@ export const ScadenzePage: React.FC = () => {
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Genera Scadenze Future */}
+      {showGeneraModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-lg w-full">
+            <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+              <h2 className="text-xl font-semibold text-gray-900 flex items-center">
+                <Wand2 size={24} className="mr-2 text-blue-600" />
+                Genera Scadenze Future
+              </h2>
+              <button
+                onClick={() => {
+                  setShowGeneraModal(false);
+                  setGeneraResult(null);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            <div className="px-6 py-4 space-y-4">
+              {!generaResult ? (
+                <>
+                  <p className="text-gray-600">
+                    Questa funzione genera automaticamente le scadenze per tutti i veicoli
+                    fino all'anno selezionato. Le scadenze gia esistenti non verranno duplicate.
+                  </p>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Genera scadenze fino all'anno:
+                    </label>
+                    <select
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      value={annoTarget}
+                      onChange={(e) => setAnnoTarget(Number(e.target.value))}
+                      disabled={generaLoading}
+                    >
+                      {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() + i).map((anno) => (
+                        <option key={anno} value={anno}>
+                          {anno}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <h4 className="font-medium text-blue-800 mb-2">Come funziona:</h4>
+                    <ul className="text-sm text-blue-700 space-y-1">
+                      <li>- Per ogni veicolo, usa il mese di scadenza dalla scadenza piu recente</li>
+                      <li>- Se non ci sono scadenze, usa il mese di immatricolazione</li>
+                      <li>- Rispetta la periodicita (annuale o quadrimestrale)</li>
+                      <li>- Calcola automaticamente l'importo in base alle tariffe</li>
+                    </ul>
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-4">
+                  <div className={`p-4 rounded-lg ${generaResult.scadenzeCreate > 0 ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-gray-200'}`}>
+                    <h4 className={`font-semibold mb-3 ${generaResult.scadenzeCreate > 0 ? 'text-green-800' : 'text-gray-800'}`}>
+                      Risultato Generazione
+                    </h4>
+                    <div className="grid grid-cols-3 gap-4 text-center">
+                      <div>
+                        <p className="text-2xl font-bold text-gray-900">{generaResult.veicoliProcessati}</p>
+                        <p className="text-sm text-gray-600">Veicoli processati</p>
+                      </div>
+                      <div>
+                        <p className="text-2xl font-bold text-green-600">{generaResult.scadenzeCreate}</p>
+                        <p className="text-sm text-gray-600">Scadenze create</p>
+                      </div>
+                      <div>
+                        <p className="text-2xl font-bold text-gray-500">{generaResult.scadenzeSaltate}</p>
+                        <p className="text-sm text-gray-600">Gia esistenti</p>
+                      </div>
+                    </div>
+                  </div>
+                  {generaResult.errori.length > 0 && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                      <h4 className="font-medium text-red-800 mb-2">Errori ({generaResult.errori.length}):</h4>
+                      <ul className="text-sm text-red-700 space-y-1 max-h-32 overflow-y-auto">
+                        {generaResult.errori.map((err, i) => (
+                          <li key={i}>- {err}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-2">
+              {!generaResult ? (
+                <>
+                  <Button
+                    variant="secondary"
+                    onClick={() => setShowGeneraModal(false)}
+                    disabled={generaLoading}
+                  >
+                    Annulla
+                  </Button>
+                  <Button onClick={handleGeneraScadenze} disabled={generaLoading}>
+                    {generaLoading ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Generazione in corso...
+                      </>
+                    ) : (
+                      <>
+                        <Wand2 size={18} className="mr-2" />
+                        Genera Scadenze
+                      </>
+                    )}
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  onClick={() => {
+                    setShowGeneraModal(false);
+                    setGeneraResult(null);
+                  }}
+                >
+                  Chiudi
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       )}
