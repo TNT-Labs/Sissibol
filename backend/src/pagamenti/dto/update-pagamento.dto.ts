@@ -1,8 +1,27 @@
-import { PartialType } from '../../common/partial-type';
-import { CreatePagamentoDto } from './create-pagamento.dto';
-import { IsInt, IsOptional, Min } from 'class-validator';
+import { IsInt, IsDateString, IsOptional, IsString, Min } from 'class-validator';
+import { Type } from 'class-transformer';
 
-export class UpdatePagamentoDto extends PartialType(CreatePagamentoDto) {
+export class UpdatePagamentoDto {
+  @IsInt()
+  @IsOptional()
+  idScadenza?: number;
+
+  @IsDateString()
+  @IsOptional()
+  dataPagamento?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  importoPagato?: number;
+
+  @IsString()
+  @IsOptional()
+  metodoPagamento?: string;
+
+  @IsString()
+  @IsOptional()
+  ricevutaFile?: string;
+
   /**
    * Versione corrente del pagamento per optimistic locking.
    * Obbligatorio per evitare race condition in ambienti multi-utente.
