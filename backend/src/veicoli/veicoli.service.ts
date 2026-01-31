@@ -41,12 +41,15 @@ export class VeicoliService {
         id: true,
         targa: true,
         tipoVeicolo: true,
+        classeAmbientale: true,
         regione: true,
         potenzaKw: true,
+        cilindrata: true,
         alimentazione: true,
         cliente: {
           select: {
             id: true,
+            tipoCliente: true,
             ragioneSociale: true,
             nome: true,
             cognome: true,
@@ -92,12 +95,15 @@ export class VeicoliService {
           id: true,
           targa: true,
           tipoVeicolo: true,
+          classeAmbientale: true,
           regione: true,
           potenzaKw: true,
+          cilindrata: true,
           alimentazione: true,
           cliente: {
             select: {
               id: true,
+              tipoCliente: true,
               ragioneSociale: true,
               nome: true,
               cognome: true,

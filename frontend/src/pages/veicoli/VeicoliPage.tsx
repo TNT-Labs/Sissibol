@@ -93,35 +93,43 @@ export const VeicoliPage: React.FC = () => {
     loadVeicoli();
   };
 
-  const handleOpenModal = (veicolo?: Veicolo) => {
+  const handleOpenModal = async (veicolo?: Veicolo) => {
     if (veicolo) {
-      setEditingVeicolo(veicolo);
-      setFormData({
-        idCliente: veicolo.idCliente,
-        targa: veicolo.targa,
-        tipoVeicolo: veicolo.tipoVeicolo || '',
-        classeAmbientale: veicolo.classeAmbientale || '',
-        regione: veicolo.regione || '',
-        alimentazione: veicolo.alimentazione || '',
-        potenzaKw: veicolo.potenzaKw?.toString() || '',
-        cilindrata: veicolo.cilindrata?.toString() || '',
-        portataKg: veicolo.portataKg?.toString() || '',
-        pesoComplessivoKg: veicolo.pesoComplessivoKg?.toString() || '',
-        numeroAssi: veicolo.numeroAssi?.toString() || '',
-        tipoSospensione: veicolo.tipoSospensione || '',
-        numeroPosti: veicolo.numeroPosti?.toString() || '',
-        massaRimorchiabileKg: veicolo.massaRimorchiabileKg?.toString() || '',
-        dataImmatricolazione: veicolo.dataImmatricolazione?.split('T')[0] || '',
-        note: veicolo.note || '',
-      });
+      // Carica i dettagli completi del veicolo per evitare perdita di campi
+      try {
+        const veicoloCompleto = await veicoliService.getById(veicolo.id);
+        setEditingVeicolo(veicoloCompleto);
+        setFormData({
+          idCliente: veicoloCompleto.idCliente,
+          targa: veicoloCompleto.targa,
+          tipoVeicolo: veicoloCompleto.tipoVeicolo || '',
+          classeAmbientale: veicoloCompleto.classeAmbientale || '',
+          regione: veicoloCompleto.regione || '',
+          alimentazione: veicoloCompleto.alimentazione || '',
+          potenzaKw: veicoloCompleto.potenzaKw?.toString() || '',
+          cilindrata: veicoloCompleto.cilindrata?.toString() || '',
+          portataKg: veicoloCompleto.portataKg?.toString() || '',
+          pesoComplessivoKg: veicoloCompleto.pesoComplessivoKg?.toString() || '',
+          numeroAssi: veicoloCompleto.numeroAssi?.toString() || '',
+          tipoSospensione: veicoloCompleto.tipoSospensione || '',
+          numeroPosti: veicoloCompleto.numeroPosti?.toString() || '',
+          massaRimorchiabileKg: veicoloCompleto.massaRimorchiabileKg?.toString() || '',
+          dataImmatricolazione: veicoloCompleto.dataImmatricolazione?.split('T')[0] || '',
+          note: veicoloCompleto.note || '',
+        });
+        setShowModal(true);
+      } catch (error) {
+        console.error('Errore nel caricamento del veicolo:', error);
+        alert('Errore nel caricamento dei dettagli del veicolo');
+      }
     } else {
       setEditingVeicolo(null);
       setFormData({
         ...emptyFormData,
         idCliente: clienti.length > 0 ? clienti[0].id : 0,
       });
+      setShowModal(true);
     }
-    setShowModal(true);
   };
 
   const handleCloseModal = () => {
