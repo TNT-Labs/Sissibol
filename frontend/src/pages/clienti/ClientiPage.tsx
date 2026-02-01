@@ -6,7 +6,7 @@ import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { Modal } from '../../components/common/Modal';
 import { EmptyState } from '../../components/common/EmptyState';
-import { Plus, Search, Edit, Trash2, Building2, User, CheckCircle, XCircle } from 'lucide-react';
+import { Plus, Edit, Trash2, Building2, User, CheckCircle, XCircle } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
 import { useDebounce } from '../../hooks/useDebounce';
 
