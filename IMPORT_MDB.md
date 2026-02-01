@@ -23,3 +23,18 @@ docker exec -it sissibol-backend npx prisma migrate reset --force
 
 ## 2. Importa i dati dai CSV
 docker exec -it sissibol-backend npm run prisma:import-mdb
+
+
+# Eliminare le scadenze >  di un anno indicato
+
+## Esegui nel container Docker del database
+docker exec -it sissibol-db-1 psql -U sissibol -d sissibol -c "DELETE FROM scadenze WHERE \"annoScadenza\" > 2028;"
+
+Se vuoi prima vedere quante scadenze verranno eliminate:
+
+## Count prima di eliminare
+docker exec -it sissibol-db-1 psql -U sissibol -d sissibol -c "SELECT COUNT(*) FROM scadenze WHERE \"annoScadenza\" > 2028;"
+
+Se il nome del container è diverso, puoi trovarlo con:
+
+docker ps | grep postgres
