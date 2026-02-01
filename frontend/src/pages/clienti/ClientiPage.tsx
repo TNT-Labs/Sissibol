@@ -32,7 +32,7 @@ export const ClientiPage: React.FC = () => {
 
   useEffect(() => {
     loadClienti();
-  }, [filtroAttivo]);
+  }, []);  // Carica solo al mount, la ricerca è gestita da handleSearch
 
   const loadClienti = useCallback(async (searchTerm?: string) => {
     try {
