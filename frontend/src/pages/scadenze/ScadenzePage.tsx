@@ -1,13 +1,16 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { scadenzeService } from '../../services/scadenze.service';
 import { veicoliService } from '../../services/veicoli.service';
+import { pagamentiService } from '../../services/pagamenti.service';
 import { StatoScadenza, Periodicita, getClienteDisplayName } from '../../types';
 import type { Scadenza, Cliente, Veicolo } from '../../types';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { SearchableSelect } from '../../components/common/SearchableSelect';
 import type { SelectOption } from '../../components/common/SearchableSelect';
-import { Plus, X, Calendar as CalendarIcon, ChevronDown, ChevronRight, Car, Edit, Trash2, Calculator, Wand2 } from 'lucide-react';
+import { Modal } from '../../components/common/Modal';
+import { useToast } from '../../context/ToastContext';
+import { Plus, X, Calendar as CalendarIcon, ChevronDown, ChevronRight, Car, Edit, Trash2, Calculator, Wand2, CreditCard, CheckCircle } from 'lucide-react';
 import { MESI, getMeseLabel } from '../../constants/domini';
 
 // Opzioni per i mesi
@@ -83,6 +86,16 @@ export const ScadenzePage: React.FC = () => {
     scadenzeSaltate: number;
     errori: string[];
   } | null>(null);
+
+  // Modal per pagamento multiplo
+  const [showPagaModal, setShowPagaModal] = useState(false);
+  const [clientePagamento, setClientePagamento] = useState<{ cliente: Cliente; scadenze: Scadenza[] } | null>(null);
+  const [pagaLoading, setPagaLoading] = useState(false);
+  const [pagaFormData, setPagaFormData] = useState({
+    dataPagamento: new Date().toISOString().split('T')[0],
+    metodoPagamento: '',
+  });
+  const toast = useToast();
 
   const [formData, setFormData] = useState<{
     idVeicolo: number;
@@ -271,6 +284,62 @@ export const ScadenzePage: React.FC = () => {
     }
   };
 
+  // Apre il modal per pagamento multiplo di un cliente
+  const handleOpenPagaModal = useCallback((cliente: Cliente, scadenzeCliente: Scadenza[]) => {
+    // Filtra solo le scadenze DA_PAGARE
+    const scadenzeDaPagare = scadenzeCliente.filter(s => s.stato === StatoScadenza.DA_PAGARE);
+    if (scadenzeDaPagare.length === 0) {
+      toast.info('Nessuna scadenza da pagare', 'Tutte le scadenze di questo cliente sono già pagate.');
+      return;
+    }
+    setClientePagamento({ cliente, scadenze: scadenzeDaPagare });
+    setPagaFormData({
+      dataPagamento: new Date().toISOString().split('T')[0],
+      metodoPagamento: '',
+    });
+    setShowPagaModal(true);
+  }, [toast]);
+
+  const handleClosePagaModal = useCallback(() => {
+    setShowPagaModal(false);
+    setClientePagamento(null);
+  }, []);
+
+  // Esegue il pagamento multiplo
+  const handlePagaMultiplo = useCallback(async () => {
+    if (!clientePagamento) return;
+
+    setPagaLoading(true);
+    try {
+      const result = await pagamentiService.createMultiplo({
+        idCliente: clientePagamento.cliente.id,
+        meseScadenza: meseSelezionato,
+        annoScadenza: annoSelezionato,
+        dataPagamento: pagaFormData.dataPagamento,
+        metodoPagamento: pagaFormData.metodoPagamento || undefined,
+      });
+
+      if (result.pagamentiCreati > 0) {
+        toast.success(
+          'Pagamenti registrati',
+          `${result.pagamentiCreati} pagament${result.pagamentiCreati === 1 ? 'o' : 'i'} registrat${result.pagamentiCreati === 1 ? 'o' : 'i'} con successo.`
+        );
+      }
+
+      if (result.errori.length > 0) {
+        toast.warning('Alcuni errori', `${result.errori.length} scadenze non sono state pagate.`);
+      }
+
+      handleClosePagaModal();
+      loadScadenze();
+    } catch (error: any) {
+      console.error('Errore nel pagamento multiplo:', error);
+      toast.error('Errore', error.message || 'Impossibile completare il pagamento.');
+    } finally {
+      setPagaLoading(false);
+    }
+  }, [clientePagamento, meseSelezionato, annoSelezionato, pagaFormData, toast, handleClosePagaModal]);
+
   const getStatoColor = (stato: string) => {
     switch (stato) {
       case 'DA_PAGARE':
@@ -373,6 +442,20 @@ export const ScadenzePage: React.FC = () => {
                       </div>
                     </div>
                     <div className="flex items-center space-x-2">
+                      {/* CTA Paga Tutti - solo se ci sono scadenze DA_PAGARE */}
+                      {scadenzeCliente.some(s => s.stato === StatoScadenza.DA_PAGARE) && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenPagaModal(cliente, scadenzeCliente);
+                          }}
+                          className="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-medium bg-green-600 text-white hover:bg-green-700 transition-colors"
+                          title="Segna tutti come pagati"
+                        >
+                          <CreditCard size={16} className="mr-1.5" />
+                          Paga Tutti
+                        </button>
+                      )}
                       <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
                         <Car size={16} className="mr-1" />
                         {veicoliCount} veicol{veicoliCount === 1 ? 'o' : 'i'}
@@ -672,6 +755,92 @@ export const ScadenzePage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Modal Pagamento Multiplo */}
+      <Modal
+        isOpen={showPagaModal}
+        onClose={handleClosePagaModal}
+        title="Registra Pagamento Bolli"
+      >
+        {clientePagamento && (
+          <div className="space-y-4">
+            {/* Info Cliente */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="font-medium text-blue-900">
+                {getClienteDisplayName(clientePagamento.cliente)}
+              </p>
+              <p className="text-sm text-blue-700 mt-1">
+                Periodo: {getMeseLabel(meseSelezionato)} {annoSelezionato}
+              </p>
+            </div>
+
+            {/* Riepilogo Scadenze */}
+            <div>
+              <h4 className="text-sm font-medium text-gray-700 mb-2">
+                Scadenze da pagare ({clientePagamento.scadenze.length})
+              </h4>
+              <div className="max-h-48 overflow-y-auto border rounded-lg divide-y">
+                {clientePagamento.scadenze.map((scadenza) => (
+                  <div key={scadenza.id} className="px-3 py-2 flex justify-between items-center text-sm">
+                    <div>
+                      <span className="font-medium">{scadenza.veicolo?.targa}</span>
+                      <span className="text-gray-500 ml-2">{scadenza.veicolo?.tipoVeicolo}</span>
+                    </div>
+                    <span className="font-medium text-green-700">
+                      {scadenza.importoPrevisto ? `€ ${Number(scadenza.importoPrevisto).toFixed(2)}` : '-'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 flex justify-between items-center px-3 py-2 bg-gray-100 rounded-lg">
+                <span className="font-medium text-gray-900">Totale</span>
+                <span className="font-bold text-lg text-green-700">
+                  € {clientePagamento.scadenze
+                    .reduce((sum, s) => sum + (s.importoPrevisto ? Number(s.importoPrevisto) : 0), 0)
+                    .toFixed(2)}
+                </span>
+              </div>
+            </div>
+
+            {/* Form Pagamento */}
+            <div className="space-y-3">
+              <Input
+                label="Data Pagamento *"
+                type="date"
+                value={pagaFormData.dataPagamento}
+                onChange={(e) => setPagaFormData({ ...pagaFormData, dataPagamento: e.target.value })}
+                required
+              />
+              <Input
+                label="Metodo di Pagamento"
+                value={pagaFormData.metodoPagamento}
+                onChange={(e) => setPagaFormData({ ...pagaFormData, metodoPagamento: e.target.value })}
+                placeholder="es. Bonifico, Contanti, PagoPA..."
+              />
+            </div>
+
+            {/* Azioni */}
+            <div className="flex justify-end space-x-2 pt-4 border-t">
+              <Button type="button" variant="secondary" onClick={handleClosePagaModal} disabled={pagaLoading}>
+                Annulla
+              </Button>
+              <Button onClick={handlePagaMultiplo} disabled={pagaLoading}>
+                {pagaLoading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Elaborazione...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle size={18} className="mr-2" />
+                    Conferma Pagamento
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 };

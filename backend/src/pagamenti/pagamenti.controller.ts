@@ -191,6 +191,23 @@ export class PagamentiController {
     });
   }
 
+  /**
+   * Crea pagamenti multipli per tutte le scadenze di un cliente in un mese/anno.
+   * POST /pagamenti/multiplo
+   */
+  @Post('multiplo')
+  createMultiplo(
+    @Body() body: {
+      idCliente: number;
+      meseScadenza: number;
+      annoScadenza: number;
+      dataPagamento: string;
+      metodoPagamento?: string;
+    },
+  ) {
+    return this.pagamentiService.createMultiplo(body);
+  }
+
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.pagamentiService.findOne(id);

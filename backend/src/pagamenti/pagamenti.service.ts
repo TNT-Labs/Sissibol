@@ -332,6 +332,76 @@ export class PagamentiService {
     return this.findOne(id);
   }
 
+  /**
+   * Crea pagamenti multipli per tutte le scadenze di un cliente in un dato mese/anno.
+   * Utile per segnare come pagati tutti i bolli di un cliente con un'unica azione.
+   *
+   * @param idCliente - ID del cliente
+   * @param meseScadenza - Mese di scadenza
+   * @param annoScadenza - Anno di scadenza
+   * @param dataPagamento - Data del pagamento
+   * @param metodoPagamento - Metodo di pagamento (opzionale)
+   */
+  async createMultiplo(params: {
+    idCliente: number;
+    meseScadenza: number;
+    annoScadenza: number;
+    dataPagamento: string;
+    metodoPagamento?: string;
+  }) {
+    const { idCliente, meseScadenza, annoScadenza, dataPagamento, metodoPagamento } = params;
+
+    // Trova tutte le scadenze DA_PAGARE per il cliente nel mese/anno specificato
+    const scadenzeDaPagare = await this.prisma.scadenza.findMany({
+      where: {
+        meseScadenza,
+        annoScadenza,
+        stato: StatoScadenza.DA_PAGARE,
+        veicolo: {
+          idCliente,
+        },
+      },
+      include: {
+        veicolo: {
+          include: { cliente: true },
+        },
+      },
+    });
+
+    if (scadenzeDaPagare.length === 0) {
+      return {
+        pagamentiCreati: 0,
+        errori: [],
+        message: 'Nessuna scadenza da pagare trovata per questo cliente nel periodo selezionato',
+      };
+    }
+
+    const risultato = {
+      pagamentiCreati: 0,
+      errori: [] as string[],
+    };
+
+    // Crea un pagamento per ogni scadenza
+    for (const scadenza of scadenzeDaPagare) {
+      try {
+        await this.create({
+          idScadenza: scadenza.id,
+          dataPagamento,
+          importoPagato: scadenza.importoPrevisto?.toNumber() || 0,
+          metodoPagamento,
+        });
+        risultato.pagamentiCreati++;
+      } catch (error) {
+        risultato.errori.push(`Scadenza ${scadenza.id} (${scadenza.veicolo?.targa}): ${error.message}`);
+      }
+    }
+
+    return {
+      ...risultato,
+      message: `Creati ${risultato.pagamentiCreati} pagamenti su ${scadenzeDaPagare.length} scadenze`,
+    };
+  }
+
   async remove(id: number) {
     const pagamento = await this.findOne(id); // Check if exists
 
