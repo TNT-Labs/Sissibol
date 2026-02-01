@@ -148,7 +148,9 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
   // Evidenzia il testo che corrisponde alla ricerca
   const highlightMatch = (text: string) => {
     if (!search) return text;
-    const parts = text.split(new RegExp(`(${search})`, 'gi'));
+    // Escape caratteri speciali regex per evitare errori
+    const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const parts = text.split(new RegExp(`(${escapedSearch})`, 'gi'));
     return parts.map((part, i) =>
       part.toLowerCase() === search.toLowerCase() ? (
         <span key={i} className="bg-yellow-200 font-medium">{part}</span>

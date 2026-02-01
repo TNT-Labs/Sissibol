@@ -71,6 +71,14 @@ export const VeicoliPage: React.FC = () => {
     loadVeicoli();
   }, []);
 
+  // Ricarica veicoli quando cambia il filtro cliente
+  useEffect(() => {
+    // Skip il primo render (gestito dall'useEffect precedente)
+    if (clienti.length > 0) {
+      loadVeicoli();
+    }
+  }, [filterCliente]);
+
   const loadClienti = async () => {
     try {
       const data = await clientiService.getAll();
@@ -263,7 +271,6 @@ export const VeicoliPage: React.FC = () => {
               value={filterCliente || ''}
               onChange={(value) => {
                 setFilterCliente(value ? Number(value) : undefined);
-                setTimeout(() => loadVeicoli(), 0);
               }}
               placeholder="Filtra per cliente..."
             />

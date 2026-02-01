@@ -1,10 +1,11 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { clientiService } from '../../services/clienti.service';
 import { TipoCliente, getClienteDisplayName } from '../../types';
 import type { Cliente } from '../../types';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { Plus, Search, Edit, Trash2, X, Building2, User, CheckCircle, XCircle } from 'lucide-react';
+import { useToast } from '../../context/ToastContext';
 
 type FiltroAttivo = 'tutti' | 'attivi' | 'nonAttivi';
 
@@ -15,6 +16,7 @@ export const ClientiPage: React.FC = () => {
   const [filtroAttivo, setFiltroAttivo] = useState<FiltroAttivo>('attivi');
   const [showModal, setShowModal] = useState(false);
   const [editingCliente, setEditingCliente] = useState<Cliente | null>(null);
+  const toast = useToast();
   const [formData, setFormData] = useState({
     tipoCliente: TipoCliente.PERSONA_GIURIDICA as TipoCliente,
     ragioneSociale: '',
@@ -44,12 +46,14 @@ export const ClientiPage: React.FC = () => {
     }
   }, [search]);
 
-  // Filtra i clienti in base al filtro attivo
-  const clientiFiltrati = clienti.filter((cliente) => {
-    if (filtroAttivo === 'attivi') return cliente.attivo;
-    if (filtroAttivo === 'nonAttivi') return !cliente.attivo;
-    return true; // 'tutti'
-  });
+  // Filtra i clienti in base al filtro attivo (memoizzato per performance)
+  const clientiFiltrati = useMemo(() => {
+    return clienti.filter((cliente) => {
+      if (filtroAttivo === 'attivi') return cliente.attivo;
+      if (filtroAttivo === 'nonAttivi') return !cliente.attivo;
+      return true; // 'tutti'
+    });
+  }, [clienti, filtroAttivo]);
 
   const handleSearch = useCallback(() => {
     loadClienti(search);
@@ -100,13 +104,16 @@ export const ClientiPage: React.FC = () => {
     try {
       if (editingCliente) {
         await clientiService.update(editingCliente.id, formData);
+        toast.success('Cliente aggiornato', 'I dati del cliente sono stati salvati.');
       } else {
         await clientiService.create(formData);
+        toast.success('Cliente creato', 'Il nuovo cliente è stato aggiunto.');
       }
       handleCloseModal();
       loadClienti();
     } catch (error) {
       console.error('Errore nel salvataggio del cliente:', error);
+      toast.error('Errore', 'Impossibile salvare il cliente. Riprova.');
     }
   };
 
@@ -114,9 +121,11 @@ export const ClientiPage: React.FC = () => {
     if (confirm('Sei sicuro di voler eliminare questo cliente?')) {
       try {
         await clientiService.delete(id);
+        toast.success('Cliente eliminato', 'Il cliente è stato rimosso.');
         loadClienti();
       } catch (error) {
         console.error('Errore nell\'eliminazione del cliente:', error);
+        toast.error('Errore', 'Impossibile eliminare il cliente. Potrebbe avere veicoli associati.');
       }
     }
   };
