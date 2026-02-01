@@ -5,6 +5,8 @@ import { StatoScadenza, getClienteDisplayName } from '../../types';
 import type { Pagamento, Scadenza } from '../../types';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
+import { SearchableSelect } from '../../components/common/SearchableSelect';
+import type { SelectOption } from '../../components/common/SearchableSelect';
 import { Plus, X, CreditCard, Upload, FileText, Trash2, Edit } from 'lucide-react';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -265,32 +267,27 @@ export const PagamentiPage: React.FC = () => {
               </button>
             </div>
             <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Scadenza *
-                </label>
-                <select
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={formData.idScadenza}
-                  onChange={(e) => setFormData({ ...formData, idScadenza: Number(e.target.value) })}
-                  required
-                  disabled={!!editingPagamento}
-                >
-                  <option value="">Seleziona una scadenza</option>
-                  {scadenze.map((scadenza) => (
-                    <option key={scadenza.id} value={scadenza.id}>
-                      {scadenza.veicolo?.targa} - {scadenza.veicolo?.cliente ? getClienteDisplayName(scadenza.veicolo.cliente) : 'N/A'} -{' '}
-                      {getMeseLabel(scadenza.meseScadenza)} {scadenza.annoScadenza}
-                    </option>
-                  ))}
-                  {editingPagamento && (
-                    <option value={editingPagamento.idScadenza}>
-                      {editingPagamento.scadenza?.veicolo?.targa} -{' '}
-                      {editingPagamento.scadenza?.veicolo?.cliente?.ragioneSociale}
-                    </option>
-                  )}
-                </select>
-              </div>
+              <SearchableSelect
+                label="Scadenza *"
+                options={(() => {
+                  const opts: SelectOption[] = scadenze.map((scadenza) => ({
+                    value: scadenza.id,
+                    label: `${scadenza.veicolo?.targa} - ${scadenza.veicolo?.cliente ? getClienteDisplayName(scadenza.veicolo.cliente) : 'N/A'} - ${getMeseLabel(scadenza.meseScadenza)} ${scadenza.annoScadenza}`
+                  }));
+                  if (editingPagamento) {
+                    opts.push({
+                      value: editingPagamento.idScadenza,
+                      label: `${editingPagamento.scadenza?.veicolo?.targa} - ${editingPagamento.scadenza?.veicolo?.cliente?.ragioneSociale || 'N/A'}`
+                    });
+                  }
+                  return opts;
+                })()}
+                value={formData.idScadenza}
+                onChange={(value) => setFormData({ ...formData, idScadenza: Number(value) })}
+                placeholder="Cerca scadenza per targa o cliente..."
+                required
+                disabled={!!editingPagamento}
+              />
               <Input
                 label="Data Pagamento *"
                 type="date"

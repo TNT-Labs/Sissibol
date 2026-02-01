@@ -3,6 +3,7 @@ import { bolloService } from '../../services/bollo.service';
 import type { ConfigurazioneBollo, TariffaBollo } from '../../types';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
+import { SearchableSelect } from '../../components/common/SearchableSelect';
 import { Settings, Plus, Copy, ChevronDown, ChevronRight, Edit2, Check, X } from 'lucide-react';
 
 export const TariffePage: React.FC = () => {
@@ -174,22 +175,21 @@ export const TariffePage: React.FC = () => {
       {/* Selector configurazione */}
       <div className="bg-white rounded-lg shadow p-4">
         <div className="flex items-center space-x-4">
-          <label className="font-medium text-gray-700">Configurazione:</label>
-          <select
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            value={selectedConfig?.id || ''}
-            onChange={(e) => {
-              const config = configurazioni.find((c) => c.id === Number(e.target.value));
-              if (config) handleSelectConfig(config);
-            }}
-          >
-            {configurazioni.map((config) => (
-              <option key={config.id} value={config.id}>
-                {config.regione} - Anno {config.annoValidita}
-                {config.attivo ? ' (Attiva)' : ''}
-              </option>
-            ))}
-          </select>
+          <div className="flex-1">
+            <SearchableSelect
+              label="Configurazione"
+              options={configurazioni.map(c => ({
+                value: c.id,
+                label: `${c.regione} - Anno ${c.annoValidita}${c.attivo ? ' (Attiva)' : ''}`
+              }))}
+              value={selectedConfig?.id || ''}
+              onChange={(value) => {
+                const config = configurazioni.find((c) => c.id === Number(value));
+                if (config) handleSelectConfig(config);
+              }}
+              placeholder="Cerca configurazione..."
+            />
+          </div>
         </div>
         {selectedConfig && (
           <div className="mt-4 grid grid-cols-3 gap-4 text-sm">

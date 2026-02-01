@@ -6,7 +6,15 @@ import type { Utente } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
+import { SearchableSelect } from '../../components/common/SearchableSelect';
+import type { SelectOption } from '../../components/common/SearchableSelect';
 import { Plus, X, Edit, Trash2, Shield, User } from 'lucide-react';
+
+// Opzioni per il ruolo
+const RUOLO_OPTIONS: SelectOption[] = [
+  { value: Ruolo.OPERATORE, label: 'Operatore' },
+  { value: Ruolo.ADMIN, label: 'Amministratore' },
+];
 
 export const UtentiPage: React.FC = () => {
   const { user: currentUser } = useAuth();
@@ -286,16 +294,14 @@ export const UtentiPage: React.FC = () => {
                 <p className="mt-1 text-sm text-gray-500">Minimo 6 caratteri</p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Ruolo *</label>
-                <select
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                <SearchableSelect
+                  label="Ruolo *"
+                  options={RUOLO_OPTIONS}
                   value={formData.ruolo}
-                  onChange={(e) => setFormData({ ...formData, ruolo: e.target.value as Ruolo })}
+                  onChange={(value) => setFormData({ ...formData, ruolo: value as Ruolo })}
+                  placeholder="Seleziona ruolo..."
                   required
-                >
-                  <option value={Ruolo.OPERATORE}>Operatore</option>
-                  <option value={Ruolo.ADMIN}>Amministratore</option>
-                </select>
+                />
                 <p className="mt-1 text-sm text-gray-500">
                   {formData.ruolo === Ruolo.ADMIN
                     ? 'Gli amministratori possono gestire utenti e configurazioni'
