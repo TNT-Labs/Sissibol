@@ -5,12 +5,15 @@ import type { Cliente } from '../../types';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { SearchInput } from '../../components/common/SearchInput';
-import { Plus, Edit, Trash2, X, Building2, User } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, X, Building2, User, CheckCircle, XCircle } from 'lucide-react';
+
+type FiltroAttivo = 'tutti' | 'attivi' | 'nonAttivi';
 
 export const ClientiPage: React.FC = () => {
   const [clienti, setClienti] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [filtroAttivo, setFiltroAttivo] = useState<FiltroAttivo>('attivi');
   const [showModal, setShowModal] = useState(false);
   const [editingCliente, setEditingCliente] = useState<Cliente | null>(null);
   const [formData, setFormData] = useState({
@@ -24,11 +27,12 @@ export const ClientiPage: React.FC = () => {
     email: '',
     telefono: '',
     note: '',
+    attivo: true,
   });
 
   useEffect(() => {
     loadClienti();
-  }, []);
+  }, [filtroAttivo]);
 
   const loadClienti = useCallback(async (searchTerm?: string) => {
     try {
@@ -41,8 +45,17 @@ export const ClientiPage: React.FC = () => {
     }
   }, [search]);
 
+  // Filtra i clienti in base al filtro attivo
+  const clientiFiltrati = clienti.filter((cliente) => {
+    if (filtroAttivo === 'attivi') return cliente.attivo;
+    if (filtroAttivo === 'nonAttivi') return !cliente.attivo;
+    return true; // 'tutti'
+  });
+
   const handleSearch = useCallback((searchTerm: string) => {
+
     loadClienti(searchTerm);
+
   }, [loadClienti]);
 
   const handleOpenModal = (cliente?: Cliente) => {
@@ -59,6 +72,7 @@ export const ClientiPage: React.FC = () => {
         email: cliente.email || '',
         telefono: cliente.telefono || '',
         note: cliente.note || '',
+        attivo: cliente.attivo ?? true,
       });
     } else {
       setEditingCliente(null);
@@ -73,6 +87,7 @@ export const ClientiPage: React.FC = () => {
         email: '',
         telefono: '',
         note: '',
+        attivo: true,
       });
     }
     setShowModal(true);
@@ -131,13 +146,61 @@ export const ClientiPage: React.FC = () => {
 
       {/* Search Bar */}
       <div className="bg-white rounded-lg shadow p-4">
-        <SearchInput
-          value={search}
-          onChange={setSearch}
-          onSearch={handleSearch}
-          placeholder="Cerca per nome, ragione sociale, P.IVA, C.F. o email..."
-          loading={loading}
-        />
+        <div className="flex flex-col space-y-3">
+          <div className="flex space-x-2">
+            <div className="flex-1">
+              <Input
+                placeholder="Cerca per nome, ragione sociale, P.IVA, C.F. o email..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+              />
+            </div>
+            <Button onClick={handleSearch}>
+              <Search size={20} className="mr-2" />
+              Cerca
+            </Button>
+          </div>
+          {/* Filtro Attivo */}
+          <div className="flex items-center space-x-6">
+            <span className="text-sm font-medium text-gray-700">Mostra:</span>
+            <label className="flex items-center cursor-pointer">
+              <input
+                type="radio"
+                name="filtroAttivo"
+                value="attivi"
+                checked={filtroAttivo === 'attivi'}
+                onChange={() => setFiltroAttivo('attivi')}
+                className="mr-2 text-blue-600 focus:ring-blue-500"
+              />
+              <CheckCircle size={16} className="mr-1 text-green-600" />
+              <span className="text-sm text-gray-700">Solo attivi</span>
+            </label>
+            <label className="flex items-center cursor-pointer">
+              <input
+                type="radio"
+                name="filtroAttivo"
+                value="nonAttivi"
+                checked={filtroAttivo === 'nonAttivi'}
+                onChange={() => setFiltroAttivo('nonAttivi')}
+                className="mr-2 text-blue-600 focus:ring-blue-500"
+              />
+              <XCircle size={16} className="mr-1 text-red-500" />
+              <span className="text-sm text-gray-700">Solo non attivi</span>
+            </label>
+            <label className="flex items-center cursor-pointer">
+              <input
+                type="radio"
+                name="filtroAttivo"
+                value="tutti"
+                checked={filtroAttivo === 'tutti'}
+                onChange={() => setFiltroAttivo('tutti')}
+                className="mr-2 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="text-sm text-gray-700">Tutti</span>
+            </label>
+          </div>
+        </div>
       </div>
 
       {/* Table */}
@@ -160,20 +223,23 @@ export const ClientiPage: React.FC = () => {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Telefono
               </th>
+              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Attivo
+              </th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Azioni
               </th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {clienti.length === 0 ? (
+            {clientiFiltrati.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
-                  Nessun cliente trovato
+                <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                  {clienti.length === 0 ? 'Nessun cliente trovato' : 'Nessun cliente corrisponde al filtro selezionato'}
                 </td>
               </tr>
             ) : (
-              clienti.map((cliente) => (
+              clientiFiltrati.map((cliente) => (
                 <tr key={cliente.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
                     {cliente.tipoCliente === TipoCliente.PERSONA_FISICA ? (
@@ -201,6 +267,13 @@ export const ClientiPage: React.FC = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {cliente.telefono || '-'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-center">
+                    {cliente.attivo ? (
+                      <CheckCircle size={20} className="inline text-green-600" />
+                    ) : (
+                      <XCircle size={20} className="inline text-red-500" />
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <button
@@ -339,6 +412,30 @@ export const ClientiPage: React.FC = () => {
                   value={formData.note}
                   onChange={(e) => setFormData({ ...formData, note: e.target.value })}
                 />
+              </div>
+              {/* Toggle Attivo */}
+              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                <div>
+                  <label className="text-sm font-medium text-gray-900">
+                    Cliente Attivo
+                  </label>
+                  <p className="text-sm text-gray-500">
+                    I clienti non attivi non saranno visibili nelle liste veicoli e scadenze
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, attivo: !formData.attivo })}
+                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                    formData.attivo ? 'bg-green-600' : 'bg-gray-200'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      formData.attivo ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
               </div>
               <div className="flex justify-end space-x-2 pt-4">
                 <Button type="button" variant="secondary" onClick={handleCloseModal}>

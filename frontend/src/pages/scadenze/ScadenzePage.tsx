@@ -388,6 +388,7 @@ export const ScadenzePage: React.FC = () => {
                           <tr className="text-xs text-gray-500 uppercase">
                             <th className="text-left py-2">Targa</th>
                             <th className="text-left py-2">Tipo</th>
+                            <th className="text-left py-2">Data Immatric.</th>
                             <th className="text-left py-2">Periodicita</th>
                             <th className="text-left py-2">Importo</th>
                             <th className="text-left py-2">Stato</th>
@@ -402,6 +403,11 @@ export const ScadenzePage: React.FC = () => {
                               </td>
                               <td className="py-3 text-gray-500">
                                 {scadenza.veicolo?.tipoVeicolo || '-'}
+                              </td>
+                              <td className="py-3 text-gray-500">
+                                {scadenza.veicolo?.dataImmatricolazione
+                                  ? new Date(scadenza.veicolo.dataImmatricolazione).toLocaleDateString('it-IT')
+                                  : '-'}
                               </td>
                               <td className="py-3">
                                 <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
