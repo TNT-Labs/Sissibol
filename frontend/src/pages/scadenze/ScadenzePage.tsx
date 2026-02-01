@@ -41,15 +41,11 @@ const STATO_OPTIONS: SelectOption[] = [
   { value: 'SCADUTO', label: 'Scaduto' },
 ];
 
-// Calcola il mese successivo
-const getNextMonth = () => {
+// Calcola il mese corrente
+const getCurrentMonth = () => {
   const oggi = new Date();
-  let mese = oggi.getMonth() + 2; // +1 per 0-indexed, +1 per mese successivo
-  let anno = oggi.getFullYear();
-  if (mese > 12) {
-    mese = 1;
-    anno++;
-  }
+  const mese = oggi.getMonth() + 1; // +1 per 0-indexed
+  const anno = oggi.getFullYear();
   return { mese, anno };
 };
 
@@ -64,8 +60,8 @@ export const ScadenzePage: React.FC = () => {
   const [veicoli, setVeicoli] = useState<Veicolo[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Filtro mese/anno - default mese successivo
-  const defaultPeriod = getNextMonth();
+  // Filtro mese/anno - default mese corrente
+  const defaultPeriod = getCurrentMonth();
   const [meseSelezionato, setMeseSelezionato] = useState(defaultPeriod.mese);
   const [annoSelezionato, setAnnoSelezionato] = useState(defaultPeriod.anno);
 

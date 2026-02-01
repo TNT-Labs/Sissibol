@@ -495,23 +495,27 @@ export class ScadenzeService {
 
   /**
    * Aggiorna automaticamente le scadenze scadute usando raw SQL per performance.
-   * Una scadenza è scaduta se siamo oltre la data effettiva di scadenza,
-   * calcolata in base alla periodicità (ANNUALE o QUADRIMESTRALE).
+   * Una scadenza è scaduta solo se il mese/anno di scadenza è PRECEDENTE
+   * al mese/anno corrente. Le scadenze del mese corrente restano DA_PAGARE.
    *
    * Questa versione usa una singola query SQL invece di caricare tutti i dati
    * e processarli in JavaScript, migliorando drasticamente la performance.
    */
   async updateScaduteAutomaticamente() {
-    // Query SQL ottimizzata che calcola la data di scadenza nel DB
-    // e aggiorna direttamente le scadenze scadute
+    // Query SQL ottimizzata: marca come SCADUTO solo i mesi passati
+    // Il mese corrente resta sempre DA_PAGARE
     const result = await this.prisma.$executeRaw`
       UPDATE scadenze
       SET stato = 'SCADUTO', "updatedAt" = NOW()
       WHERE stato = 'DA_PAGARE'
         AND (
-          -- Calcola l'ultimo giorno del mese di scadenza
-          make_date(anno_scadenza, mese_scadenza, 1) + interval '1 month' - interval '1 day'
-        )::date < CURRENT_DATE
+          -- Anno passato, oppure stesso anno ma mese passato
+          anno_scadenza < EXTRACT(YEAR FROM CURRENT_DATE)
+          OR (
+            anno_scadenza = EXTRACT(YEAR FROM CURRENT_DATE)
+            AND mese_scadenza < EXTRACT(MONTH FROM CURRENT_DATE)
+          )
+        )
     `;
 
     return result;

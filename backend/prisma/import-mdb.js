@@ -222,12 +222,13 @@ async function importMezzi(ditteMap, lookups) {
   const content = fs.readFileSync(path.join(CSV_DIR, 'mezzi.csv'), 'utf-8');
   const records = parseCSV(content);
 
-  // Mappa Targa → id Veicolo Sissibol
+  // Mappa Targa → { id, periodicita } Veicolo Sissibol
   const veicoliMap = new Map();
 
   let imported = 0;
   let skipped = 0;
   let errors = 0;
+  let quadrimestrali = 0;
 
   for (const row of records) {
     const targa = row['Targa']?.trim().toUpperCase();
@@ -258,6 +259,11 @@ async function importMezzi(ditteMap, lookups) {
     const codRegione = parseInt2(row['Regione']);
     const regione = codRegione !== null ? lookups.regioni.get(codRegione) : null;
 
+    // Periodicità dal CSV mezzi: 12 = ANNUALE, 4 = QUADRIMESTRALE
+    const periodicitaVal = parseInt2(row['Periodicita']) || parseInt2(row['periodicita']) || parseInt2(row['PERIODICITA']);
+    const periodicita = periodicitaVal === 4 ? Periodicita.QUADRIMESTRALE : Periodicita.ANNUALE;
+    if (periodicitaVal === 4) quadrimestrali++;
+
     // Altri campi
     const kw = parseDecimal(row['KW']);
     const numAssi = parseInt2(row['NumAssi']);
@@ -278,7 +284,8 @@ async function importMezzi(ditteMap, lookups) {
         },
       });
 
-      veicoliMap.set(targa, veicolo.id);
+      // Salva id e periodicità per usarla nell'import scadenziario
+      veicoliMap.set(targa, { id: veicolo.id, periodicita });
       imported++;
     } catch (err) {
       console.error(`  Errore veicolo ${targa}:`, err.message);
@@ -287,6 +294,7 @@ async function importMezzi(ditteMap, lookups) {
   }
 
   console.log(`  ✓ Importati: ${imported} veicoli`);
+  console.log(`  ✓ Di cui QUADRIMESTRALE: ${quadrimestrali}`);
   console.log(`  ⊘ Saltati: ${skipped}`);
   if (errors > 0) console.log(`  ✗ Errori: ${errors}`);
 
@@ -325,34 +333,6 @@ async function importScadenziario(veicoliMap) {
   let skipped = 0;
   let errors = 0;
 
-  // Prima analisi: conta scadenze per veicolo per anno per determinare periodicità
-  // Se un veicolo ha 3+ scadenze nello stesso anno, è QUADRIMESTRALE
-  const scadenzePerVeicoloAnno = new Map();
-
-  for (const row of records) {
-    const targa = row['Targa']?.trim().toUpperCase();
-    if (!targa) continue;
-
-    const dataScadenza = parseMDBDate(row['Scadenza']);
-    if (!dataScadenza) continue;
-
-    const annoScadenza = dataScadenza.getFullYear();
-    const key = `${targa}-${annoScadenza}`;
-
-    scadenzePerVeicoloAnno.set(key, (scadenzePerVeicoloAnno.get(key) || 0) + 1);
-  }
-
-  // Determina veicoli quadrimestrali (3+ scadenze/anno)
-  const veicoliQuadrimestrali = new Set();
-  for (const [key, count] of scadenzePerVeicoloAnno.entries()) {
-    if (count >= 3) {
-      const targa = key.split('-')[0];
-      veicoliQuadrimestrali.add(targa);
-    }
-  }
-
-  console.log(`  Veicoli con periodicità QUADRIMESTRALE rilevati: ${veicoliQuadrimestrali.size}`);
-
   // Raggruppa per targa per evitare duplicati di scadenza stesso mese/anno
   const scadenzeCreate = new Map();
 
@@ -363,8 +343,8 @@ async function importScadenziario(veicoliMap) {
       continue;
     }
 
-    const idVeicolo = veicoliMap.get(targa);
-    if (!idVeicolo) {
+    const veicoloInfo = veicoliMap.get(targa);
+    if (!veicoloInfo) {
       // Veicolo non importato, skip silenzioso
       skipped++;
       continue;
@@ -389,8 +369,8 @@ async function importScadenziario(veicoliMap) {
     }
 
     scadenzeCreate.get(key).push({
-      idVeicolo,
-      targa, // Aggiungiamo la targa per determinare la periodicità
+      idVeicolo: veicoloInfo.id,
+      periodicita: veicoloInfo.periodicita, // Periodicità dal CSV mezzi
       meseScadenza,
       annoScadenza,
       importoPrevisto,
@@ -415,29 +395,29 @@ async function importScadenziario(veicoliMap) {
       try {
         // Determina lo stato
         const now = new Date();
-        const scadenzaDate = new Date(first.annoScadenza, first.meseScadenza - 1, 1);
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth() + 1;
         let stato;
 
         if (hasPagamento) {
           stato = StatoScadenza.PAGATO;
-        } else if (scadenzaDate < now) {
+        } else if (
+          first.annoScadenza < currentYear ||
+          (first.annoScadenza === currentYear && first.meseScadenza < currentMonth)
+        ) {
+          // Scaduto solo se mese/anno è PRECEDENTE al corrente
           stato = StatoScadenza.SCADUTO;
         } else {
           stato = StatoScadenza.DA_PAGARE;
         }
 
-        // Determina periodicità basata sull'analisi delle scadenze
-        const periodicita = veicoliQuadrimestrali.has(first.targa)
-          ? Periodicita.QUADRIMESTRALE
-          : Periodicita.ANNUALE;
-
-        // Crea scadenza
+        // Crea scadenza con periodicità dal CSV mezzi
         const scadenza = await prisma.scadenza.create({
           data: {
             idVeicolo: first.idVeicolo,
             meseScadenza: first.meseScadenza,
             annoScadenza: first.annoScadenza,
-            periodicita,
+            periodicita: first.periodicita,
             importoPrevisto: first.importoPrevisto,
             stato,
           },
