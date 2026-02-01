@@ -4,7 +4,7 @@ import { TipoCliente, getClienteDisplayName } from '../../types';
 import type { Cliente } from '../../types';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
-import { Plus, Search, Edit, Trash2, X, Building2, User } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, X, Building2, User, CheckCircle, XCircle } from 'lucide-react';
 
 export const ClientiPage: React.FC = () => {
   const [clienti, setClienti] = useState<Cliente[]>([]);
@@ -23,6 +23,7 @@ export const ClientiPage: React.FC = () => {
     email: '',
     telefono: '',
     note: '',
+    attivo: true,
   });
 
   useEffect(() => {
@@ -58,6 +59,7 @@ export const ClientiPage: React.FC = () => {
         email: cliente.email || '',
         telefono: cliente.telefono || '',
         note: cliente.note || '',
+        attivo: cliente.attivo ?? true,
       });
     } else {
       setEditingCliente(null);
@@ -72,6 +74,7 @@ export const ClientiPage: React.FC = () => {
         email: '',
         telefono: '',
         note: '',
+        attivo: true,
       });
     }
     setShowModal(true);
@@ -166,6 +169,9 @@ export const ClientiPage: React.FC = () => {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Telefono
               </th>
+              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Attivo
+              </th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Azioni
               </th>
@@ -174,7 +180,7 @@ export const ClientiPage: React.FC = () => {
           <tbody className="bg-white divide-y divide-gray-200">
             {clienti.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+                <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
                   Nessun cliente trovato
                 </td>
               </tr>
@@ -207,6 +213,13 @@ export const ClientiPage: React.FC = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {cliente.telefono || '-'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-center">
+                    {cliente.attivo ? (
+                      <CheckCircle size={20} className="inline text-green-600" />
+                    ) : (
+                      <XCircle size={20} className="inline text-red-500" />
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <button
@@ -345,6 +358,30 @@ export const ClientiPage: React.FC = () => {
                   value={formData.note}
                   onChange={(e) => setFormData({ ...formData, note: e.target.value })}
                 />
+              </div>
+              {/* Toggle Attivo */}
+              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                <div>
+                  <label className="text-sm font-medium text-gray-900">
+                    Cliente Attivo
+                  </label>
+                  <p className="text-sm text-gray-500">
+                    I clienti non attivi non saranno visibili nelle liste veicoli e scadenze
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, attivo: !formData.attivo })}
+                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                    formData.attivo ? 'bg-green-600' : 'bg-gray-200'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      formData.attivo ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
               </div>
               <div className="flex justify-end space-x-2 pt-4">
                 <Button type="button" variant="secondary" onClick={handleCloseModal}>

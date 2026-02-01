@@ -265,7 +265,14 @@ export class ScadenzeService {
     // NOTE: updateScaduteAutomaticamente rimosso da qui per performance
     // Usare un cron job separato per aggiornare gli stati
 
-    const where: any = {};
+    const where: any = {
+      // Filtra solo scadenze di veicoli appartenenti a clienti attivi
+      veicolo: {
+        cliente: {
+          attivo: true,
+        },
+      },
+    };
 
     if (stato) {
       where.stato = stato;
@@ -273,6 +280,7 @@ export class ScadenzeService {
 
     if (idCliente) {
       where.veicolo = {
+        ...where.veicolo,
         idCliente: idCliente,
       };
     }
@@ -297,6 +305,7 @@ export class ScadenzeService {
                 ragioneSociale: true,
                 nome: true,
                 cognome: true,
+                attivo: true,
               },
             },
           },
@@ -339,7 +348,14 @@ export class ScadenzeService {
     // Aggiorna scadenze scadute (non fare in ogni request se impatta performance)
     // await this.updateScaduteAutomaticamente();
 
-    const where: any = {};
+    const where: any = {
+      // Filtra solo scadenze di veicoli appartenenti a clienti attivi
+      veicolo: {
+        cliente: {
+          attivo: true,
+        },
+      },
+    };
 
     if (stato) {
       where.stato = stato;
@@ -347,6 +363,7 @@ export class ScadenzeService {
 
     if (idCliente) {
       where.veicolo = {
+        ...where.veicolo,
         idCliente: idCliente,
       };
     }
@@ -400,10 +417,17 @@ export class ScadenzeService {
    * Più efficiente di caricare tutti i dati
    */
   async getStatsCounts(idCliente?: number) {
-    const where: any = {};
+    const where: any = {
+      // Filtra solo scadenze di veicoli appartenenti a clienti attivi
+      veicolo: {
+        cliente: {
+          attivo: true,
+        },
+      },
+    };
 
     if (idCliente) {
-      where.veicolo = { idCliente };
+      where.veicolo = { ...where.veicolo, idCliente };
     }
 
     const [daPagare, pagato, scaduto, totaleImporto] = await Promise.all([
@@ -516,6 +540,12 @@ export class ScadenzeService {
     const scadenzeDaPagare = await this.prisma.scadenza.findMany({
       where: {
         stato: StatoScadenza.DA_PAGARE,
+        // Filtra solo scadenze di veicoli appartenenti a clienti attivi
+        veicolo: {
+          cliente: {
+            attivo: true,
+          },
+        },
         OR: [
           // Scadenze di quest'anno nel range di mesi
           {
@@ -544,6 +574,7 @@ export class ScadenzeService {
                 cognome: true,
                 email: true,
                 telefono: true,
+                attivo: true,
               },
             },
           },
@@ -629,8 +660,13 @@ export class ScadenzeService {
       errori: [] as string[],
     };
 
-    // Recupera tutti i veicoli con le loro scadenze esistenti
+    // Recupera solo i veicoli di clienti attivi con le loro scadenze esistenti
     const veicoli = await this.prisma.veicolo.findMany({
+      where: {
+        cliente: {
+          attivo: true,
+        },
+      },
       include: {
         scadenze: {
           orderBy: [
@@ -640,7 +676,7 @@ export class ScadenzeService {
           take: 1, // Solo la più recente
         },
         cliente: {
-          select: { id: true, ragioneSociale: true, nome: true, cognome: true },
+          select: { id: true, ragioneSociale: true, nome: true, cognome: true, attivo: true },
         },
       },
     });

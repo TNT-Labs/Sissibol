@@ -1,10 +1,14 @@
-import { IsNotEmpty, IsString, IsOptional, IsEmail, IsEnum, ValidateIf } from 'class-validator';
+import { IsNotEmpty, IsString, IsOptional, IsEmail, IsEnum, ValidateIf, IsBoolean } from 'class-validator';
 import { TipoCliente } from '../../prisma/types';
 
 export class CreateClienteDto {
   @IsEnum(TipoCliente)
   @IsOptional()
   tipoCliente?: TipoCliente;
+
+  @IsBoolean()
+  @IsOptional()
+  attivo?: boolean;
 
   // Campi Persona Giuridica - obbligatori se tipoCliente è PERSONA_GIURIDICA
   @ValidateIf(o => o.tipoCliente === 'PERSONA_GIURIDICA' || !o.tipoCliente)

@@ -50,6 +50,7 @@ export interface Cliente {
   email?: string;
   telefono?: string;
   note?: string;
+  attivo: boolean;
   createdAt: string;
   updatedAt: string;
   veicoli?: Veicolo[];

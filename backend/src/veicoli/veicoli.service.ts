@@ -26,7 +26,12 @@ export class VeicoliService {
   }
 
   async findAll(idCliente?: number, search?: string) {
-    const where: any = {};
+    const where: any = {
+      // Filtra solo veicoli di clienti attivi
+      cliente: {
+        attivo: true,
+      },
+    };
 
     if (idCliente) {
       where.idCliente = idCliente;
@@ -35,9 +40,9 @@ export class VeicoliService {
     if (search) {
       where.OR = [
         { targa: { contains: search, mode: 'insensitive' } },
-        { cliente: { ragioneSociale: { contains: search, mode: 'insensitive' } } },
-        { cliente: { nome: { contains: search, mode: 'insensitive' } } },
-        { cliente: { cognome: { contains: search, mode: 'insensitive' } } },
+        { cliente: { ragioneSociale: { contains: search, mode: 'insensitive' }, attivo: true } },
+        { cliente: { nome: { contains: search, mode: 'insensitive' }, attivo: true } },
+        { cliente: { cognome: { contains: search, mode: 'insensitive' }, attivo: true } },
       ];
     }
 
@@ -52,6 +57,7 @@ export class VeicoliService {
         potenzaKw: true,
         cilindrata: true,
         alimentazione: true,
+        dataImmatricolazione: true,
         cliente: {
           select: {
             id: true,
@@ -59,6 +65,7 @@ export class VeicoliService {
             ragioneSociale: true,
             nome: true,
             cognome: true,
+            attivo: true,
           },
         },
         _count: {
@@ -79,7 +86,12 @@ export class VeicoliService {
   ) {
     const skip = (page - 1) * pageSize;
 
-    const where: any = {};
+    const where: any = {
+      // Filtra solo veicoli di clienti attivi
+      cliente: {
+        attivo: true,
+      },
+    };
 
     if (idCliente) {
       where.idCliente = idCliente;
@@ -88,9 +100,9 @@ export class VeicoliService {
     if (search) {
       where.OR = [
         { targa: { contains: search, mode: 'insensitive' } },
-        { cliente: { ragioneSociale: { contains: search, mode: 'insensitive' } } },
-        { cliente: { nome: { contains: search, mode: 'insensitive' } } },
-        { cliente: { cognome: { contains: search, mode: 'insensitive' } } },
+        { cliente: { ragioneSociale: { contains: search, mode: 'insensitive' }, attivo: true } },
+        { cliente: { nome: { contains: search, mode: 'insensitive' }, attivo: true } },
+        { cliente: { cognome: { contains: search, mode: 'insensitive' }, attivo: true } },
       ];
     }
 
@@ -106,6 +118,7 @@ export class VeicoliService {
           potenzaKw: true,
           cilindrata: true,
           alimentazione: true,
+          dataImmatricolazione: true,
           cliente: {
             select: {
               id: true,
@@ -113,6 +126,7 @@ export class VeicoliService {
               ragioneSociale: true,
               nome: true,
               cognome: true,
+              attivo: true,
             },
           },
           _count: {

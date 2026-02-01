@@ -285,6 +285,9 @@ export const VeicoliPage: React.FC = () => {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Potenza/Cilindrata
               </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Data Immatricolazione
+              </th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Azioni
               </th>
@@ -293,7 +296,7 @@ export const VeicoliPage: React.FC = () => {
           <tbody className="bg-white divide-y divide-gray-200">
             {veicoli.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+                <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
                   Nessun veicolo trovato
                 </td>
               </tr>
@@ -317,6 +320,11 @@ export const VeicoliPage: React.FC = () => {
                     {veicolo.potenzaKw && veicolo.cilindrata ? ' / ' : ''}
                     {veicolo.cilindrata ? `${veicolo.cilindrata} cc` : ''}
                     {!veicolo.potenzaKw && !veicolo.cilindrata ? '-' : ''}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {veicolo.dataImmatricolazione
+                      ? new Date(veicolo.dataImmatricolazione).toLocaleDateString('it-IT')
+                      : '-'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <button

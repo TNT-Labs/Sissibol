@@ -81,6 +81,7 @@ export class ClientiService {
           codiceFiscale: true,
           email: true,
           telefono: true,
+          attivo: true,
           _count: {
             select: { veicoli: true },
           },
