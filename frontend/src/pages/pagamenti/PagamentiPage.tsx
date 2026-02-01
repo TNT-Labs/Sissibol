@@ -11,6 +11,7 @@ import { Plus, X, CreditCard, Upload, FileText, Trash2, Edit } from 'lucide-reac
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { getMeseLabel } from '../../constants/domini';
+import { useToast } from '../../context/ToastContext';
 
 export const PagamentiPage: React.FC = () => {
   const [pagamenti, setPagamenti] = useState<Pagamento[]>([]);
@@ -25,6 +26,7 @@ export const PagamentiPage: React.FC = () => {
     importoPagato: '',
     metodoPagamento: '',
   });
+  const toast = useToast();
 
   useEffect(() => {
     loadData();
@@ -80,12 +82,12 @@ export const PagamentiPage: React.FC = () => {
       // Verifica tipo file (immagini e PDF)
       const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
       if (!allowedTypes.includes(file.type)) {
-        alert('Formato file non supportato. Usa JPG, PNG o PDF.');
+        toast.warning('Formato non supportato', 'Usa JPG, PNG o PDF.');
         return;
       }
       // Verifica dimensione (max 5MB)
       if (file.size > 5 * 1024 * 1024) {
-        alert('File troppo grande. Dimensione massima: 5MB');
+        toast.warning('File troppo grande', 'Dimensione massima: 5MB');
         return;
       }
       setSelectedFile(file);
@@ -104,14 +106,16 @@ export const PagamentiPage: React.FC = () => {
 
       if (editingPagamento) {
         await pagamentiService.update(editingPagamento.id, data);
+        toast.success('Pagamento aggiornato', 'Il pagamento è stato modificato con successo.');
       } else {
         await pagamentiService.create(data, selectedFile || undefined);
+        toast.success('Pagamento registrato', 'Il pagamento è stato registrato con successo.');
       }
       handleCloseModal();
       loadData();
     } catch (error) {
       console.error('Errore nel salvataggio del pagamento:', error);
-      alert('Errore nel salvataggio del pagamento');
+      toast.error('Errore', 'Impossibile salvare il pagamento. Riprova.');
     }
   };
 
@@ -119,9 +123,11 @@ export const PagamentiPage: React.FC = () => {
     if (confirm('Sei sicuro di voler eliminare questo pagamento?')) {
       try {
         await pagamentiService.delete(id);
+        toast.success('Pagamento eliminato', 'Il pagamento è stato eliminato con successo.');
         loadData();
       } catch (error) {
         console.error('Errore nell\'eliminazione del pagamento:', error);
+        toast.error('Errore', 'Impossibile eliminare il pagamento. Riprova.');
       }
     }
   };
@@ -221,7 +227,7 @@ export const PagamentiPage: React.FC = () => {
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {pagamento.ricevutaFile ? (
                       <a
-                        href={`http://localhost:3000/${pagamento.ricevutaFile}`}
+                        href={`${import.meta.env.VITE_API_URL || ''}/${pagamento.ricevutaFile}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-blue-600 hover:text-blue-800 flex items-center"

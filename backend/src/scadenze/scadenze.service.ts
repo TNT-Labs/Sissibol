@@ -740,43 +740,50 @@ export class ScadenzeService {
           scadenzeEsistenti.map(s => `${s.annoScadenza}-${s.meseScadenza}`)
         );
 
-        // Crea solo le scadenze che non esistono
-        for (const scadenza of scadenzeDaCreare) {
+        // Filtra scadenze non esistenti
+        const scadenzeNuove = scadenzeDaCreare.filter(scadenza => {
           const chiave = `${scadenza.annoScadenza}-${scadenza.meseScadenza}`;
-
           if (esistentiSet.has(chiave)) {
             risultato.scadenzeSaltate++;
-            continue;
+            return false;
           }
+          return true;
+        });
 
-          // Calcola importo previsto
-          let importoPrevisto: number | undefined;
-          try {
-            const calcolo = await this.bolloService.calcolaBollo(
-              veicolo.id,
-              scadenza.annoScadenza,
-              periodicita,
-            );
-            importoPrevisto = calcolo.importoBase;
-          } catch (error) {
-            // Se il calcolo fallisce, lascia l'importo nullo
-            console.warn(`Impossibile calcolare bollo per veicolo ${veicolo.targa}:`, error.message);
-          }
-
-          // Crea la scadenza
-          await this.prisma.scadenza.create({
-            data: {
-              idVeicolo: veicolo.id,
-              meseScadenza: scadenza.meseScadenza,
-              annoScadenza: scadenza.annoScadenza,
-              periodicita: periodicita,
-              importoPrevisto: importoPrevisto,
-              stato: StatoScadenza.DA_PAGARE,
-            },
-          });
-
-          risultato.scadenzeCreate++;
+        if (scadenzeNuove.length === 0) {
+          continue;
         }
+
+        // Calcola importo una sola volta per veicolo (ottimizzazione)
+        // L'importo è lo stesso per tutte le scadenze dello stesso veicolo/periodicità
+        let importoPrevisto: number | undefined;
+        try {
+          const calcolo = await this.bolloService.calcolaBollo(
+            veicolo.id,
+            annoCorrente,
+            periodicita,
+          );
+          importoPrevisto = calcolo.importoBase;
+        } catch (error) {
+          console.warn(`Impossibile calcolare bollo per veicolo ${veicolo.targa}:`, error.message);
+        }
+
+        // Prepara batch di scadenze da creare
+        const scadenzeBatch = scadenzeNuove.map(scadenza => ({
+          idVeicolo: veicolo.id,
+          meseScadenza: scadenza.meseScadenza,
+          annoScadenza: scadenza.annoScadenza,
+          periodicita: periodicita,
+          importoPrevisto: importoPrevisto,
+          stato: StatoScadenza.DA_PAGARE,
+        }));
+
+        // Crea tutte le scadenze in batch (molto più veloce)
+        await this.prisma.scadenza.createMany({
+          data: scadenzeBatch,
+        });
+
+        risultato.scadenzeCreate += scadenzeNuove.length;
       } catch (error) {
         risultato.errori.push(`Veicolo ${veicolo.targa}: ${error.message}`);
       }
