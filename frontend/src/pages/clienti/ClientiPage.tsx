@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { clientiService } from '../../services/clienti.service';
 import { TipoCliente, getClienteDisplayName } from '../../types';
 import type { Cliente } from '../../types';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
-import { Plus, Search, Edit, Trash2, X, Building2, User } from 'lucide-react';
+import { SearchInput } from '../../components/common/SearchInput';
+import { Plus, Edit, Trash2, X, Building2, User } from 'lucide-react';
 
 export const ClientiPage: React.FC = () => {
   const [clienti, setClienti] = useState<Cliente[]>([]);
@@ -29,20 +30,20 @@ export const ClientiPage: React.FC = () => {
     loadClienti();
   }, []);
 
-  const loadClienti = async () => {
+  const loadClienti = useCallback(async (searchTerm?: string) => {
     try {
-      const data = await clientiService.getAll(search);
+      const data = await clientiService.getAll(searchTerm || search);
       setClienti(data);
     } catch (error) {
       console.error('Errore nel caricamento dei clienti:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [search]);
 
-  const handleSearch = () => {
-    loadClienti();
-  };
+  const handleSearch = useCallback((searchTerm: string) => {
+    loadClienti(searchTerm);
+  }, [loadClienti]);
 
   const handleOpenModal = (cliente?: Cliente) => {
     if (cliente) {
@@ -130,20 +131,13 @@ export const ClientiPage: React.FC = () => {
 
       {/* Search Bar */}
       <div className="bg-white rounded-lg shadow p-4">
-        <div className="flex space-x-2">
-          <div className="flex-1">
-            <Input
-              placeholder="Cerca per nome, ragione sociale, P.IVA, C.F. o email..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-            />
-          </div>
-          <Button onClick={handleSearch}>
-            <Search size={20} className="mr-2" />
-            Cerca
-          </Button>
-        </div>
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          onSearch={handleSearch}
+          placeholder="Cerca per nome, ragione sociale, P.IVA, C.F. o email..."
+          loading={loading}
+        />
       </div>
 
       {/* Table */}

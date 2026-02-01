@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { veicoliService } from '../../services/veicoli.service';
 import { clientiService } from '../../services/clienti.service';
 import { getClienteDisplayName } from '../../types';
@@ -6,6 +6,8 @@ import type { Veicolo, Cliente } from '../../types';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { SearchableSelect } from '../../components/common/SearchableSelect';
+import type { SelectOption } from '../../components/common/SearchableSelect';
+import { SearchInput } from '../../components/common/SearchInput';
 import {
   TIPI_VEICOLO,
   CLASSI_AMBIENTALI,
@@ -14,7 +16,7 @@ import {
   TIPI_SOSPENSIONE,
   shouldShowField
 } from '../../constants/domini';
-import { Plus, Search, Edit, Trash2, X, Car } from 'lucide-react';
+import { Plus, Edit, Trash2, X, Car } from 'lucide-react';
 
 interface VeicoloFormData {
   idCliente: number;
@@ -78,20 +80,29 @@ export const VeicoliPage: React.FC = () => {
     }
   };
 
-  const loadVeicoli = async () => {
+  const loadVeicoli = useCallback(async (searchTerm?: string) => {
     try {
-      const data = await veicoliService.getAll(filterCliente, search || undefined);
+      const searchValue = searchTerm !== undefined ? searchTerm : search;
+      const data = await veicoliService.getAll(filterCliente, searchValue || undefined);
       setVeicoli(data);
     } catch (error) {
       console.error('Errore nel caricamento dei veicoli:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [filterCliente, search]);
 
-  const handleSearch = () => {
-    loadVeicoli();
-  };
+  const handleSearch = useCallback((searchTerm: string) => {
+    loadVeicoli(searchTerm);
+  }, [loadVeicoli]);
+
+  // Opzioni clienti per SearchableSelect
+  const clientiOptions: SelectOption[] = useMemo(() => {
+    return [
+      { value: '', label: 'Tutti i clienti' },
+      ...clienti.map(c => ({ value: c.id, label: getClienteDisplayName(c) }))
+    ];
+  }, [clienti]);
 
   const handleOpenModal = async (veicolo?: Veicolo) => {
     if (veicolo) {
@@ -138,19 +149,20 @@ export const VeicoliPage: React.FC = () => {
   };
 
   // Quando cambia il tipo veicolo, resetta i campi non pertinenti
-  const handleTipoVeicoloChange = (value: string) => {
+  const handleTipoVeicoloChange = (value: string | number) => {
+    const strValue = String(value);
     setFormData(prev => ({
       ...prev,
-      tipoVeicolo: value,
+      tipoVeicolo: strValue,
       // Reset campi condizionali che non sono più visibili
-      potenzaKw: shouldShowField(value, 'potenzaKw') ? prev.potenzaKw : '',
-      cilindrata: shouldShowField(value, 'cilindrata') ? prev.cilindrata : '',
-      portataKg: shouldShowField(value, 'portataKg') ? prev.portataKg : '',
-      pesoComplessivoKg: shouldShowField(value, 'pesoComplessivoKg') ? prev.pesoComplessivoKg : '',
-      numeroAssi: shouldShowField(value, 'numeroAssi') ? prev.numeroAssi : '',
-      tipoSospensione: shouldShowField(value, 'tipoSospensione') ? prev.tipoSospensione : '',
-      numeroPosti: shouldShowField(value, 'numeroPosti') ? prev.numeroPosti : '',
-      massaRimorchiabileKg: shouldShowField(value, 'massaRimorchiabileKg') ? prev.massaRimorchiabileKg : '',
+      potenzaKw: shouldShowField(strValue, 'potenzaKw') ? prev.potenzaKw : '',
+      cilindrata: shouldShowField(strValue, 'cilindrata') ? prev.cilindrata : '',
+      portataKg: shouldShowField(strValue, 'portataKg') ? prev.portataKg : '',
+      pesoComplessivoKg: shouldShowField(strValue, 'pesoComplessivoKg') ? prev.pesoComplessivoKg : '',
+      numeroAssi: shouldShowField(strValue, 'numeroAssi') ? prev.numeroAssi : '',
+      tipoSospensione: shouldShowField(strValue, 'tipoSospensione') ? prev.tipoSospensione : '',
+      numeroPosti: shouldShowField(strValue, 'numeroPosti') ? prev.numeroPosti : '',
+      massaRimorchiabileKg: shouldShowField(strValue, 'massaRimorchiabileKg') ? prev.massaRimorchiabileKg : '',
     }));
   };
 
@@ -235,33 +247,27 @@ export const VeicoliPage: React.FC = () => {
 
       {/* Search and Filter Bar */}
       <div className="bg-white rounded-lg shadow p-4">
-        <div className="flex space-x-2">
+        <div className="flex space-x-4">
           <div className="flex-1">
-            <Input
-              placeholder="Cerca per targa o nome cliente..."
+            <SearchInput
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+              onChange={setSearch}
+              onSearch={handleSearch}
+              placeholder="Cerca per targa o nome cliente..."
+              loading={loading}
             />
           </div>
-          <div className="w-64">
-            <select
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          <div className="w-72">
+            <SearchableSelect
+              options={clientiOptions}
               value={filterCliente || ''}
-              onChange={(e) => setFilterCliente(e.target.value ? Number(e.target.value) : undefined)}
-            >
-              <option value="">Tutti i clienti</option>
-              {clienti.map((cliente) => (
-                <option key={cliente.id} value={cliente.id}>
-                  {getClienteDisplayName(cliente)}
-                </option>
-              ))}
-            </select>
+              onChange={(value) => {
+                setFilterCliente(value ? Number(value) : undefined);
+                setTimeout(() => loadVeicoli(), 0);
+              }}
+              placeholder="Filtra per cliente..."
+            />
           </div>
-          <Button onClick={handleSearch}>
-            <Search size={20} className="mr-2" />
-            Cerca
-          </Button>
         </div>
       </div>
 
@@ -358,24 +364,14 @@ export const VeicoliPage: React.FC = () => {
                   Dati Principali
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Cliente *
-                    </label>
-                    <select
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      value={formData.idCliente}
-                      onChange={(e) => setFormData({ ...formData, idCliente: Number(e.target.value) })}
-                      required
-                    >
-                      <option value="">Seleziona un cliente</option>
-                      {clienti.map((cliente) => (
-                        <option key={cliente.id} value={cliente.id}>
-                          {getClienteDisplayName(cliente)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <SearchableSelect
+                    label="Cliente *"
+                    options={clienti.map(c => ({ value: c.id, label: getClienteDisplayName(c) }))}
+                    value={formData.idCliente}
+                    onChange={(value) => setFormData({ ...formData, idCliente: Number(value) })}
+                    placeholder="Cerca cliente..."
+                    required
+                  />
                   <Input
                     label="Targa *"
                     value={formData.targa}
@@ -404,7 +400,7 @@ export const VeicoliPage: React.FC = () => {
                     label="Classe Ambientale"
                     options={CLASSI_AMBIENTALI}
                     value={formData.classeAmbientale}
-                    onChange={(value) => setFormData({ ...formData, classeAmbientale: value })}
+                    onChange={(value) => setFormData({ ...formData, classeAmbientale: String(value) })}
                     placeholder="Seleziona o cerca..."
                     allowCustom
                   />
@@ -412,7 +408,7 @@ export const VeicoliPage: React.FC = () => {
                     label="Alimentazione"
                     options={TIPI_ALIMENTAZIONE}
                     value={formData.alimentazione}
-                    onChange={(value) => setFormData({ ...formData, alimentazione: value })}
+                    onChange={(value) => setFormData({ ...formData, alimentazione: String(value) })}
                     placeholder="Seleziona o cerca..."
                     allowCustom
                   />
@@ -420,7 +416,7 @@ export const VeicoliPage: React.FC = () => {
                     label="Regione"
                     options={REGIONI_ITALIANE}
                     value={formData.regione}
-                    onChange={(value) => setFormData({ ...formData, regione: value })}
+                    onChange={(value) => setFormData({ ...formData, regione: String(value) })}
                     placeholder="Seleziona o cerca..."
                   />
                   <Input
@@ -481,28 +477,24 @@ export const VeicoliPage: React.FC = () => {
                       />
                     )}
                     {shouldShowField(formData.tipoVeicolo, 'numeroAssi') && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Numero Assi
-                        </label>
-                        <select
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          value={formData.numeroAssi}
-                          onChange={(e) => setFormData({ ...formData, numeroAssi: e.target.value })}
-                        >
-                          <option value="">Seleziona...</option>
-                          <option value="2">2 assi</option>
-                          <option value="3">3 assi</option>
-                          <option value="4">4 o più assi</option>
-                        </select>
-                      </div>
+                      <SearchableSelect
+                        label="Numero Assi"
+                        options={[
+                          { value: '2', label: '2 assi' },
+                          { value: '3', label: '3 assi' },
+                          { value: '4', label: '4 o più assi' },
+                        ]}
+                        value={formData.numeroAssi}
+                        onChange={(value) => setFormData({ ...formData, numeroAssi: String(value) })}
+                        placeholder="Seleziona numero assi..."
+                      />
                     )}
                     {shouldShowField(formData.tipoVeicolo, 'tipoSospensione') && (
                       <SearchableSelect
                         label="Tipo Sospensione"
                         options={TIPI_SOSPENSIONE}
                         value={formData.tipoSospensione}
-                        onChange={(value) => setFormData({ ...formData, tipoSospensione: value })}
+                        onChange={(value) => setFormData({ ...formData, tipoSospensione: String(value) })}
                         placeholder="Seleziona..."
                       />
                     )}

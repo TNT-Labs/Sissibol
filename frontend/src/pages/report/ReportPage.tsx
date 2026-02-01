@@ -6,6 +6,8 @@ import type { Cliente, StatoScadenza, Scadenza, Pagamento } from '../../types';
 import { getClienteDisplayName } from '../../types';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
+import { SearchableSelect } from '../../components/common/SearchableSelect';
+import type { SelectOption } from '../../components/common/SearchableSelect';
 import { FileText, Download, FileSpreadsheet } from 'lucide-react';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -13,6 +15,14 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import { getMeseLabel } from '../../constants/domini';
+
+// Opzioni per filtro stato
+const STATO_FILTER_OPTIONS: SelectOption[] = [
+  { value: '', label: 'Tutti gli stati' },
+  { value: 'DA_PAGARE', label: 'Da Pagare' },
+  { value: 'PAGATO', label: 'Pagato' },
+  { value: 'SCADUTO', label: 'Scaduto' },
+];
 
 type ReportType = 'scadenze' | 'pagamenti' | 'clienti';
 
@@ -536,40 +546,23 @@ export const ReportPage: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {reportType === 'scadenze' && (
                 <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Stato
-                    </label>
-                    <select
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      value={filterStato}
-                      onChange={(e) => setFilterStato(e.target.value as StatoScadenza | '')}
-                    >
-                      <option value="">Tutti</option>
-                      <option value="DA_PAGARE">Da Pagare</option>
-                      <option value="PAGATO">Pagato</option>
-                      <option value="SCADUTO">Scaduto</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Cliente
-                    </label>
-                    <select
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      value={filterCliente || ''}
-                      onChange={(e) =>
-                        setFilterCliente(e.target.value ? Number(e.target.value) : undefined)
-                      }
-                    >
-                      <option value="">Tutti i clienti</option>
-                      {clienti.map((cliente) => (
-                        <option key={cliente.id} value={cliente.id}>
-                          {getClienteDisplayName(cliente)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <SearchableSelect
+                    label="Stato"
+                    options={STATO_FILTER_OPTIONS}
+                    value={filterStato}
+                    onChange={(value) => setFilterStato(value as StatoScadenza | '')}
+                    placeholder="Filtra per stato..."
+                  />
+                  <SearchableSelect
+                    label="Cliente"
+                    options={[
+                      { value: '', label: 'Tutti i clienti' },
+                      ...clienti.map(c => ({ value: c.id, label: getClienteDisplayName(c) }))
+                    ]}
+                    value={filterCliente || ''}
+                    onChange={(value) => setFilterCliente(value ? Number(value) : undefined)}
+                    placeholder="Filtra per cliente..."
+                  />
                 </>
               )}
 

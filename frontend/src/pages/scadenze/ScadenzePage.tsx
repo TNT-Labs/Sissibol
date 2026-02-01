@@ -5,8 +5,38 @@ import { StatoScadenza, Periodicita, getClienteDisplayName } from '../../types';
 import type { Scadenza, Cliente, Veicolo } from '../../types';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
+import { SearchableSelect } from '../../components/common/SearchableSelect';
+import type { SelectOption } from '../../components/common/SearchableSelect';
 import { Plus, X, Calendar as CalendarIcon, ChevronDown, ChevronRight, Car, Edit, Trash2, Calculator, Wand2 } from 'lucide-react';
 import { MESI, getMeseLabel } from '../../constants/domini';
+
+// Opzioni per i mesi
+const MESI_OPTIONS: SelectOption[] = MESI.map(m => ({ value: m.value, label: m.label }));
+
+// Genera opzioni per gli anni
+const getAnniOptions = (startOffset: number = -1, count: number = 5): SelectOption[] => {
+  const currentYear = new Date().getFullYear();
+  return Array.from({ length: count }, (_, i) => {
+    const anno = currentYear + startOffset + i;
+    return { value: anno, label: String(anno) };
+  });
+};
+
+const ANNI_OPTIONS = getAnniOptions(-1, 5);
+const ANNI_FUTURI_OPTIONS = getAnniOptions(0, 10);
+
+// Opzioni per periodicita
+const PERIODICITA_OPTIONS: SelectOption[] = [
+  { value: 'ANNUALE', label: 'Annuale (12 mesi)' },
+  { value: 'QUADRIMESTRALE', label: 'Quadrimestrale (4 mesi)' },
+];
+
+// Opzioni per stato
+const STATO_OPTIONS: SelectOption[] = [
+  { value: 'DA_PAGARE', label: 'Da Pagare' },
+  { value: 'PAGATO', label: 'Pagato' },
+  { value: 'SCADUTO', label: 'Scaduto' },
+];
 
 // Calcola il mese successivo
 const getNextMonth = () => {
@@ -287,36 +317,26 @@ export const ScadenzePage: React.FC = () => {
       {/* Filtro Mese/Anno */}
       <div className="bg-white rounded-lg shadow p-4">
         <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2">
-            <label className="text-sm font-medium text-gray-700">Mese:</label>
-            <select
-              className="px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          <div className="w-48">
+            <SearchableSelect
+              label="Mese"
+              options={MESI_OPTIONS}
               value={meseSelezionato}
-              onChange={(e) => setMeseSelezionato(Number(e.target.value))}
-            >
-              {MESI.map((mese) => (
-                <option key={mese.value} value={mese.value}>
-                  {mese.label}
-                </option>
-              ))}
-            </select>
+              onChange={(value) => setMeseSelezionato(Number(value))}
+              placeholder="Seleziona mese..."
+            />
           </div>
-          <div className="flex items-center space-x-2">
-            <label className="text-sm font-medium text-gray-700">Anno:</label>
-            <select
-              className="px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          <div className="w-36">
+            <SearchableSelect
+              label="Anno"
+              options={ANNI_OPTIONS}
               value={annoSelezionato}
-              onChange={(e) => setAnnoSelezionato(Number(e.target.value))}
-            >
-              {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 1 + i).map((anno) => (
-                <option key={anno} value={anno}>
-                  {anno}
-                </option>
-              ))}
-            </select>
+              onChange={(value) => setAnnoSelezionato(Number(value))}
+              placeholder="Seleziona anno..."
+            />
           </div>
           <div className="flex-1"></div>
-          <div className="text-sm text-gray-600">
+          <div className="text-sm text-gray-600 self-end pb-2">
             <span className="font-semibold text-lg text-blue-600">{totaleVeicoli}</span> veicoli in scadenza
           </div>
         </div>
@@ -458,74 +478,43 @@ export const ScadenzePage: React.FC = () => {
               </button>
             </div>
             <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Veicolo *
-                </label>
-                <select
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={formData.idVeicolo}
-                  onChange={(e) => setFormData({ ...formData, idVeicolo: Number(e.target.value) })}
-                  required
-                >
-                  <option value="">Seleziona un veicolo</option>
-                  {veicoli.map((veicolo) => (
-                    <option key={veicolo.id} value={veicolo.id}>
-                      {veicolo.targa} - {veicolo.cliente ? getClienteDisplayName(veicolo.cliente) : 'N/A'}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <SearchableSelect
+                label="Veicolo *"
+                options={veicoli.map(v => ({
+                  value: v.id,
+                  label: `${v.targa} - ${v.cliente ? getClienteDisplayName(v.cliente) : 'N/A'}`
+                }))}
+                value={formData.idVeicolo}
+                onChange={(value) => setFormData({ ...formData, idVeicolo: Number(value) })}
+                placeholder="Cerca veicolo per targa o cliente..."
+                required
+              />
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Mese Scadenza *
-                  </label>
-                  <select
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={formData.meseScadenza}
-                    onChange={(e) => setFormData({ ...formData, meseScadenza: Number(e.target.value) })}
-                    required
-                  >
-                    {MESI.map((mese) => (
-                      <option key={mese.value} value={mese.value}>
-                        {mese.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Anno *
-                  </label>
-                  <select
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={formData.annoScadenza}
-                    onChange={(e) => setFormData({ ...formData, annoScadenza: Number(e.target.value) })}
-                    required
-                  >
-                    {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() + i).map((anno) => (
-                      <option key={anno} value={anno}>
-                        {anno}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Periodicita *
-                </label>
-                <select
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={formData.periodicita}
-                  onChange={(e) => setFormData({ ...formData, periodicita: e.target.value as Periodicita })}
+                <SearchableSelect
+                  label="Mese Scadenza *"
+                  options={MESI_OPTIONS}
+                  value={formData.meseScadenza}
+                  onChange={(value) => setFormData({ ...formData, meseScadenza: Number(value) })}
+                  placeholder="Seleziona mese..."
                   required
-                >
-                  <option value="ANNUALE">Annuale (12 mesi)</option>
-                  <option value="QUADRIMESTRALE">Quadrimestrale (4 mesi)</option>
-                </select>
+                />
+                <SearchableSelect
+                  label="Anno *"
+                  options={ANNI_FUTURI_OPTIONS}
+                  value={formData.annoScadenza}
+                  onChange={(value) => setFormData({ ...formData, annoScadenza: Number(value) })}
+                  placeholder="Seleziona anno..."
+                  required
+                />
               </div>
+              <SearchableSelect
+                label="Periodicita *"
+                options={PERIODICITA_OPTIONS}
+                value={formData.periodicita}
+                onChange={(value) => setFormData({ ...formData, periodicita: value as Periodicita })}
+                placeholder="Seleziona periodicita..."
+                required
+              />
               <div>
                 <Input
                   label="Importo Previsto"
@@ -539,19 +528,14 @@ export const ScadenzePage: React.FC = () => {
                   Lascia vuoto per calcolare automaticamente in base alle tariffe configurate
                 </p>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Stato *</label>
-                <select
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={formData.stato}
-                  onChange={(e) => setFormData({ ...formData, stato: e.target.value as StatoScadenza })}
-                  required
-                >
-                  <option value="DA_PAGARE">Da Pagare</option>
-                  <option value="PAGATO">Pagato</option>
-                  <option value="SCADUTO">Scaduto</option>
-                </select>
-              </div>
+              <SearchableSelect
+                label="Stato *"
+                options={STATO_OPTIONS}
+                value={formData.stato}
+                onChange={(value) => setFormData({ ...formData, stato: value as StatoScadenza })}
+                placeholder="Seleziona stato..."
+                required
+              />
               <div className="flex justify-end space-x-2 pt-4">
                 <Button type="button" variant="secondary" onClick={handleCloseModal}>
                   Annulla
@@ -591,23 +575,14 @@ export const ScadenzePage: React.FC = () => {
                     Questa funzione genera automaticamente le scadenze per tutti i veicoli
                     fino all'anno selezionato. Le scadenze gia esistenti non verranno duplicate.
                   </p>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Genera scadenze fino all'anno:
-                    </label>
-                    <select
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      value={annoTarget}
-                      onChange={(e) => setAnnoTarget(Number(e.target.value))}
-                      disabled={generaLoading}
-                    >
-                      {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() + i).map((anno) => (
-                        <option key={anno} value={anno}>
-                          {anno}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <SearchableSelect
+                    label="Genera scadenze fino all'anno:"
+                    options={ANNI_FUTURI_OPTIONS}
+                    value={annoTarget}
+                    onChange={(value) => setAnnoTarget(Number(value))}
+                    placeholder="Seleziona anno..."
+                    disabled={generaLoading}
+                  />
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                     <h4 className="font-medium text-blue-800 mb-2">Come funziona:</h4>
                     <ul className="text-sm text-blue-700 space-y-1">
