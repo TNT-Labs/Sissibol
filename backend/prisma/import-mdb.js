@@ -260,7 +260,8 @@ async function importMezzi(ditteMap, lookups) {
     const regione = codRegione !== null ? lookups.regioni.get(codRegione) : null;
 
     // Periodicità dal CSV mezzi: 12 = ANNUALE, 4 = QUADRIMESTRALE
-    const periodicitaVal = parseInt2(row['Periodicita']) || parseInt2(row['periodicita']) || parseInt2(row['PERIODICITA']);
+    // NB: il campo nel CSV ha l'accento "Periodicità"
+    const periodicitaVal = parseInt2(row['Periodicità']) || parseInt2(row['Periodicita']) || parseInt2(row['periodicita']);
     const periodicita = periodicitaVal === 4 ? Periodicita.QUADRIMESTRALE : Periodicita.ANNUALE;
     if (periodicitaVal === 4) quadrimestrali++;
 
