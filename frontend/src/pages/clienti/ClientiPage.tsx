@@ -4,7 +4,6 @@ import { TipoCliente, getClienteDisplayName } from '../../types';
 import type { Cliente } from '../../types';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
-import { SearchInput } from '../../components/common/SearchInput';
 import { Plus, Search, Edit, Trash2, X, Building2, User, CheckCircle, XCircle } from 'lucide-react';
 
 type FiltroAttivo = 'tutti' | 'attivi' | 'nonAttivi';
@@ -52,11 +51,9 @@ export const ClientiPage: React.FC = () => {
     return true; // 'tutti'
   });
 
-  const handleSearch = useCallback((searchTerm: string) => {
-
-    loadClienti(searchTerm);
-
-  }, [loadClienti]);
+  const handleSearch = useCallback(() => {
+    loadClienti(search);
+  }, [loadClienti, search]);
 
   const handleOpenModal = (cliente?: Cliente) => {
     if (cliente) {
