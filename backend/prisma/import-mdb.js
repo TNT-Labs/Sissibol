@@ -325,6 +325,34 @@ async function importScadenziario(veicoliMap) {
   let skipped = 0;
   let errors = 0;
 
+  // Prima analisi: conta scadenze per veicolo per anno per determinare periodicità
+  // Se un veicolo ha 3+ scadenze nello stesso anno, è QUADRIMESTRALE
+  const scadenzePerVeicoloAnno = new Map();
+
+  for (const row of records) {
+    const targa = row['Targa']?.trim().toUpperCase();
+    if (!targa) continue;
+
+    const dataScadenza = parseMDBDate(row['Scadenza']);
+    if (!dataScadenza) continue;
+
+    const annoScadenza = dataScadenza.getFullYear();
+    const key = `${targa}-${annoScadenza}`;
+
+    scadenzePerVeicoloAnno.set(key, (scadenzePerVeicoloAnno.get(key) || 0) + 1);
+  }
+
+  // Determina veicoli quadrimestrali (3+ scadenze/anno)
+  const veicoliQuadrimestrali = new Set();
+  for (const [key, count] of scadenzePerVeicoloAnno.entries()) {
+    if (count >= 3) {
+      const targa = key.split('-')[0];
+      veicoliQuadrimestrali.add(targa);
+    }
+  }
+
+  console.log(`  Veicoli con periodicità QUADRIMESTRALE rilevati: ${veicoliQuadrimestrali.size}`);
+
   // Raggruppa per targa per evitare duplicati di scadenza stesso mese/anno
   const scadenzeCreate = new Map();
 
@@ -362,6 +390,7 @@ async function importScadenziario(veicoliMap) {
 
     scadenzeCreate.get(key).push({
       idVeicolo,
+      targa, // Aggiungiamo la targa per determinare la periodicità
       meseScadenza,
       annoScadenza,
       importoPrevisto,
@@ -397,13 +426,18 @@ async function importScadenziario(veicoliMap) {
           stato = StatoScadenza.DA_PAGARE;
         }
 
+        // Determina periodicità basata sull'analisi delle scadenze
+        const periodicita = veicoliQuadrimestrali.has(first.targa)
+          ? Periodicita.QUADRIMESTRALE
+          : Periodicita.ANNUALE;
+
         // Crea scadenza
         const scadenza = await prisma.scadenza.create({
           data: {
             idVeicolo: first.idVeicolo,
             meseScadenza: first.meseScadenza,
             annoScadenza: first.annoScadenza,
-            periodicita: Periodicita.ANNUALE, // Default, potrebbe essere raffinato
+            periodicita,
             importoPrevisto: first.importoPrevisto,
             stato,
           },

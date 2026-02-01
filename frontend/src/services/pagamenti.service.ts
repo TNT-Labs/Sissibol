@@ -113,4 +113,19 @@ export const pagamentiService = {
   async delete(id: number): Promise<void> {
     await api.delete(`/pagamenti/${id}`);
   },
+
+  /**
+   * Crea pagamenti multipli per tutte le scadenze di un cliente in un mese/anno.
+   * Segna come pagati tutti i bolli del cliente per il periodo selezionato.
+   */
+  async createMultiplo(params: {
+    idCliente: number;
+    meseScadenza: number;
+    annoScadenza: number;
+    dataPagamento: string;
+    metodoPagamento?: string;
+  }): Promise<{ pagamentiCreati: number; errori: string[]; message: string }> {
+    const response = await api.post('/pagamenti/multiplo', params);
+    return response.data;
+  },
 };
