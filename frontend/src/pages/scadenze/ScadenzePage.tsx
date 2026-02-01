@@ -323,7 +323,11 @@ export const ScadenzePage: React.FC = () => {
       }
 
       if (result.errori.length > 0) {
-        toast.warning('Alcuni errori', `${result.errori.length} scadenze non sono state pagate.`);
+        console.error('Errori pagamento multiplo:', result.errori);
+        toast.warning(
+          'Alcuni errori',
+          `${result.errori.length} scadenze non pagate: ${result.errori.join('; ')}`
+        );
       }
 
       handleClosePagaModal();
