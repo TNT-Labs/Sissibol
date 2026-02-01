@@ -6,10 +6,13 @@ import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { Plus, Search, Edit, Trash2, X, Building2, User, CheckCircle, XCircle } from 'lucide-react';
 
+type FiltroAttivo = 'tutti' | 'attivi' | 'nonAttivi';
+
 export const ClientiPage: React.FC = () => {
   const [clienti, setClienti] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [filtroAttivo, setFiltroAttivo] = useState<FiltroAttivo>('attivi');
   const [showModal, setShowModal] = useState(false);
   const [editingCliente, setEditingCliente] = useState<Cliente | null>(null);
   const [formData, setFormData] = useState({
@@ -28,7 +31,7 @@ export const ClientiPage: React.FC = () => {
 
   useEffect(() => {
     loadClienti();
-  }, []);
+  }, [filtroAttivo]);
 
   const loadClienti = async () => {
     try {
@@ -40,6 +43,13 @@ export const ClientiPage: React.FC = () => {
       setLoading(false);
     }
   };
+
+  // Filtra i clienti in base al filtro attivo
+  const clientiFiltrati = clienti.filter((cliente) => {
+    if (filtroAttivo === 'attivi') return cliente.attivo;
+    if (filtroAttivo === 'nonAttivi') return !cliente.attivo;
+    return true; // 'tutti'
+  });
 
   const handleSearch = () => {
     loadClienti();
@@ -133,19 +143,60 @@ export const ClientiPage: React.FC = () => {
 
       {/* Search Bar */}
       <div className="bg-white rounded-lg shadow p-4">
-        <div className="flex space-x-2">
-          <div className="flex-1">
-            <Input
-              placeholder="Cerca per nome, ragione sociale, P.IVA, C.F. o email..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-            />
+        <div className="flex flex-col space-y-3">
+          <div className="flex space-x-2">
+            <div className="flex-1">
+              <Input
+                placeholder="Cerca per nome, ragione sociale, P.IVA, C.F. o email..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+              />
+            </div>
+            <Button onClick={handleSearch}>
+              <Search size={20} className="mr-2" />
+              Cerca
+            </Button>
           </div>
-          <Button onClick={handleSearch}>
-            <Search size={20} className="mr-2" />
-            Cerca
-          </Button>
+          {/* Filtro Attivo */}
+          <div className="flex items-center space-x-6">
+            <span className="text-sm font-medium text-gray-700">Mostra:</span>
+            <label className="flex items-center cursor-pointer">
+              <input
+                type="radio"
+                name="filtroAttivo"
+                value="attivi"
+                checked={filtroAttivo === 'attivi'}
+                onChange={() => setFiltroAttivo('attivi')}
+                className="mr-2 text-blue-600 focus:ring-blue-500"
+              />
+              <CheckCircle size={16} className="mr-1 text-green-600" />
+              <span className="text-sm text-gray-700">Solo attivi</span>
+            </label>
+            <label className="flex items-center cursor-pointer">
+              <input
+                type="radio"
+                name="filtroAttivo"
+                value="nonAttivi"
+                checked={filtroAttivo === 'nonAttivi'}
+                onChange={() => setFiltroAttivo('nonAttivi')}
+                className="mr-2 text-blue-600 focus:ring-blue-500"
+              />
+              <XCircle size={16} className="mr-1 text-red-500" />
+              <span className="text-sm text-gray-700">Solo non attivi</span>
+            </label>
+            <label className="flex items-center cursor-pointer">
+              <input
+                type="radio"
+                name="filtroAttivo"
+                value="tutti"
+                checked={filtroAttivo === 'tutti'}
+                onChange={() => setFiltroAttivo('tutti')}
+                className="mr-2 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="text-sm text-gray-700">Tutti</span>
+            </label>
+          </div>
         </div>
       </div>
 
@@ -178,14 +229,14 @@ export const ClientiPage: React.FC = () => {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {clienti.length === 0 ? (
+            {clientiFiltrati.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
-                  Nessun cliente trovato
+                  {clienti.length === 0 ? 'Nessun cliente trovato' : 'Nessun cliente corrisponde al filtro selezionato'}
                 </td>
               </tr>
             ) : (
-              clienti.map((cliente) => (
+              clientiFiltrati.map((cliente) => (
                 <tr key={cliente.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
                     {cliente.tipoCliente === TipoCliente.PERSONA_FISICA ? (
