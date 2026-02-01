@@ -1,19 +1,28 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import { Layout } from './components/layout/Layout';
 import { LoginPage } from './pages/auth/LoginPage';
-import { DashboardPage } from './pages/dashboard/DashboardPage';
-import { ClientiPage } from './pages/clienti/ClientiPage';
-import { VeicoliPage } from './pages/veicoli/VeicoliPage';
-import { ScadenzePage } from './pages/scadenze/ScadenzePage';
-import { PagamentiPage } from './pages/pagamenti/PagamentiPage';
-import { ReportPage } from './pages/report/ReportPage';
-import { TariffePage } from './pages/tariffe/TariffePage';
-import { UtentiPage } from './pages/utenti/UtentiPage';
 import { UpdatePrompt } from './components/UpdatePrompt';
 import { Ruolo } from './types';
+
+// Lazy load delle pagine per migliorare performance iniziale
+const DashboardPage = lazy(() => import('./pages/dashboard/DashboardPage').then(m => ({ default: m.DashboardPage })));
+const ClientiPage = lazy(() => import('./pages/clienti/ClientiPage').then(m => ({ default: m.ClientiPage })));
+const VeicoliPage = lazy(() => import('./pages/veicoli/VeicoliPage').then(m => ({ default: m.VeicoliPage })));
+const ScadenzePage = lazy(() => import('./pages/scadenze/ScadenzePage').then(m => ({ default: m.ScadenzePage })));
+const PagamentiPage = lazy(() => import('./pages/pagamenti/PagamentiPage').then(m => ({ default: m.PagamentiPage })));
+const ReportPage = lazy(() => import('./pages/report/ReportPage').then(m => ({ default: m.ReportPage })));
+const TariffePage = lazy(() => import('./pages/tariffe/TariffePage').then(m => ({ default: m.TariffePage })));
+const UtentiPage = lazy(() => import('./pages/utenti/UtentiPage').then(m => ({ default: m.UtentiPage })));
+
+// Loading fallback per Suspense
+const PageLoader: React.FC = () => (
+  <div className="flex justify-center items-center h-64">
+    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+  </div>
+);
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
@@ -55,93 +64,95 @@ const AppRoutes: React.FC = () => {
   const { isAuthenticated } = useAuth();
 
   return (
-    <Routes>
-      <Route
-        path="/login"
-        element={isAuthenticated ? <Navigate to="/dashboard" /> : <LoginPage />}
-      />
-      <Route
-        path="/dashboard"
-        element={
-          <ProtectedRoute>
-            <Layout>
-              <DashboardPage />
-            </Layout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/clienti"
-        element={
-          <ProtectedRoute>
-            <Layout>
-              <ClientiPage />
-            </Layout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/veicoli"
-        element={
-          <ProtectedRoute>
-            <Layout>
-              <VeicoliPage />
-            </Layout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/scadenze"
-        element={
-          <ProtectedRoute>
-            <Layout>
-              <ScadenzePage />
-            </Layout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/pagamenti"
-        element={
-          <ProtectedRoute>
-            <Layout>
-              <PagamentiPage />
-            </Layout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/report"
-        element={
-          <ProtectedRoute>
-            <Layout>
-              <ReportPage />
-            </Layout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/tariffe"
-        element={
-          <ProtectedRoute>
-            <Layout>
-              <TariffePage />
-            </Layout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/utenti"
-        element={
-          <AdminRoute>
-            <Layout>
-              <UtentiPage />
-            </Layout>
-          </AdminRoute>
-        }
-      />
-      <Route path="/" element={<Navigate to="/dashboard" />} />
-    </Routes>
+    <Suspense fallback={<PageLoader />}>
+      <Routes>
+        <Route
+          path="/login"
+          element={isAuthenticated ? <Navigate to="/dashboard" /> : <LoginPage />}
+        />
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <DashboardPage />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/clienti"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <ClientiPage />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/veicoli"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <VeicoliPage />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/scadenze"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <ScadenzePage />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/pagamenti"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <PagamentiPage />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/report"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <ReportPage />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/tariffe"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <TariffePage />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/utenti"
+          element={
+            <AdminRoute>
+              <Layout>
+                <UtentiPage />
+              </Layout>
+            </AdminRoute>
+          }
+        />
+        <Route path="/" element={<Navigate to="/dashboard" />} />
+      </Routes>
+    </Suspense>
   );
 };
 
