@@ -65,6 +65,8 @@ export const VeicoliPage: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
   const [editingVeicolo, setEditingVeicolo] = useState<Veicolo | null>(null);
   const [formData, setFormData] = useState<VeicoloFormData>(emptyFormData);
+  // BUG FIX: aggiunto stato isSubmitting per evitare submit multipli
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     loadClienti();
@@ -176,6 +178,22 @@ export const VeicoliPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // BUG FIX: protezione contro submit multipli
+    if (isSubmitting) return;
+
+    // BUG FIX: validazione valori numerici prima del submit
+    const potenzaKw = formData.potenzaKw ? parseFloat(formData.potenzaKw) : undefined;
+    const cilindrata = formData.cilindrata ? parseInt(formData.cilindrata) : undefined;
+    if (potenzaKw !== undefined && isNaN(potenzaKw)) {
+      alert('La potenza deve essere un numero valido');
+      return;
+    }
+    if (cilindrata !== undefined && isNaN(cilindrata)) {
+      alert('La cilindrata deve essere un numero valido');
+      return;
+    }
+
+    setIsSubmitting(true);
     try {
       // Prepara i dati convertendo i valori numerici
       const submitData: Partial<Veicolo> = {
@@ -185,8 +203,8 @@ export const VeicoliPage: React.FC = () => {
         classeAmbientale: formData.classeAmbientale || undefined,
         regione: formData.regione || undefined,
         alimentazione: formData.alimentazione || undefined,
-        potenzaKw: formData.potenzaKw ? parseFloat(formData.potenzaKw) : undefined,
-        cilindrata: formData.cilindrata ? parseInt(formData.cilindrata) : undefined,
+        potenzaKw: potenzaKw,
+        cilindrata: cilindrata,
         portataKg: formData.portataKg ? parseInt(formData.portataKg) : undefined,
         pesoComplessivoKg: formData.pesoComplessivoKg ? parseInt(formData.pesoComplessivoKg) : undefined,
         numeroAssi: formData.numeroAssi ? parseInt(formData.numeroAssi) : undefined,
@@ -206,6 +224,8 @@ export const VeicoliPage: React.FC = () => {
       loadVeicoli();
     } catch (error) {
       console.error('Errore nel salvataggio del veicolo:', error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -551,11 +571,12 @@ export const VeicoliPage: React.FC = () => {
               </div>
 
               <div className="flex justify-end space-x-2 pt-4 border-t">
-                <Button type="button" variant="secondary" onClick={handleCloseModal}>
+                <Button type="button" variant="secondary" onClick={handleCloseModal} disabled={isSubmitting}>
                   Annulla
                 </Button>
-                <Button type="submit">
-                  {editingVeicolo ? 'Salva' : 'Crea'}
+                {/* BUG FIX: bottone disabilitato durante submit */}
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? 'Salvataggio...' : (editingVeicolo ? 'Salva' : 'Crea')}
                 </Button>
               </div>
             </form>

@@ -34,6 +34,8 @@ export const ClientiPage: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
   const [editingCliente, setEditingCliente] = useState<Cliente | null>(null);
   const [formData, setFormData] = useState(emptyFormData);
+  // BUG FIX: aggiunto stato isSubmitting per evitare submit multipli
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const toast = useToast();
 
   // Debounce della ricerca per evitare troppe chiamate API
@@ -96,6 +98,9 @@ export const ClientiPage: React.FC = () => {
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
+    // BUG FIX: protezione contro submit multipli
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     try {
       if (editingCliente) {
         await clientiService.update(editingCliente.id, formData);
@@ -109,8 +114,10 @@ export const ClientiPage: React.FC = () => {
     } catch (error) {
       console.error('Errore nel salvataggio del cliente:', error);
       toast.error('Errore', 'Impossibile salvare il cliente. Riprova.');
+    } finally {
+      setIsSubmitting(false);
     }
-  }, [editingCliente, formData, handleCloseModal, loadClienti, debouncedSearch, toast]);
+  }, [editingCliente, formData, handleCloseModal, loadClienti, debouncedSearch, toast, isSubmitting]);
 
   const handleDelete = useCallback(async (id: number) => {
     if (confirm('Sei sicuro di voler eliminare questo cliente?')) {
@@ -438,8 +445,11 @@ export const ClientiPage: React.FC = () => {
           </div>
 
           <div className="flex justify-end space-x-2 pt-4">
-            <Button type="button" variant="secondary" onClick={handleCloseModal}>Annulla</Button>
-            <Button type="submit">{editingCliente ? 'Salva' : 'Crea'}</Button>
+            <Button type="button" variant="secondary" onClick={handleCloseModal} disabled={isSubmitting}>Annulla</Button>
+            {/* BUG FIX: bottone disabilitato durante submit */}
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? 'Salvataggio...' : (editingCliente ? 'Salva' : 'Crea')}
+            </Button>
           </div>
         </form>
       </Modal>

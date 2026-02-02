@@ -20,6 +20,8 @@ export const PagamentiPage: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
   const [editingPagamento, setEditingPagamento] = useState<Pagamento | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  // BUG FIX: aggiunto stato isSubmitting per evitare submit multipli (race condition)
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     idScadenza: 0,
     dataPagamento: '',
@@ -96,11 +98,23 @@ export const PagamentiPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // BUG FIX: protezione contro submit multipli
+    if (isSubmitting) return;
+
+    // BUG FIX: validazione importo prima del submit
+    const importo = parseFloat(formData.importoPagato);
+    if (isNaN(importo) || importo <= 0) {
+      toast.error('Errore', 'L\'importo deve essere un numero maggiore di 0');
+      return;
+    }
+
+    setIsSubmitting(true);
     try {
       const data = {
         idScadenza: formData.idScadenza,
         dataPagamento: formData.dataPagamento,
-        importoPagato: parseFloat(formData.importoPagato),
+        importoPagato: importo,
         metodoPagamento: formData.metodoPagamento,
       };
 
@@ -116,6 +130,8 @@ export const PagamentiPage: React.FC = () => {
     } catch (error) {
       console.error('Errore nel salvataggio del pagamento:', error);
       toast.error('Errore', 'Impossibile salvare il pagamento. Riprova.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -351,11 +367,12 @@ export const PagamentiPage: React.FC = () => {
               )}
 
               <div className="flex justify-end space-x-2 pt-4">
-                <Button type="button" variant="secondary" onClick={handleCloseModal}>
+                <Button type="button" variant="secondary" onClick={handleCloseModal} disabled={isSubmitting}>
                   Annulla
                 </Button>
-                <Button type="submit">
-                  {editingPagamento ? 'Salva' : 'Crea'}
+                {/* BUG FIX: bottone disabilitato durante submit per evitare click multipli */}
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? 'Salvataggio...' : (editingPagamento ? 'Salva' : 'Crea')}
                 </Button>
               </div>
             </form>
