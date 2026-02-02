@@ -6,9 +6,26 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   // Enable CORS for frontend
+  // BUG FIX: origin: true permetteva qualsiasi origine (vulnerabilità CSRF)
+  // Ora usa whitelist configurabile via environment variable
+  const allowedOrigins = process.env.CORS_ORIGINS
+    ? process.env.CORS_ORIGINS.split(',').map(o => o.trim())
+    : ['http://localhost:5173', 'http://localhost:3001']; // Default per sviluppo
+
   app.enableCors({
-    origin: true, // Allow all origins in development, configure for production
+    origin: (origin, callback) => {
+      // Permetti richieste senza origin (es. Postman, curl, mobile apps)
+      if (!origin) {
+        return callback(null, true);
+      }
+      if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+        return callback(null, true);
+      }
+      return callback(new Error(`Origin ${origin} non consentito da CORS`), false);
+    },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
   // Enable validation
