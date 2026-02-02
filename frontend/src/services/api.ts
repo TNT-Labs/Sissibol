@@ -142,11 +142,15 @@ api.interceptors.response.use(
 
 /**
  * Gestisce il logout pulendo tutti i dati locali
+ * BUG FIX: Emette un evento per notificare la UI (toast) della sessione scaduta
  */
 function handleLogout() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(REFRESH_TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
+
+  // Emetti evento per mostrare toast nella UI
+  window.dispatchEvent(new CustomEvent('auth:session-expired'));
 
   // Redirect solo se non siamo già sulla pagina di login
   if (!window.location.pathname.includes('/login')) {

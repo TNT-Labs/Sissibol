@@ -12,6 +12,7 @@ import {
   Ip,
   ParseIntPipe,
 } from '@nestjs/common';
+import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -25,8 +26,11 @@ export class AuthController {
 
   /**
    * Login - restituisce access_token e refresh_token
+   * BUG FIX: Rate limiting restrittivo per prevenire brute force
+   * Max 5 tentativi per minuto, 20 per ora per IP
    */
   @Post('login')
+  @Throttle({ default: { limit: 5, ttl: 60000 } }) // 5 tentativi al minuto
   async login(
     @Body() loginDto: LoginDto,
     @Headers('user-agent') userAgent?: string,
@@ -68,8 +72,10 @@ export class AuthController {
   /**
    * Setup iniziale - crea il primo utente ADMIN
    * Funziona solo se non esistono utenti nel sistema
+   * BUG FIX: Rate limiting molto restrittivo per prevenire abuse
    */
   @Post('setup')
+  @Throttle({ default: { limit: 3, ttl: 60000 } }) // 3 tentativi al minuto
   async initialSetup(@Body() registerDto: RegisterDto) {
     return this.authService.register(registerDto, false);
   }

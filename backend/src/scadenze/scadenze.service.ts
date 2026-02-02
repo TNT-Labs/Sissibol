@@ -494,31 +494,38 @@ export class ScadenzeService {
   }
 
   /**
-   * Aggiorna automaticamente le scadenze scadute usando raw SQL per performance.
+   * Aggiorna automaticamente le scadenze scadute.
    * Una scadenza è scaduta solo se il mese/anno di scadenza è PRECEDENTE
    * al mese/anno corrente. Le scadenze del mese corrente restano DA_PAGARE.
    *
-   * Questa versione usa una singola query SQL invece di caricare tutti i dati
-   * e processarli in JavaScript, migliorando drasticamente la performance.
+   * BUG FIX: Usa Prisma ORM invece di raw SQL per evitare problemi
+   * se lo schema cambia (colonne hardcoded nel raw SQL sono fragili).
    */
   async updateScaduteAutomaticamente() {
-    // Query SQL ottimizzata: marca come SCADUTO solo i mesi passati
-    // Il mese corrente resta sempre DA_PAGARE
-    const result = await this.prisma.$executeRaw`
-      UPDATE scadenze
-      SET stato = 'SCADUTO', "updatedAt" = NOW()
-      WHERE stato = 'DA_PAGARE'
-        AND (
-          -- Anno passato, oppure stesso anno ma mese passato
-          anno_scadenza < EXTRACT(YEAR FROM CURRENT_DATE)
-          OR (
-            anno_scadenza = EXTRACT(YEAR FROM CURRENT_DATE)
-            AND mese_scadenza < EXTRACT(MONTH FROM CURRENT_DATE)
-          )
-        )
-    `;
+    const oggi = this.getOggiNormalizzato();
+    const annoCorrente = oggi.getFullYear();
+    const meseCorrente = oggi.getMonth() + 1;
 
-    return result;
+    // Usa Prisma ORM invece di raw SQL per robustezza
+    const result = await this.prisma.scadenza.updateMany({
+      where: {
+        stato: StatoScadenza.DA_PAGARE,
+        OR: [
+          // Anno passato
+          { annoScadenza: { lt: annoCorrente } },
+          // Stesso anno ma mese passato
+          {
+            annoScadenza: annoCorrente,
+            meseScadenza: { lt: meseCorrente },
+          },
+        ],
+      },
+      data: {
+        stato: StatoScadenza.SCADUTO,
+      },
+    });
+
+    return result.count;
   }
 
   /**

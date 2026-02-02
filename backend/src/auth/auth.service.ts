@@ -180,46 +180,56 @@ export class AuthService {
   /**
    * Registrazione - protetta, solo admin può creare nuovi utenti
    * Eccezione: primo utente del sistema (setup iniziale)
+   *
+   * BUG FIX: Usa transazione serializable per prevenire race condition
+   * nel setup iniziale (due richieste simultanee potrebbero entrambe
+   * pensare di essere il primo utente)
    */
   async register(registerDto: RegisterDto, isAdmin: boolean = false) {
-    // Verifica se è il primo utente (setup iniziale)
-    const userCount = await this.prisma.utente.count();
-    const isInitialSetup = userCount === 0;
+    // Usa transazione per prevenire race condition nel setup iniziale
+    return this.prisma.$transaction(async (tx) => {
+      // Verifica se è il primo utente (setup iniziale)
+      const userCount = await tx.utente.count();
+      const isInitialSetup = userCount === 0;
 
-    // Se non è setup iniziale e non è admin, nega accesso
-    if (!isInitialSetup && !isAdmin) {
-      throw new ForbiddenException(
-        'Solo gli amministratori possono creare nuovi utenti. ' +
-        'Contatta un amministratore per richiedere un account.',
-      );
-    }
+      // Se non è setup iniziale e non è admin, nega accesso
+      if (!isInitialSetup && !isAdmin) {
+        throw new ForbiddenException(
+          'Solo gli amministratori possono creare nuovi utenti. ' +
+          'Contatta un amministratore per richiedere un account.',
+        );
+      }
 
-    const existingUser = await this.prisma.utente.findUnique({
-      where: { email: registerDto.email },
+      const existingUser = await tx.utente.findUnique({
+        where: { email: registerDto.email },
+      });
+
+      if (existingUser) {
+        throw new ConflictException('Email già registrata');
+      }
+
+      const hashedPassword = await bcrypt.hash(registerDto.password, 10);
+
+      // Primo utente è sempre ADMIN
+      const ruolo = isInitialSetup ? 'ADMIN' : registerDto.ruolo;
+
+      const user = await tx.utente.create({
+        data: {
+          email: registerDto.email,
+          password: hashedPassword,
+          ruolo: ruolo as any,
+        },
+      });
+
+      const { password, ...result } = user;
+      return {
+        ...result,
+        isInitialSetup,
+      };
+    }, {
+      // Isolation level serializable per massima sicurezza
+      isolationLevel: 'Serializable',
     });
-
-    if (existingUser) {
-      throw new ConflictException('Email già registrata');
-    }
-
-    const hashedPassword = await bcrypt.hash(registerDto.password, 10);
-
-    // Primo utente è sempre ADMIN
-    const ruolo = isInitialSetup ? 'ADMIN' : registerDto.ruolo;
-
-    const user = await this.prisma.utente.create({
-      data: {
-        email: registerDto.email,
-        password: hashedPassword,
-        ruolo: ruolo as any,
-      },
-    });
-
-    const { password, ...result } = user;
-    return {
-      ...result,
-      isInitialSetup,
-    };
   }
 
   /**

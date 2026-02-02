@@ -251,6 +251,7 @@ model ConfigurazioneBollo {
   updatedAt             DateTime  @updatedAt
 
   tariffe               TariffaBollo[]
+  esenzioni             EsenzioneBollo[]
 
   @@unique([annoValidita, regione])
   @@map("configurazioni_bollo")
@@ -310,5 +311,9 @@ model EsenzioneBollo {
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
+  // BUG FIX: Relazione con cascade delete - elimina esenzioni quando si elimina la configurazione
+  configurazione        ConfigurazioneBollo @relation(fields: [idConfigurazione], references: [id], onDelete: Cascade)
+
+  @@index([idConfigurazione])
   @@map("esenzioni_bollo")
 }

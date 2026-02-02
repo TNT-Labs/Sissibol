@@ -1,9 +1,23 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // BUG FIX: Security headers per prevenire XSS, clickjacking, etc.
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "blob:"],
+        scriptSrc: ["'self'"],
+      },
+    },
+    crossOriginEmbedderPolicy: false, // Necessario per alcune risorse esterne
+  }));
 
   // Enable CORS for frontend
   // BUG FIX: origin: true permetteva qualsiasi origine (vulnerabilità CSRF)

@@ -70,16 +70,13 @@ export const VeicoliPage: React.FC = () => {
 
   useEffect(() => {
     loadClienti();
-    loadVeicoli();
   }, []);
 
-  // Ricarica veicoli quando cambia il filtro cliente
+  // BUG FIX: loadVeicoli dipende da filterCliente e search (tramite useCallback)
+  // Quando cambiano, loadVeicoli viene ricreato e questo effect si ri-esegue
   useEffect(() => {
-    // Skip il primo render (gestito dall'useEffect precedente)
-    if (clienti.length > 0) {
-      loadVeicoli();
-    }
-  }, [filterCliente]);
+    loadVeicoli();
+  }, [loadVeicoli]);
 
   const loadClienti = async () => {
     try {
