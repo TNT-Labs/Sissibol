@@ -103,7 +103,7 @@ export class PagamentiService {
               tipoVeicolo: scadenza.veicolo.tipoVeicolo,
               classeAmbientale: scadenza.veicolo.classeAmbientale,
               alimentazione: scadenza.veicolo.alimentazione,
-              potenzaKw: scadenza.veicolo.potenzaKw?.toString(),
+              potenzaKw: scadenza.veicolo.potenzaKw ? Number(scadenza.veicolo.potenzaKw) : null,
               cilindrata: scadenza.veicolo.cilindrata,
               portataKg: scadenza.veicolo.portataKg,
               pesoComplessivoKg: scadenza.veicolo.pesoComplessivoKg,

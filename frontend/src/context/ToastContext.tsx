@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { ToastContainer } from '../components/common/Toast';
 import type { ToastMessage, ToastType } from '../components/common/Toast';
 
@@ -48,6 +48,18 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     (title: string, message?: string) => showToast('info', title, message),
     [showToast]
   );
+
+  // BUG FIX: Ascolta evento sessione scaduta per mostrare toast
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      warning('Sessione scaduta', 'Effettua nuovamente il login per continuare.');
+    };
+
+    window.addEventListener('auth:session-expired', handleSessionExpired);
+    return () => {
+      window.removeEventListener('auth:session-expired', handleSessionExpired);
+    };
+  }, [warning]);
 
   return (
     <ToastContext.Provider value={{ showToast, success, error, warning, info }}>
