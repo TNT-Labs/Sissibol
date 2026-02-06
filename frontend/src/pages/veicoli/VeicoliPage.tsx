@@ -72,12 +72,6 @@ export const VeicoliPage: React.FC = () => {
     loadClienti();
   }, []);
 
-  // BUG FIX: loadVeicoli dipende da filterCliente e search (tramite useCallback)
-  // Quando cambiano, loadVeicoli viene ricreato e questo effect si ri-esegue
-  useEffect(() => {
-    loadVeicoli();
-  }, [loadVeicoli]);
-
   const loadClienti = async () => {
     try {
       const data = await clientiService.getAll();
@@ -98,6 +92,12 @@ export const VeicoliPage: React.FC = () => {
       setLoading(false);
     }
   }, [filterCliente, search]);
+
+  // BUG FIX: loadVeicoli dipende da filterCliente e search (tramite useCallback)
+  // Quando cambiano, loadVeicoli viene ricreato e questo effect si ri-esegue
+  useEffect(() => {
+    loadVeicoli();
+  }, [loadVeicoli]);
 
   const handleSearch = useCallback((searchTerm: string) => {
     loadVeicoli(searchTerm);
