@@ -30,10 +30,14 @@ export class BolloController {
     @Query('anno') anno?: string,
     @Query('periodicita') periodicita?: 'ANNUALE' | 'QUADRIMESTRALE',
   ) {
-    const annoNum = anno ? parseInt(anno) : new Date().getFullYear();
+    const annoCorrente = new Date().getFullYear();
+    const annoNum = anno ? parseInt(anno, 10) : annoCorrente;
+    const annoValido = Number.isFinite(annoNum) && annoNum >= 2000 && annoNum <= 2100
+      ? annoNum
+      : annoCorrente;
     return this.bolloService.calcolaBollo(
       idVeicolo,
-      annoNum,
+      annoValido,
       periodicita || 'ANNUALE',
     );
   }
@@ -47,8 +51,12 @@ export class BolloController {
     @Param('idCliente', ParseIntPipe) idCliente: number,
     @Query('anno') anno?: string,
   ) {
-    const annoNum = anno ? parseInt(anno) : new Date().getFullYear();
-    return this.bolloService.calcolaBolloPerCliente(idCliente, annoNum);
+    const annoCorrente = new Date().getFullYear();
+    const annoNum = anno ? parseInt(anno, 10) : annoCorrente;
+    const annoValido = Number.isFinite(annoNum) && annoNum >= 2000 && annoNum <= 2100
+      ? annoNum
+      : annoCorrente;
+    return this.bolloService.calcolaBolloPerCliente(idCliente, annoValido);
   }
 
   /**

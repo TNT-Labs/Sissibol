@@ -393,7 +393,7 @@ export class PagamentiService {
     // Le scadenze con importo 0 o null vengono comunque elaborate ma con warning
     for (const scadenza of scadenzeSenzaImporto) {
       risultato.errori.push(
-        `Scadenza ${scadenza.id} (${scadenza.veicolo?.targa}): importo previsto mancante o zero - verrà usato 0€`
+        `Scadenza ${scadenza.id} (${scadenza.veicolo?.targa}): importo previsto mancante o zero - verrà usato 0.01€ come minimo`
       );
     }
 

@@ -56,6 +56,18 @@ interface EsenzioneApplicata {
   percentualeRiduzione: number | null;
 }
 
+interface EsenzioneRaw {
+  id: number;
+  id_configurazione: number;
+  tipo_esenzione: 'TOTALE' | 'PARZIALE';
+  percentuale_riduzione: number | null;
+  tipo_veicolo: string | null;
+  alimentazione: string | null;
+  anni_da_immatricolazione: number | null;
+  descrizione: string;
+  note: string | null;
+}
+
 @Injectable()
 export class BolloService {
   constructor(private prisma: PrismaService) {}
@@ -182,7 +194,7 @@ export class BolloService {
     // Recupera tutte le esenzioni ordinate per priorità:
     // - TOTALE prima di PARZIALE
     // - Percentuale riduzione decrescente (100% = più vantaggioso)
-    const esenzioni = await this.prisma.$queryRaw<any[]>`
+    const esenzioni = await this.prisma.$queryRaw<EsenzioneRaw[]>`
       SELECT * FROM "esenzioni_bollo"
       WHERE "id_configurazione" = ${idConfigurazione}
       ORDER BY
@@ -207,7 +219,6 @@ export class BolloService {
 
       let applicabile = false;
       let motivoApplicazione = '';
-      let priorita = 0; // Usato per determinare quale esenzione prevale
 
       // Verifica per alimentazione (es. Elettrico, GPL, Metano)
       if (esenzione.alimentazione && veicolo.alimentazione === esenzione.alimentazione) {
@@ -217,18 +228,15 @@ export class BolloService {
           if (esenzione.anni_da_immatricolazione && anniVeicolo <= esenzione.anni_da_immatricolazione) {
             applicabile = true;
             motivoApplicazione = `Veicolo elettrico (${anniVeicolo} anni dall'immatricolazione)`;
-            priorita = 100; // Massima priorità per elettrico entro 5 anni
           } else if (!esenzione.anni_da_immatricolazione) {
             // Esenzione generica per alimentazione elettrica
             applicabile = true;
             motivoApplicazione = `Alimentazione: ${veicolo.alimentazione}`;
-            priorita = 80;
           }
         } else {
           // GPL, Metano, Ibrido, etc.
           applicabile = true;
           motivoApplicazione = `Alimentazione: ${veicolo.alimentazione}`;
-          priorita = 50;
         }
       }
 
@@ -248,7 +256,6 @@ export class BolloService {
           if (!motiviApplicati.has(motivoAlimentazione)) {
             applicabile = true;
             motivoApplicazione = `Veicolo storico (${anniVeicolo} anni, soglia: ${esenzione.anni_da_immatricolazione})`;
-            priorita = 60;
           }
         }
       }
@@ -259,7 +266,6 @@ export class BolloService {
         if (motiviApplicati.size === 0) {
           applicabile = true;
           motivoApplicazione = `Tipo veicolo: ${veicolo.tipoVeicolo}`;
-          priorita = 30;
         }
       }
 
