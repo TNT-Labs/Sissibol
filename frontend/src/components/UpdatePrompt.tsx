@@ -7,8 +7,7 @@ export function UpdatePrompt() {
     needRefresh: [needRefresh, setNeedRefresh],
     updateServiceWorker,
   } = useRegisterSW({
-    onRegisteredSW(swUrl, r) {
-      console.log(`SW registrato: ${swUrl}`);
+    onRegisteredSW(_swUrl, r) {
       // Controlla aggiornamenti ogni 60 secondi
       if (r) {
         setInterval(() => {

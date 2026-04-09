@@ -166,6 +166,7 @@ model Scadenza {
   @@index([idVeicolo])
   @@index([stato, annoScadenza])
   @@index([annoScadenza, meseScadenza])
+  @@index([stato, meseScadenza, annoScadenza])
   @@map("scadenze")
 }
 

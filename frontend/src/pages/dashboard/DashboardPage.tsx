@@ -141,7 +141,7 @@ export const DashboardPage: React.FC = () => {
                       {scadenza.veicolo?.cliente ? getClienteDisplayName(scadenza.veicolo.cliente) : 'N/A'}
                     </p>
                     <p className="text-sm text-gray-600">
-                      Targa: {scadenza.veicolo?.targa}
+                      Targa: {scadenza.veicolo?.targa || 'N/A'}
                     </p>
                   </div>
                   <div className="text-right">
