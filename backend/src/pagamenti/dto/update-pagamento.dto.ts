@@ -4,6 +4,7 @@ import { Type } from 'class-transformer';
 export class UpdatePagamentoDto {
   @IsInt()
   @IsOptional()
+  @Type(() => Number)
   idScadenza?: number;
 
   @IsDateString()

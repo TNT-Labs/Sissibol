@@ -115,6 +115,16 @@ export const pagamentiService = {
   },
 
   /**
+   * Scarica la ricevuta di un pagamento come Blob (endpoint autenticato).
+   */
+  async downloadRicevuta(id: number): Promise<Blob> {
+    const response = await api.get(`/pagamenti/${id}/ricevuta`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
+  /**
    * Crea pagamenti multipli per tutte le scadenze di un cliente in un mese/anno.
    * Segna come pagati tutti i bolli del cliente per il periodo selezionato.
    */

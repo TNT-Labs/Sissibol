@@ -2,8 +2,10 @@ import { IsNotEmpty, IsInt, IsDateString, IsOptional, IsString, IsNumber, Min, M
 import { Type } from 'class-transformer';
 
 export class CreatePagamentoDto {
+  // @Type necessario: con upload multipart (FileInterceptor) i campi arrivano come stringhe
   @IsInt()
   @IsNotEmpty()
+  @Type(() => Number)
   idScadenza: number;
 
   @IsDateString()

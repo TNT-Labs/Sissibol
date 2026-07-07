@@ -403,7 +403,55 @@ async function seedTariffeLombardia2026() {
     });
   }
 
-  console.log('✅ Tariffe Lombardia 2026 inserite con successo!');
+  // =====================================================
+  // ESENZIONI E RIDUZIONI
+  // =====================================================
+  await prisma.esenzioneBollo.createMany({
+    data: [
+      {
+        idConfigurazione: config.id,
+        tipoEsenzione: 'TOTALE',
+        alimentazione: 'Elettrico',
+        anniDaImmatricolazione: 5,
+        descrizione: 'Veicoli elettrici - esenzione totale per i primi 5 anni',
+        note: 'Dalla prima immatricolazione',
+      },
+      {
+        idConfigurazione: config.id,
+        tipoEsenzione: 'PARZIALE',
+        percentualeRiduzione: 75,
+        alimentazione: 'Elettrico',
+        descrizione: 'Veicoli elettrici oltre i 5 anni - riduzione 75%',
+        note: 'Si applica dopo il periodo di esenzione totale',
+      },
+      {
+        idConfigurazione: config.id,
+        tipoEsenzione: 'PARZIALE',
+        percentualeRiduzione: 25,
+        alimentazione: 'GPL',
+        descrizione: 'Veicoli GPL - riduzione 25%',
+        note: 'Verifica normativa regionale vigente',
+      },
+      {
+        idConfigurazione: config.id,
+        tipoEsenzione: 'PARZIALE',
+        percentualeRiduzione: 25,
+        alimentazione: 'Metano',
+        descrizione: 'Veicoli Metano - riduzione 25%',
+        note: 'Verifica normativa regionale vigente',
+      },
+      {
+        idConfigurazione: config.id,
+        tipoEsenzione: 'PARZIALE',
+        percentualeRiduzione: 50,
+        anniDaImmatricolazione: 30,
+        descrizione: 'Veicoli ultratrentennali non iscritti a registri storici - riduzione 50%',
+        note: 'Solo se non circolanti su strada',
+      },
+    ],
+  });
+
+  console.log('✅ Tariffe ed esenzioni Lombardia 2026 inserite con successo!');
 }
 
 async function main() {

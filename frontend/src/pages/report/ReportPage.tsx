@@ -67,7 +67,12 @@ export const ReportPage: React.FC = () => {
       // Se il dataset è piccolo, usa il metodo tradizionale (più veloce)
       if (stats.totale <= CHUNK_THRESHOLD) {
         const scadenze = await scadenzeService.getAll(filterStato || undefined, filterCliente);
-        generateScadenzePDFFromData(scadenze, stats.importoTotale);
+        // Calcola il totale dai dati filtrati: stats.importoTotale ignora il filtro stato
+        const totale = scadenze.reduce(
+          (sum, s) => sum + (s.importoPrevisto ? Number(s.importoPrevisto) : 0),
+          0,
+        );
+        generateScadenzePDFFromData(scadenze, totale);
         return;
       }
 
@@ -217,7 +222,7 @@ export const ReportPage: React.FC = () => {
 
     const tableData = pagamenti.map((p) => [
       format(new Date(p.dataPagamento), 'dd/MM/yyyy'),
-      p.scadenza?.veicolo?.cliente?.ragioneSociale || '-',
+      p.scadenza?.veicolo?.cliente ? getClienteDisplayName(p.scadenza.veicolo.cliente) : '-',
       p.scadenza?.veicolo?.targa || '-',
       `€ ${Number(p.importoPagato).toFixed(2)}`,
       p.metodoPagamento || '-',
@@ -392,7 +397,7 @@ export const ReportPage: React.FC = () => {
         (chunk, progressInfo) => {
           const data = chunk.map((p) => ({
             'Data Pagamento': format(new Date(p.dataPagamento), 'dd/MM/yyyy'),
-            Cliente: p.scadenza?.veicolo?.cliente?.ragioneSociale || '-',
+            Cliente: p.scadenza?.veicolo?.cliente ? getClienteDisplayName(p.scadenza.veicolo.cliente) : '-',
             Veicolo: p.scadenza?.veicolo?.targa || '-',
             'Importo Pagato': Number(p.importoPagato),
             'Metodo Pagamento': p.metodoPagamento || '-',
