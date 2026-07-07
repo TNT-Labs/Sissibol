@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { clientiService } from '../../services/clienti.service';
 import { TipoCliente, getClienteDisplayName } from '../../types';
 import type { Cliente } from '../../types';
@@ -8,7 +8,11 @@ import { Modal } from '../../components/common/Modal';
 import { EmptyState } from '../../components/common/EmptyState';
 import { Plus, Edit, Trash2, Building2, User, CheckCircle, XCircle } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
+import { useIsAdmin } from '../../context/AuthContext';
 import { useDebounce } from '../../hooks/useDebounce';
+import { Pagination } from '../../components/common/Pagination';
+
+const PAGE_SIZE = 50;
 
 type FiltroAttivo = 'tutti' | 'attivi' | 'nonAttivi';
 
@@ -31,42 +35,51 @@ export const ClientiPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filtroAttivo, setFiltroAttivo] = useState<FiltroAttivo>('attivi');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
   const [showModal, setShowModal] = useState(false);
   const [editingCliente, setEditingCliente] = useState<Cliente | null>(null);
   const [formData, setFormData] = useState(emptyFormData);
   // BUG FIX: aggiunto stato isSubmitting per evitare submit multipli
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isAdmin = useIsAdmin();
   const toast = useToast();
 
   // Debounce della ricerca per evitare troppe chiamate API
   const debouncedSearch = useDebounce(search, 300);
 
-  // Carica clienti quando cambia la ricerca debounced
+  // Ricerca e filtro riportano sempre alla prima pagina
   useEffect(() => {
-    loadClienti(debouncedSearch);
-  }, [debouncedSearch]);
+    setPage(1);
+  }, [debouncedSearch, filtroAttivo]);
 
-  const loadClienti = useCallback(async (searchTerm?: string) => {
+  // Caricamento paginato server-side: la pagina non carica più tutti i clienti
+  const loadClienti = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await clientiService.getAll(searchTerm);
-      setClienti(data);
+      const result = await clientiService.getAllPaginated({
+        page,
+        pageSize: PAGE_SIZE,
+        search: debouncedSearch || undefined,
+        attivo: filtroAttivo === 'tutti' ? undefined : filtroAttivo === 'attivi',
+      });
+      setClienti(result.data);
+      setTotalPages(result.pagination.totalPages);
+      setTotal(result.pagination.total);
     } catch (error) {
       console.error('Errore nel caricamento dei clienti:', error);
       toast.error('Errore', 'Impossibile caricare i clienti.');
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [page, debouncedSearch, filtroAttivo, toast]);
 
-  // Filtra i clienti in base al filtro attivo (memoizzato per performance)
-  const clientiFiltrati = useMemo(() => {
-    return clienti.filter((cliente) => {
-      if (filtroAttivo === 'attivi') return cliente.attivo;
-      if (filtroAttivo === 'nonAttivi') return !cliente.attivo;
-      return true;
-    });
-  }, [clienti, filtroAttivo]);
+  useEffect(() => {
+    loadClienti();
+  }, [loadClienti]);
+
+  const clientiFiltrati = clienti;
 
   const handleOpenModal = useCallback((cliente?: Cliente) => {
     if (cliente) {
@@ -127,31 +140,47 @@ export const ClientiPage: React.FC = () => {
         toast.success('Cliente creato', 'Il nuovo cliente è stato aggiunto.');
       }
       handleCloseModal();
-      loadClienti(debouncedSearch);
+      loadClienti();
     } catch (error) {
       console.error('Errore nel salvataggio del cliente:', error);
       toast.error('Errore', 'Impossibile salvare il cliente. Riprova.');
     } finally {
       setIsSubmitting(false);
     }
-  }, [editingCliente, formData, handleCloseModal, loadClienti, debouncedSearch, toast, isSubmitting]);
+  }, [editingCliente, formData, handleCloseModal, loadClienti, toast, isSubmitting]);
 
+  // Soft-delete: disattiva il cliente, i dati storici restano
   const handleDelete = useCallback(async (id: number) => {
-    if (confirm('Sei sicuro di voler eliminare questo cliente?')) {
+    if (confirm('Disattivare questo cliente? Veicoli, scadenze e pagamenti restano archiviati e il cliente potrà essere riattivato in seguito.')) {
       try {
         await clientiService.delete(id);
-        toast.success('Cliente eliminato', 'Il cliente è stato rimosso.');
-        loadClienti(debouncedSearch);
+        toast.success('Cliente disattivato', 'Il cliente è stato disattivato. Puoi riattivarlo dalla scheda di modifica.');
+        loadClienti();
       } catch (error) {
-        console.error('Errore nell\'eliminazione del cliente:', error);
-        toast.error('Errore', 'Impossibile eliminare il cliente. Potrebbe avere veicoli associati.');
+        console.error('Errore nella disattivazione del cliente:', error);
+        toast.error('Errore', 'Impossibile disattivare il cliente. Riprova.');
       }
     }
-  }, [loadClienti, debouncedSearch, toast]);
+  }, [loadClienti, toast]);
+
+  // Eliminazione definitiva (solo ADMIN, solo clienti già disattivati)
+  const handleHardDelete = useCallback(async (id: number) => {
+    if (confirm('ATTENZIONE: eliminazione DEFINITIVA. Verranno cancellati anche tutti i veicoli, le scadenze e i pagamenti del cliente. Continuare?')) {
+      try {
+        await clientiService.delete(id, true);
+        toast.success('Cliente eliminato', 'Il cliente e i suoi dati sono stati eliminati definitivamente.');
+        loadClienti();
+      } catch (error) {
+        console.error('Errore nell\'eliminazione del cliente:', error);
+        toast.error('Errore', 'Impossibile eliminare il cliente. Riprova.');
+      }
+    }
+  }, [loadClienti, toast]);
 
   // Handlers memoizzati per evitare re-render
   const handleEditClick = useCallback((cliente: Cliente) => () => handleOpenModal(cliente), [handleOpenModal]);
   const handleDeleteClick = useCallback((id: number) => () => handleDelete(id), [handleDelete]);
+  const handleHardDeleteClick = useCallback((id: number) => () => handleHardDelete(id), [handleHardDelete]);
   const handleNewClick = useCallback(() => handleOpenModal(), [handleOpenModal]);
 
   const updateFormField = useCallback(<K extends keyof typeof formData>(field: K, value: typeof formData[K]) => {
@@ -282,12 +311,18 @@ export const ClientiPage: React.FC = () => {
                         {cliente.attivo ? <CheckCircle size={20} className="inline text-green-600" /> : <XCircle size={20} className="inline text-red-500" />}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button onClick={handleEditClick(cliente)} className="text-blue-600 hover:text-blue-900 mr-4" aria-label="Modifica">
+                        <button onClick={handleEditClick(cliente)} className="text-blue-600 hover:text-blue-900 mr-4" aria-label="Modifica" title="Modifica">
                           <Edit size={18} />
                         </button>
-                        <button onClick={handleDeleteClick(cliente.id)} className="text-red-600 hover:text-red-900" aria-label="Elimina">
-                          <Trash2 size={18} />
-                        </button>
+                        {cliente.attivo ? (
+                          <button onClick={handleDeleteClick(cliente.id)} className="text-orange-500 hover:text-orange-700" aria-label="Disattiva" title="Disattiva cliente (soft-delete)">
+                            <XCircle size={18} />
+                          </button>
+                        ) : isAdmin ? (
+                          <button onClick={handleHardDeleteClick(cliente.id)} className="text-red-600 hover:text-red-900" aria-label="Elimina definitivamente" title="Elimina definitivamente (solo admin)">
+                            <Trash2 size={18} />
+                          </button>
+                        ) : null}
                       </td>
                     </tr>
                   ))}
@@ -319,9 +354,15 @@ export const ClientiPage: React.FC = () => {
                       <button onClick={handleEditClick(cliente)} className="text-blue-600 p-2" aria-label="Modifica">
                         <Edit size={18} />
                       </button>
-                      <button onClick={handleDeleteClick(cliente.id)} className="text-red-600 p-2" aria-label="Elimina">
-                        <Trash2 size={18} />
-                      </button>
+                      {cliente.attivo ? (
+                        <button onClick={handleDeleteClick(cliente.id)} className="text-orange-500 p-2" aria-label="Disattiva">
+                          <XCircle size={18} />
+                        </button>
+                      ) : isAdmin ? (
+                        <button onClick={handleHardDeleteClick(cliente.id)} className="text-red-600 p-2" aria-label="Elimina definitivamente">
+                          <Trash2 size={18} />
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                   <div className="text-sm text-gray-500 space-y-1">
@@ -334,6 +375,13 @@ export const ClientiPage: React.FC = () => {
             </div>
           </>
         )}
+        <Pagination
+          page={page}
+          totalPages={totalPages}
+          total={total}
+          pageSize={PAGE_SIZE}
+          onPageChange={setPage}
+        />
       </div>
 
       {/* Modal Accessibile */}

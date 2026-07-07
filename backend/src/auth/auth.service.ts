@@ -111,6 +111,19 @@ export class AuthService {
         throw new UnauthorizedException('Refresh token non valido o revocato');
       }
 
+      // Confronta il token presentato con l'hash salvato: la sola firma JWT
+      // non basta se il segreto fosse compromesso o il token forgiato con
+      // lo stesso jti di una sessione valida
+      const hashValido = await bcrypt.compare(refreshToken, storedToken.tokenHash);
+      if (!hashValido) {
+        // Possibile furto/riuso: revoca la sessione per sicurezza
+        await this.prisma.refreshToken.update({
+          where: { id: storedToken.id },
+          data: { revokedAt: new Date() },
+        });
+        throw new UnauthorizedException('Refresh token non valido o revocato');
+      }
+
       // Ottieni utente
       const user = await this.prisma.utente.findUnique({
         where: { id: payload.sub },
@@ -238,6 +251,49 @@ export class AuthService {
   async checkInitialSetup(): Promise<{ required: boolean }> {
     const userCount = await this.prisma.utente.count();
     return { required: userCount === 0 };
+  }
+
+  /**
+   * Cambio password: verifica la password attuale, aggiorna l'hash e
+   * revoca tutte le altre sessioni (mantiene attiva quella corrente).
+   */
+  async changePassword(
+    userId: number,
+    dto: { currentPassword: string; newPassword: string },
+    currentJti?: string,
+  ) {
+    const user = await this.prisma.utente.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new UnauthorizedException('Utente non trovato');
+    }
+
+    const passwordValida = await bcrypt.compare(dto.currentPassword, user.password);
+    if (!passwordValida) {
+      throw new UnauthorizedException('Password attuale non corretta');
+    }
+
+    const hashedPassword = await bcrypt.hash(dto.newPassword, 10);
+
+    const [, revoked] = await this.prisma.$transaction([
+      this.prisma.utente.update({
+        where: { id: userId },
+        data: { password: hashedPassword },
+      }),
+      // Revoca tutte le sessioni tranne quella corrente
+      this.prisma.refreshToken.updateMany({
+        where: {
+          userId,
+          revokedAt: null,
+          ...(currentJti ? { jti: { not: currentJti } } : {}),
+        },
+        data: { revokedAt: new Date() },
+      }),
+    ]);
+
+    return {
+      message: 'Password aggiornata con successo',
+      altreSessioniRevocate: revoked.count,
+    };
   }
 
   async getProfile(userId: number) {

@@ -1,10 +1,14 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
+import * as cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Necessario per leggere il refresh token dal cookie httpOnly
+  app.use(cookieParser());
 
   // BUG FIX: Security headers per prevenire XSS, clickjacking, etc.
   app.use(helmet({

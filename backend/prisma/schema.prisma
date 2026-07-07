@@ -99,6 +99,7 @@ model Veicolo {
   massaRimorchiabileKg  Int?      @map("massa_rimorchiabile_kg") // Tassa aggiuntiva trattori stradali
   dataImmatricolazione  DateTime? @map("data_immatricolazione") @db.Date // Per calcolo ultratrentennali
   note                  String?
+  attivo                Boolean   @default(true) // Soft-delete: false = disattivato
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 

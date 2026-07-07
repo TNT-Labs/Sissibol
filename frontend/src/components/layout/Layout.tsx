@@ -14,7 +14,9 @@ import {
   Menu,
   X,
   UserCog,
+  KeyRound,
 } from 'lucide-react';
+import { ChangePasswordModal } from '../ChangePasswordModal';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -24,6 +26,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const { user, logout } = useAuth();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
 
   const isAdmin = user?.ruolo === Ruolo.ADMIN;
 
@@ -58,6 +61,14 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             </div>
             <div className="flex items-center space-x-4">
               <span className="text-sm text-gray-600">{user?.email}</span>
+              <button
+                onClick={() => setShowChangePassword(true)}
+                className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md"
+                title="Cambia password"
+              >
+                <KeyRound size={18} />
+                <span className="hidden sm:inline">Cambia password</span>
+              </button>
               <button
                 onClick={logout}
                 className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md"
@@ -106,6 +117,12 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
           </div>
         </main>
       </div>
+
+      {/* Modal cambio password */}
+      <ChangePasswordModal
+        isOpen={showChangePassword}
+        onClose={() => setShowChangePassword(false)}
+      />
 
       {/* Overlay for mobile */}
       {sidebarOpen && (

@@ -34,6 +34,8 @@ export const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  // Necessario per inviare/ricevere il cookie httpOnly del refresh token
+  withCredentials: true,
 });
 
 // Interceptor per aggiungere il token JWT a ogni richiesta
@@ -85,25 +87,23 @@ api.interceptors.response.use(
       originalRequest._retry = true;
       isRefreshing = true;
 
-      const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
-
-      if (!refreshToken) {
-        // Nessun refresh token - logout
-        handleLogout();
-        return Promise.reject(error);
-      }
+      // Il refresh token vive in un cookie httpOnly; il valore in localStorage
+      // è solo un residuo legacy di sessioni create prima della migrazione
+      const legacyRefreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
 
       try {
-        // Tenta il refresh
-        const response = await axios.post(`${API_URL}/auth/refresh`, {
-          refresh_token: refreshToken,
-        });
+        // Tenta il refresh: il cookie httpOnly viaggia con withCredentials
+        const response = await axios.post(
+          `${API_URL}/auth/refresh`,
+          legacyRefreshToken ? { refresh_token: legacyRefreshToken } : {},
+          { withCredentials: true },
+        );
 
-        const { access_token, refresh_token: newRefreshToken } = response.data;
+        const { access_token } = response.data;
 
-        // Salva i nuovi token
+        // Salva il nuovo access token; il refresh token è nel cookie httpOnly
         localStorage.setItem(TOKEN_KEY, access_token);
-        localStorage.setItem(REFRESH_TOKEN_KEY, newRefreshToken);
+        localStorage.removeItem(REFRESH_TOKEN_KEY); // Pulizia residuo legacy
 
         // Aggiorna l'header e processa la coda
         api.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
@@ -141,6 +141,20 @@ api.interceptors.response.use(
 );
 
 /**
+ * Svuota la cache API del service worker: le risposte autenticate non devono
+ * restare leggibili in Cache Storage dopo il logout.
+ */
+export const clearApiCache = async (): Promise<void> => {
+  try {
+    if ('caches' in window) {
+      await caches.delete('api-cache');
+    }
+  } catch {
+    // Cache Storage non disponibile (browser vecchio/contesto insicuro): ignora
+  }
+};
+
+/**
  * Gestisce il logout pulendo tutti i dati locali
  * BUG FIX: Emette un evento per notificare la UI (toast) della sessione scaduta
  */
@@ -148,6 +162,7 @@ function handleLogout() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(REFRESH_TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
+  void clearApiCache();
 
   // Emetti evento per mostrare toast nella UI
   window.dispatchEvent(new CustomEvent('auth:session-expired'));
@@ -159,18 +174,13 @@ function handleLogout() {
 }
 
 /**
- * Utility per salvare i token dopo il login
+ * Utility per salvare l'access token dopo il login.
+ * Il refresh token NON viene più salvato: vive in un cookie httpOnly.
  */
-export const saveTokens = (accessToken: string, refreshToken: string) => {
+export const saveTokens = (accessToken: string) => {
   localStorage.setItem(TOKEN_KEY, accessToken);
-  localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
-};
-
-/**
- * Utility per ottenere il refresh token
- */
-export const getRefreshToken = (): string | null => {
-  return localStorage.getItem(REFRESH_TOKEN_KEY);
+  // Rimuovi eventuale refresh token legacy di versioni precedenti
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
 };
 
 /**
@@ -187,4 +197,5 @@ export const clearTokens = () => {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(REFRESH_TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
+  void clearApiCache();
 };

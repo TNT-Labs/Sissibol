@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   ParseIntPipe,
+  Request,
 } from '@nestjs/common';
 import { ClientiService } from './clienti.service';
 import { CreateClienteDto } from './dto/create-cliente.dto';
@@ -35,11 +36,13 @@ export class ClientiController {
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
     @Query('search') search?: string,
+    @Query('attivo') attivo?: string,
   ) {
     return this.clientiService.findAllPaginated(
       page ? parseInt(page, 10) : 1,
       pageSize ? parseInt(pageSize, 10) : 50,
       search,
+      attivo === undefined ? undefined : attivo === 'true',
     );
   }
 
@@ -56,8 +59,19 @@ export class ClientiController {
     return this.clientiService.update(id, updateClienteDto);
   }
 
+  /**
+   * DELETE /clienti/:id        → soft-delete (disattiva il cliente)
+   * DELETE /clienti/:id?hard=true → eliminazione definitiva (solo ADMIN)
+   */
   @Delete(':id')
-  remove(@Param('id', ParseIntPipe) id: number) {
+  remove(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('hard') hard: string | undefined,
+    @Request() req: any,
+  ) {
+    if (hard === 'true') {
+      return this.clientiService.removeHard(id, req.user?.ruolo === 'ADMIN');
+    }
     return this.clientiService.remove(id);
   }
 }
