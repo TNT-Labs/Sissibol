@@ -115,11 +115,15 @@ export const PagamentiPage: React.FC = () => {
         idScadenza: formData.idScadenza,
         dataPagamento: formData.dataPagamento,
         importoPagato: importo,
-        metodoPagamento: formData.metodoPagamento,
+        metodoPagamento: formData.metodoPagamento || undefined,
       };
 
       if (editingPagamento) {
-        await pagamentiService.update(editingPagamento.id, data);
+        // Invia la versione corrente per l'optimistic locking lato server
+        await pagamentiService.update(editingPagamento.id, {
+          ...data,
+          version: editingPagamento.version,
+        });
         toast.success('Pagamento aggiornato', 'Il pagamento è stato modificato con successo.');
       } else {
         await pagamentiService.create(data, selectedFile || undefined);
@@ -132,6 +136,20 @@ export const PagamentiPage: React.FC = () => {
       toast.error('Errore', 'Impossibile salvare il pagamento. Riprova.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // Scarica la ricevuta tramite endpoint autenticato e la apre in una nuova tab
+  const handleViewRicevuta = async (id: number) => {
+    try {
+      const blob = await pagamentiService.downloadRicevuta(id);
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank', 'noopener');
+      // Revoca l'URL dopo che la tab ha avuto il tempo di caricarlo
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (error) {
+      console.error('Errore nel download della ricevuta:', error);
+      toast.error('Errore', 'Impossibile scaricare la ricevuta.');
     }
   };
 
@@ -242,15 +260,14 @@ export const PagamentiPage: React.FC = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {pagamento.ricevutaFile ? (
-                      <a
-                        href={`${import.meta.env.VITE_API_URL || ''}/${pagamento.ricevutaFile}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <button
+                        type="button"
+                        onClick={() => handleViewRicevuta(pagamento.id)}
                         className="text-blue-600 hover:text-blue-800 flex items-center"
                       >
                         <FileText size={16} className="mr-1" />
                         Visualizza
-                      </a>
+                      </button>
                     ) : (
                       <span className="text-gray-400">Nessuna</span>
                     )}
@@ -299,7 +316,7 @@ export const PagamentiPage: React.FC = () => {
                   if (editingPagamento) {
                     opts.push({
                       value: editingPagamento.idScadenza,
-                      label: `${editingPagamento.scadenza?.veicolo?.targa} - ${editingPagamento.scadenza?.veicolo?.cliente?.ragioneSociale || 'N/A'}`
+                      label: `${editingPagamento.scadenza?.veicolo?.targa} - ${editingPagamento.scadenza?.veicolo?.cliente ? getClienteDisplayName(editingPagamento.scadenza.veicolo.cliente) : 'N/A'}`
                     });
                   }
                   return opts;

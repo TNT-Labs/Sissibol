@@ -241,7 +241,10 @@ export class BolloService {
       }
 
       // Verifica per anzianità veicolo (ultratrentennali, interesse storico)
-      if (!applicabile && esenzione.anni_da_immatricolazione && veicolo.dataImmatricolazione) {
+      // Solo per esenzioni puramente anagrafiche: se l'esenzione ha un criterio
+      // di alimentazione, anni_da_immatricolazione è un limite SUPERIORE di validità
+      // (es. elettrico esente per i primi 5 anni) e non va riusata come soglia minima
+      if (!applicabile && !esenzione.alimentazione && esenzione.anni_da_immatricolazione && veicolo.dataImmatricolazione) {
         // CONFLITTO: Se veicolo è elettrico E ultratrentennale
         // - Se elettrico entro 5 anni: usa esenzione elettrico (già gestito sopra)
         // - Se elettrico oltre 5 anni E ultratrentennale: usa ultratrentennale
@@ -285,8 +288,9 @@ export class BolloService {
 
         // Gestione esenzioni PARZIALI con limite cumulativo
         if (esenzione.tipo_esenzione === 'PARZIALE') {
+          // Il campo arriva da $queryRaw come Decimal: Number() gestisce sia Decimal che number
           const percentuale = esenzione.percentuale_riduzione
-            ? parseFloat(esenzione.percentuale_riduzione)
+            ? Number(esenzione.percentuale_riduzione)
             : 0;
 
           // Verifica che non si superi il 100% cumulativo

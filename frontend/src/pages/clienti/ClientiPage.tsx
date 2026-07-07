@@ -102,11 +102,28 @@ export const ClientiPage: React.FC = () => {
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
+      // Converte le stringhe vuote in undefined: il backend valida i campi
+      // opzionali (es. @IsEmail) anche se vuoti, e '' li farebbe fallire
+      const isPersonaFisica = formData.tipoCliente === TipoCliente.PERSONA_FISICA;
+      const payload = {
+        tipoCliente: formData.tipoCliente,
+        attivo: formData.attivo,
+        ragioneSociale: !isPersonaFisica ? formData.ragioneSociale || undefined : undefined,
+        partitaIva: !isPersonaFisica ? formData.partitaIva || undefined : undefined,
+        nome: isPersonaFisica ? formData.nome || undefined : undefined,
+        cognome: isPersonaFisica ? formData.cognome || undefined : undefined,
+        codiceFiscale: isPersonaFisica ? formData.codiceFiscale || undefined : undefined,
+        indirizzo: formData.indirizzo || undefined,
+        email: formData.email || undefined,
+        telefono: formData.telefono || undefined,
+        note: formData.note || undefined,
+      };
+
       if (editingCliente) {
-        await clientiService.update(editingCliente.id, formData);
+        await clientiService.update(editingCliente.id, payload);
         toast.success('Cliente aggiornato', 'I dati del cliente sono stati salvati.');
       } else {
-        await clientiService.create(formData);
+        await clientiService.create(payload);
         toast.success('Cliente creato', 'Il nuovo cliente è stato aggiunto.');
       }
       handleCloseModal();

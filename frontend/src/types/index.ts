@@ -110,6 +110,8 @@ export interface Pagamento {
   importoPagato: number;
   metodoPagamento?: string;
   ricevutaFile?: string;
+  /** Versione per optimistic locking lato server */
+  version?: number;
   createdAt: string;
   updatedAt: string;
   scadenza?: Scadenza;

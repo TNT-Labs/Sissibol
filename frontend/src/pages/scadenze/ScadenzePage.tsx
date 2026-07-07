@@ -677,7 +677,7 @@ export const ScadenzePage: React.FC = () => {
                     <ul className="text-sm text-blue-700 space-y-1">
                       <li>- Il mese di scadenza e calcolato dalla data di immatricolazione</li>
                       <li>- Annuale: scadenza nel mese di immatricolazione</li>
-                      <li>- Quadrimestrale: 3 scadenze/anno (Gen, Mag, Set) in base al periodo di immatricolazione</li>
+                      <li>- Quadrimestrale: 3 scadenze/anno, ogni 4 mesi a partire dal mese di immatricolazione</li>
                       <li>- Calcola automaticamente l'importo in base alle tariffe</li>
                       <li>- Veicoli senza data immatricolazione: usa scadenze esistenti come riferimento</li>
                     </ul>

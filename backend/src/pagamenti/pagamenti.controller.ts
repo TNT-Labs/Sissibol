@@ -12,10 +12,14 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  NotFoundException,
+  StreamableFile,
+  Header,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
-import { extname } from 'path';
+import { extname, basename, join, resolve } from 'path';
+import { createReadStream, existsSync } from 'fs';
 import { PagamentiService } from './pagamenti.service';
 import { CreatePagamentoDto } from './dto/create-pagamento.dto';
 import { UpdatePagamentoDto } from './dto/update-pagamento.dto';
@@ -211,6 +215,50 @@ export class PagamentiController {
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.pagamentiService.findOne(id);
+  }
+
+  /**
+   * Scarica la ricevuta allegata a un pagamento.
+   * GET /pagamenti/:id/ricevuta
+   *
+   * Il file viene servito tramite endpoint autenticato (JwtAuthGuard a livello
+   * di controller): le ricevute non sono mai esposte come file statici pubblici.
+   */
+  @Get(':id/ricevuta')
+  @Header('Cache-Control', 'private, max-age=0')
+  async downloadRicevuta(@Param('id', ParseIntPipe) id: number): Promise<StreamableFile> {
+    const pagamento = await this.pagamentiService.findOne(id);
+
+    if (!pagamento.ricevutaFile) {
+      throw new NotFoundException('Nessuna ricevuta allegata a questo pagamento');
+    }
+
+    // Difesa da path traversal: usa solo il basename e verifica che il path
+    // risolto resti dentro la directory delle ricevute
+    const uploadsDir = resolve('./uploads/ricevute');
+    const safeName = basename(pagamento.ricevutaFile);
+    const filePath = resolve(join(uploadsDir, safeName));
+
+    if (!filePath.startsWith(uploadsDir) || !existsSync(filePath)) {
+      throw new NotFoundException('File ricevuta non trovato');
+    }
+
+    const ext = extname(safeName).toLowerCase();
+    const contentTypes: Record<string, string> = {
+      '.pdf': 'application/pdf',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+      '.tiff': 'image/tiff',
+      '.tif': 'image/tiff',
+    };
+
+    return new StreamableFile(createReadStream(filePath), {
+      type: contentTypes[ext] || 'application/octet-stream',
+      disposition: `inline; filename="${safeName}"`,
+    });
   }
 
   @Patch(':id')

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateScadenzaDto } from './dto/create-scadenza.dto';
 import { UpdateScadenzaDto } from './dto/update-scadenza.dto';
@@ -27,12 +27,49 @@ function getMesiScadenzaQuadrimestrale(meseImmatricolazione: number): number[] {
   return mesi;
 }
 
+// Intervallo di aggiornamento automatico degli stati scaduti (6 ore)
+const AGGIORNA_SCADUTE_INTERVAL_MS = 6 * 60 * 60 * 1000;
+
 @Injectable()
-export class ScadenzeService {
+export class ScadenzeService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(ScadenzeService.name);
+  private aggiornaScaduteTimer?: NodeJS.Timeout;
+
   constructor(
     private prisma: PrismaService,
     private bolloService: BolloService,
   ) {}
+
+  /**
+   * All'avvio (e poi ogni 6 ore) marca come SCADUTO le scadenze DA_PAGARE
+   * il cui mese/anno è passato. Sostituisce il cron job esterno mai configurato.
+   */
+  async onModuleInit() {
+    await this.eseguiAggiornamentoScadute();
+    this.aggiornaScaduteTimer = setInterval(
+      () => this.eseguiAggiornamentoScadute(),
+      AGGIORNA_SCADUTE_INTERVAL_MS,
+    );
+    // Non tenere vivo il processo solo per il timer
+    this.aggiornaScaduteTimer.unref?.();
+  }
+
+  onModuleDestroy() {
+    if (this.aggiornaScaduteTimer) {
+      clearInterval(this.aggiornaScaduteTimer);
+    }
+  }
+
+  private async eseguiAggiornamentoScadute() {
+    try {
+      const aggiornate = await this.updateScaduteAutomaticamente();
+      if (aggiornate > 0) {
+        this.logger.log(`Aggiornate ${aggiornate} scadenze a stato SCADUTO`);
+      }
+    } catch (error) {
+      this.logger.error(`Errore aggiornamento scadenze scadute: ${error.message}`);
+    }
+  }
 
   // =====================================================
   // UTILITY DATE - Timezone-safe
@@ -192,7 +229,7 @@ export class ScadenzeService {
     // Valida il mese di scadenza per la periodicità selezionata
     const validazione = this.validaMeseScadenza(createScadenzaDto.meseScadenza, periodicita);
     if (!validazione.valido) {
-      throw new Error(validazione.messaggio);
+      throw new BadRequestException(validazione.messaggio);
     }
 
     let importoPrevisto = createScadenzaDto.importoPrevisto;
@@ -252,7 +289,7 @@ export class ScadenzeService {
         },
       });
     } catch (error) {
-      throw new Error(`Impossibile ricalcolare il bollo: ${error.message}`);
+      throw new BadRequestException(`Impossibile ricalcolare il bollo: ${error.message}`);
     }
   }
 
@@ -656,12 +693,12 @@ export class ScadenzeService {
     const annoCorrente = oggi.getFullYear();
     const meseCorrente = oggi.getMonth() + 1;
 
-    if (annoTarget < annoCorrente) {
-      throw new Error(`L'anno target (${annoTarget}) non può essere inferiore all'anno corrente (${annoCorrente})`);
+    if (!Number.isInteger(annoTarget) || annoTarget < annoCorrente) {
+      throw new BadRequestException(`L'anno target (${annoTarget}) non può essere inferiore all'anno corrente (${annoCorrente})`);
     }
 
     if (annoTarget > annoCorrente + 10) {
-      throw new Error(`L'anno target non può essere superiore a ${annoCorrente + 10}`);
+      throw new BadRequestException(`L'anno target non può essere superiore a ${annoCorrente + 10}`);
     }
 
     const risultato = {

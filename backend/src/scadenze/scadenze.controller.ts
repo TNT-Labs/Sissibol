@@ -101,6 +101,18 @@ export class ScadenzeController {
     return this.scadenzeService.generaScadenzeFuture(body.annoTarget);
   }
 
+  /**
+   * Marca subito come SCADUTO le scadenze DA_PAGARE con mese/anno passato.
+   * L'aggiornamento avviene comunque in automatico ogni 6 ore.
+   *
+   * POST /scadenze/aggiorna-scadute
+   */
+  @Post('aggiorna-scadute')
+  async aggiornaScadute() {
+    const aggiornate = await this.scadenzeService.updateScaduteAutomaticamente();
+    return { message: `Aggiornate ${aggiornate} scadenze a stato SCADUTO`, aggiornate };
+  }
+
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.scadenzeService.findOne(id);
