@@ -41,12 +41,14 @@ export class VeicoliController {
     @Query('pageSize') pageSize?: string,
     @Query('idCliente') idCliente?: string,
     @Query('search') search?: string,
+    @Query('attivo') attivo?: string,
   ) {
     return this.veicoliService.findAllPaginated(
       page ? parseInt(page, 10) : 1,
       pageSize ? parseInt(pageSize, 10) : 50,
       idCliente ? parseInt(idCliente, 10) : undefined,
       search,
+      attivo === 'false' ? false : true,
     );
   }
 
@@ -74,8 +76,19 @@ export class VeicoliController {
     return this.veicoliService.update(id, updateVeicoloDto, utenteEmail, motivazione);
   }
 
+  /**
+   * DELETE /veicoli/:id        → soft-delete (disattiva il veicolo)
+   * DELETE /veicoli/:id?hard=true → eliminazione definitiva (solo ADMIN)
+   */
   @Delete(':id')
-  remove(@Param('id', ParseIntPipe) id: number) {
+  remove(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('hard') hard: string | undefined,
+    @Request() req: any,
+  ) {
+    if (hard === 'true') {
+      return this.veicoliService.removeHard(id, req.user?.ruolo === 'ADMIN');
+    }
     return this.veicoliService.remove(id);
   }
 }

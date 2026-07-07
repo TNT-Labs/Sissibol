@@ -83,6 +83,8 @@ export interface Veicolo {
   massaRimorchiabileKg?: number;
   dataImmatricolazione?: string;
   note?: string;
+  /** Soft-delete: false = veicolo disattivato */
+  attivo?: boolean;
   createdAt: string;
   updatedAt: string;
   cliente?: Cliente;

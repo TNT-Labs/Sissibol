@@ -104,22 +104,23 @@ export class TariffeService {
       );
     }
 
-    // Crea la nuova configurazione
-    const nuovaConfig = await this.prisma.configurazioneBollo.create({
-      data: {
-        annoValidita: nuovoAnno,
-        regione: configOriginale.regione,
-        scontoRid: configOriginale.scontoRid,
-        note: `Duplicata da configurazione ${configOriginale.annoValidita}`,
-        attivo: true,
-      },
-    });
-
-    // Duplica tutte le tariffe
-    for (const tariffa of configOriginale.tariffe) {
-      await this.prisma.tariffaBollo.create({
+    // Crea configurazione e tariffe in un'unica transazione:
+    // atomica (nessuna configurazione mezza duplicata) e molto più veloce
+    // del create riga per riga
+    const nuovaConfig = await this.prisma.$transaction(async (tx) => {
+      const config = await tx.configurazioneBollo.create({
         data: {
-          idConfigurazione: nuovaConfig.id,
+          annoValidita: nuovoAnno,
+          regione: configOriginale.regione,
+          scontoRid: configOriginale.scontoRid,
+          note: `Duplicata da configurazione ${configOriginale.annoValidita}`,
+          attivo: true,
+        },
+      });
+
+      await tx.tariffaBollo.createMany({
+        data: configOriginale.tariffe.map((tariffa) => ({
+          idConfigurazione: config.id,
           tipoVeicolo: tariffa.tipoVeicolo,
           categoriaEuro: tariffa.categoriaEuro,
           unitaMisura: tariffa.unitaMisura,
@@ -131,9 +132,30 @@ export class TariffeService {
           periodicita: tariffa.periodicita,
           descrizione: tariffa.descrizione,
           ordine: tariffa.ordine,
-        },
+        })),
       });
-    }
+
+      // Duplica anche le esenzioni: prima venivano perse nella duplicazione
+      const esenzioni = await tx.esenzioneBollo.findMany({
+        where: { idConfigurazione: id },
+      });
+      if (esenzioni.length > 0) {
+        await tx.esenzioneBollo.createMany({
+          data: esenzioni.map((e) => ({
+            idConfigurazione: config.id,
+            tipoEsenzione: e.tipoEsenzione,
+            percentualeRiduzione: e.percentualeRiduzione,
+            tipoVeicolo: e.tipoVeicolo,
+            alimentazione: e.alimentazione,
+            anniDaImmatricolazione: e.anniDaImmatricolazione,
+            descrizione: e.descrizione,
+            note: e.note,
+          })),
+        });
+      }
+
+      return config;
+    });
 
     return this.getConfigurazione(nuovaConfig.id);
   }
@@ -255,27 +277,29 @@ export class TariffeService {
   async adeguaImporti(idConfigurazione: number, percentualeAdeguamento: number) {
     const tariffe = await this.getTariffe(idConfigurazione);
 
-    let aggiornate = 0;
-    for (const tariffa of tariffe) {
-      const nuovoImportoUnitario =
-        tariffa.importoUnitario.toNumber() * (1 + percentualeAdeguamento / 100);
-      const nuovoImportoFisso = tariffa.importoFisso
-        ? tariffa.importoFisso.toNumber() * (1 + percentualeAdeguamento / 100)
-        : null;
+    // Tutti gli update in un'unica transazione: atomico (nessun adeguamento
+    // parziale in caso di errore) e un solo round-trip verso il database
+    await this.prisma.$transaction(
+      tariffe.map((tariffa) => {
+        const nuovoImportoUnitario =
+          tariffa.importoUnitario.toNumber() * (1 + percentualeAdeguamento / 100);
+        const nuovoImportoFisso = tariffa.importoFisso
+          ? tariffa.importoFisso.toNumber() * (1 + percentualeAdeguamento / 100)
+          : null;
 
-      await this.prisma.tariffaBollo.update({
-        where: { id: tariffa.id },
-        data: {
-          importoUnitario: Math.round(nuovoImportoUnitario * 10000) / 10000,
-          importoFisso: nuovoImportoFisso
-            ? Math.round(nuovoImportoFisso * 100) / 100
-            : undefined,
-        },
-      });
+        return this.prisma.tariffaBollo.update({
+          where: { id: tariffa.id },
+          data: {
+            importoUnitario: Math.round(nuovoImportoUnitario * 10000) / 10000,
+            importoFisso: nuovoImportoFisso
+              ? Math.round(nuovoImportoFisso * 100) / 100
+              : undefined,
+          },
+        });
+      }),
+    );
 
-      aggiornate++;
-    }
-
+    const aggiornate = tariffe.length;
     return { message: `Adeguate ${aggiornate} tariffe del ${percentualeAdeguamento}%`, aggiornate };
   }
 }

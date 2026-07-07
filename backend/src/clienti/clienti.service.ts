@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateClienteDto } from './dto/create-cliente.dto';
 import { UpdateClienteDto } from './dto/update-cliente.dto';
@@ -52,10 +52,11 @@ export class ClientiService {
     page: number = 1,
     pageSize: number = 50,
     search?: string,
+    attivo?: boolean,
   ) {
     const skip = (page - 1) * pageSize;
 
-    const where = search
+    const where: any = search
       ? {
           OR: [
             { ragioneSociale: { contains: search, mode: 'insensitive' as const } },
@@ -67,6 +68,11 @@ export class ClientiService {
           ],
         }
       : {};
+
+    // Filtro server-side per stato attivo (undefined = tutti)
+    if (attivo !== undefined) {
+      where.attivo = attivo;
+    }
 
     const [data, total] = await Promise.all([
       this.prisma.cliente.findMany({
@@ -141,7 +147,30 @@ export class ClientiService {
     });
   }
 
+  /**
+   * Soft-delete: disattiva il cliente preservando veicoli, scadenze e
+   * pagamenti (dati fiscali). L'eliminazione definitiva è riservata agli
+   * ADMIN tramite removeHard.
+   */
   async remove(id: number) {
+    await this.findOne(id); // Check if exists
+
+    return this.prisma.cliente.update({
+      where: { id },
+      data: { attivo: false },
+    });
+  }
+
+  /**
+   * Eliminazione definitiva (solo ADMIN): cancella a cascata veicoli,
+   * scadenze e pagamenti collegati.
+   */
+  async removeHard(id: number, isAdmin: boolean) {
+    if (!isAdmin) {
+      throw new ForbiddenException(
+        'Solo gli amministratori possono eliminare definitivamente un cliente',
+      );
+    }
     await this.findOne(id); // Check if exists
 
     return this.prisma.cliente.delete({

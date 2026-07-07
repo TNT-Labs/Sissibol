@@ -18,17 +18,14 @@ interface Session {
 
 export const authService = {
   /**
-   * Login con salvataggio di access_token e refresh_token
+   * Login con salvataggio dell'access token.
+   * Il refresh token arriva come cookie httpOnly gestito dal browser.
    */
   async login(credentials: LoginRequest): Promise<AuthResponse> {
     const response = await api.post<AuthResponseWithRefresh>('/auth/login', credentials);
 
     if (response.data.access_token) {
-      // Salva entrambi i token
-      saveTokens(
-        response.data.access_token,
-        response.data.refresh_token || ''
-      );
+      saveTokens(response.data.access_token);
       localStorage.setItem('user', JSON.stringify(response.data.user));
     }
 
@@ -95,6 +92,17 @@ export const authService = {
     } finally {
       clearTokens();
     }
+  },
+
+  /**
+   * Cambio password dell'utente corrente
+   */
+  async changePassword(currentPassword: string, newPassword: string): Promise<{ message: string; altreSessioniRevocate: number }> {
+    const response = await api.post<{ message: string; altreSessioniRevocate: number }>('/auth/change-password', {
+      currentPassword,
+      newPassword,
+    });
+    return response.data;
   },
 
   /**

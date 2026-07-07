@@ -384,31 +384,31 @@ export class PagamentiService {
       errori: [] as string[],
     };
 
-    // BUG FIX: Validazione preventiva - verifica che tutte le scadenze abbiano un importo valido
-    const scadenzeSenzaImporto = scadenzeDaPagare.filter(
-      s => !s.importoPrevisto || s.importoPrevisto.toNumber() <= 0
-    );
-
-    // BUG FIX: Permetti importo 0 solo se esplicitamente voluto, altrimenti segnala errore
-    // Le scadenze con importo 0 o null vengono comunque elaborate ma con warning
-    for (const scadenza of scadenzeSenzaImporto) {
-      risultato.errori.push(
-        `Scadenza ${scadenza.id} (${scadenza.veicolo?.targa}): importo previsto mancante o zero - verrà usato 0.01€ come minimo`
-      );
+    // Le scadenze senza importo previsto valido NON vengono pagate:
+    // registrare un pagamento fittizio (es. 0,01€) falserebbe i report.
+    // L'operatore le vede negli errori e le gestisce singolarmente
+    // (ricalcolando il bollo o inserendo l'importo a mano).
+    const scadenzePagabili: typeof scadenzeDaPagare = [];
+    for (const scadenza of scadenzeDaPagare) {
+      const importo = scadenza.importoPrevisto?.toNumber() ?? 0;
+      if (importo > 0) {
+        scadenzePagabili.push(scadenza);
+      } else {
+        risultato.errori.push(
+          `Scadenza ${scadenza.id} (${scadenza.veicolo?.targa}): importo previsto mancante - ` +
+          `saltata. Ricalcola il bollo o inserisci l'importo, poi registra il pagamento singolarmente.`
+        );
+      }
     }
 
-    // Crea pagamenti per ogni scadenza
+    // Crea pagamenti per ogni scadenza pagabile
     // Non usiamo transazione globale per permettere pagamenti parziali con errori dettagliati
-    for (const scadenza of scadenzeDaPagare) {
+    for (const scadenza of scadenzePagabili) {
       try {
-        // BUG FIX: Usa l'importo previsto, permettendo anche 0 se necessario
-        // ma logga un warning se l'importo è 0
-        const importo = scadenza.importoPrevisto?.toNumber() ?? 0;
-
         await this.create({
           idScadenza: scadenza.id,
           dataPagamento,
-          importoPagato: importo > 0 ? importo : 0.01, // Minimo 0.01 per rispettare validazione
+          importoPagato: scadenza.importoPrevisto!.toNumber(),
           metodoPagamento,
         });
         risultato.pagamentiCreati++;

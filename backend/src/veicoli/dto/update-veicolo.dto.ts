@@ -1,10 +1,15 @@
-import { IsString, IsInt, IsOptional, IsNumber, IsDateString } from 'class-validator';
+import { IsString, IsInt, IsOptional, IsNumber, IsDateString, IsBoolean } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class UpdateVeicoloDto {
   @IsInt()
   @IsOptional()
   idCliente?: number;
+
+  // Soft-delete / riattivazione
+  @IsBoolean()
+  @IsOptional()
+  attivo?: boolean;
 
   @IsString()
   @IsOptional()

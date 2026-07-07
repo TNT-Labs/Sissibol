@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateVeicoloDto } from './dto/create-veicolo.dto';
 import { UpdateVeicoloDto } from './dto/update-veicolo.dto';
@@ -27,7 +27,8 @@ export class VeicoliService {
 
   async findAll(idCliente?: number, search?: string) {
     const where: any = {
-      // Filtra solo veicoli di clienti attivi
+      // Filtra solo veicoli attivi di clienti attivi
+      attivo: true,
       cliente: {
         attivo: true,
       },
@@ -83,11 +84,13 @@ export class VeicoliService {
     pageSize: number = 50,
     idCliente?: number,
     search?: string,
+    attivo: boolean = true,
   ) {
     const skip = (page - 1) * pageSize;
 
     const where: any = {
-      // Filtra solo veicoli di clienti attivi
+      // Filtra per stato attivo del veicolo e solo clienti attivi
+      attivo,
       cliente: {
         attivo: true,
       },
@@ -272,7 +275,27 @@ export class VeicoliService {
     });
   }
 
+  /**
+   * Soft-delete: disattiva il veicolo preservando scadenze e pagamenti.
+   */
   async remove(id: number) {
+    await this.findOne(id); // Check if exists
+
+    return this.prisma.veicolo.update({
+      where: { id },
+      data: { attivo: false },
+    });
+  }
+
+  /**
+   * Eliminazione definitiva (solo ADMIN): cancella a cascata scadenze e pagamenti.
+   */
+  async removeHard(id: number, isAdmin: boolean) {
+    if (!isAdmin) {
+      throw new ForbiddenException(
+        'Solo gli amministratori possono eliminare definitivamente un veicolo',
+      );
+    }
     await this.findOne(id); // Check if exists
 
     return this.prisma.veicolo.delete({

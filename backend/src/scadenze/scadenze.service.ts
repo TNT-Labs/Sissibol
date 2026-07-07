@@ -305,6 +305,7 @@ export class ScadenzeService implements OnModuleInit, OnModuleDestroy {
     const where: any = {
       // Filtra solo scadenze di veicoli appartenenti a clienti attivi
       veicolo: {
+        attivo: true,
         cliente: {
           attivo: true,
         },
@@ -388,6 +389,7 @@ export class ScadenzeService implements OnModuleInit, OnModuleDestroy {
     const where: any = {
       // Filtra solo scadenze di veicoli appartenenti a clienti attivi
       veicolo: {
+        attivo: true,
         cliente: {
           attivo: true,
         },
@@ -457,6 +459,7 @@ export class ScadenzeService implements OnModuleInit, OnModuleDestroy {
     const where: any = {
       // Filtra solo scadenze di veicoli appartenenti a clienti attivi
       veicolo: {
+        attivo: true,
         cliente: {
           attivo: true,
         },
@@ -590,6 +593,7 @@ export class ScadenzeService implements OnModuleInit, OnModuleDestroy {
         stato: StatoScadenza.DA_PAGARE,
         // Filtra solo scadenze di veicoli appartenenti a clienti attivi
         veicolo: {
+          attivo: true,
           cliente: {
             attivo: true,
           },
@@ -708,9 +712,13 @@ export class ScadenzeService implements OnModuleInit, OnModuleDestroy {
       errori: [] as string[],
     };
 
+    // Cache configurazioni tariffe: evita di ricaricarle per ogni veicolo
+    const configCache = new Map<string, any>();
+
     // Recupera solo i veicoli di clienti attivi con le loro scadenze esistenti
     const veicoli = await this.prisma.veicolo.findMany({
       where: {
+        attivo: true,
         cliente: {
           attivo: true,
         },
@@ -810,6 +818,7 @@ export class ScadenzeService implements OnModuleInit, OnModuleDestroy {
             veicolo.id,
             annoCorrente,
             periodicita,
+            configCache,
           );
           importoPrevisto = calcolo.importoBase;
         } catch (error) {

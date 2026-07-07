@@ -16,7 +16,11 @@ import {
   TIPI_SOSPENSIONE,
   shouldShowField
 } from '../../constants/domini';
-import { Plus, Edit, Trash2, X, Car } from 'lucide-react';
+import { Plus, Edit, Trash2, X, Car, XCircle, RotateCcw } from 'lucide-react';
+import { Pagination } from '../../components/common/Pagination';
+import { useIsAdmin } from '../../context/AuthContext';
+
+const PAGE_SIZE = 50;
 
 interface VeicoloFormData {
   idCliente: number;
@@ -62,11 +66,16 @@ export const VeicoliPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [filterCliente, setFilterCliente] = useState<number | undefined>();
   const [search, setSearch] = useState('');
+  const [mostraDisattivati, setMostraDisattivati] = useState(false);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
   const [showModal, setShowModal] = useState(false);
   const [editingVeicolo, setEditingVeicolo] = useState<Veicolo | null>(null);
   const [formData, setFormData] = useState<VeicoloFormData>(emptyFormData);
   // BUG FIX: aggiunto stato isSubmitting per evitare submit multipli
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isAdmin = useIsAdmin();
 
   useEffect(() => {
     loadClienti();
@@ -81,25 +90,39 @@ export const VeicoliPage: React.FC = () => {
     }
   };
 
+  // Filtri riportano alla prima pagina
+  useEffect(() => {
+    setPage(1);
+  }, [filterCliente, mostraDisattivati]);
+
+  // Caricamento paginato server-side
   const loadVeicoli = useCallback(async (searchTerm?: string) => {
     try {
       const searchValue = searchTerm !== undefined ? searchTerm : search;
-      const data = await veicoliService.getAll(filterCliente, searchValue || undefined);
-      setVeicoli(data);
+      const result = await veicoliService.getAllPaginated({
+        page,
+        pageSize: PAGE_SIZE,
+        idCliente: filterCliente,
+        search: searchValue || undefined,
+        attivo: !mostraDisattivati,
+      });
+      setVeicoli(result.data);
+      setTotalPages(result.pagination.totalPages);
+      setTotal(result.pagination.total);
     } catch (error) {
       console.error('Errore nel caricamento dei veicoli:', error);
     } finally {
       setLoading(false);
     }
-  }, [filterCliente, search]);
+  }, [filterCliente, search, page, mostraDisattivati]);
 
-  // BUG FIX: loadVeicoli dipende da filterCliente e search (tramite useCallback)
-  // Quando cambiano, loadVeicoli viene ricreato e questo effect si ri-esegue
+  // loadVeicoli dipende da filtri/pagina: quando cambiano l'effect si ri-esegue
   useEffect(() => {
     loadVeicoli();
   }, [loadVeicoli]);
 
   const handleSearch = useCallback((searchTerm: string) => {
+    setPage(1);
     loadVeicoli(searchTerm);
   }, [loadVeicoli]);
 
@@ -226,10 +249,32 @@ export const VeicoliPage: React.FC = () => {
     }
   };
 
+  // Soft-delete: disattiva il veicolo, scadenze e pagamenti restano
   const handleDelete = async (id: number) => {
-    if (confirm('Sei sicuro di voler eliminare questo veicolo?')) {
+    if (confirm('Disattivare questo veicolo? Scadenze e pagamenti restano archiviati e il veicolo potrà essere riattivato in seguito.')) {
       try {
         await veicoliService.delete(id);
+        loadVeicoli();
+      } catch (error) {
+        console.error('Errore nella disattivazione del veicolo:', error);
+      }
+    }
+  };
+
+  const handleRiattiva = async (id: number) => {
+    try {
+      await veicoliService.update(id, { attivo: true });
+      loadVeicoli();
+    } catch (error) {
+      console.error('Errore nella riattivazione del veicolo:', error);
+    }
+  };
+
+  // Eliminazione definitiva (solo ADMIN, dalla vista disattivati)
+  const handleHardDelete = async (id: number) => {
+    if (confirm('ATTENZIONE: eliminazione DEFINITIVA. Verranno cancellate anche tutte le scadenze e i pagamenti del veicolo. Continuare?')) {
+      try {
+        await veicoliService.delete(id, true);
         loadVeicoli();
       } catch (error) {
         console.error('Errore nell\'eliminazione del veicolo:', error);
@@ -292,6 +337,15 @@ export const VeicoliPage: React.FC = () => {
               placeholder="Filtra per cliente..."
             />
           </div>
+          <label className="flex items-center space-x-2 text-sm text-gray-700 cursor-pointer whitespace-nowrap self-center">
+            <input
+              type="checkbox"
+              checked={mostraDisattivati}
+              onChange={(e) => setMostraDisattivati(e.target.checked)}
+              className="text-blue-600 focus:ring-blue-500 rounded"
+            />
+            <span>Mostra disattivati</span>
+          </label>
         </div>
       </div>
 
@@ -360,21 +414,51 @@ export const VeicoliPage: React.FC = () => {
                     <button
                       onClick={() => handleOpenModal(veicolo)}
                       className="text-blue-600 hover:text-blue-900 mr-4"
+                      title="Modifica"
                     >
                       <Edit size={18} />
                     </button>
-                    <button
-                      onClick={() => handleDelete(veicolo.id)}
-                      className="text-red-600 hover:text-red-900"
-                    >
-                      <Trash2 size={18} />
-                    </button>
+                    {mostraDisattivati ? (
+                      <>
+                        <button
+                          onClick={() => handleRiattiva(veicolo.id)}
+                          className="text-green-600 hover:text-green-800 mr-4"
+                          title="Riattiva veicolo"
+                        >
+                          <RotateCcw size={18} />
+                        </button>
+                        {isAdmin && (
+                          <button
+                            onClick={() => handleHardDelete(veicolo.id)}
+                            className="text-red-600 hover:text-red-900"
+                            title="Elimina definitivamente (solo admin)"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        )}
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => handleDelete(veicolo.id)}
+                        className="text-orange-500 hover:text-orange-700"
+                        title="Disattiva veicolo (soft-delete)"
+                      >
+                        <XCircle size={18} />
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))
             )}
           </tbody>
         </table>
+        <Pagination
+          page={page}
+          totalPages={totalPages}
+          total={total}
+          pageSize={PAGE_SIZE}
+          onPageChange={setPage}
+        />
       </div>
 
       {/* Modal */}

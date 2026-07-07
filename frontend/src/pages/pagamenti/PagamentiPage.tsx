@@ -12,11 +12,18 @@ import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { getMeseLabel } from '../../constants/domini';
 import { useToast } from '../../context/ToastContext';
+import { Pagination } from '../../components/common/Pagination';
+
+const PAGE_SIZE = 50;
 
 export const PagamentiPage: React.FC = () => {
   const [pagamenti, setPagamenti] = useState<Pagamento[]>([]);
   const [scadenze, setScadenze] = useState<Scadenza[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [importoTotale, setImportoTotale] = useState(0);
   const [showModal, setShowModal] = useState(false);
   const [editingPagamento, setEditingPagamento] = useState<Pagamento | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -32,15 +39,20 @@ export const PagamentiPage: React.FC = () => {
 
   useEffect(() => {
     loadData();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
 
+  // Caricamento paginato server-side: la pagina non carica più tutti i pagamenti
   const loadData = async () => {
     try {
-      const [pagamentiData, scadenzeData] = await Promise.all([
-        pagamentiService.getAll(),
+      const [pagamentiResult, scadenzeData] = await Promise.all([
+        pagamentiService.getAllPaginated({ page, pageSize: PAGE_SIZE }),
         scadenzeService.getAll(StatoScadenza.DA_PAGARE),
       ]);
-      setPagamenti(pagamentiData);
+      setPagamenti(pagamentiResult.data);
+      setTotalPages(pagamentiResult.pagination.totalPages);
+      setTotalCount(pagamentiResult.pagination.totalCount);
+      setImportoTotale(pagamentiResult.summary.importoTotale);
       setScadenze(scadenzeData);
     } catch (error) {
       console.error('Errore nel caricamento dei dati:', error);
@@ -191,12 +203,12 @@ export const PagamentiPage: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white rounded-lg shadow p-6">
           <div className="text-sm font-medium text-gray-600">Totale Pagamenti</div>
-          <div className="mt-2 text-3xl font-semibold text-gray-900">{pagamenti.length}</div>
+          <div className="mt-2 text-3xl font-semibold text-gray-900">{totalCount}</div>
         </div>
         <div className="bg-white rounded-lg shadow p-6">
           <div className="text-sm font-medium text-gray-600">Importo Totale</div>
           <div className="mt-2 text-3xl font-semibold text-gray-900">
-            € {pagamenti.reduce((sum, p) => sum + Number(p.importoPagato), 0).toFixed(2)}
+            € {importoTotale.toFixed(2)}
           </div>
         </div>
         <div className="bg-white rounded-lg shadow p-6">
@@ -291,6 +303,13 @@ export const PagamentiPage: React.FC = () => {
             )}
           </tbody>
         </table>
+        <Pagination
+          page={page}
+          totalPages={totalPages}
+          total={totalCount}
+          pageSize={PAGE_SIZE}
+          onPageChange={setPage}
+        />
       </div>
 
       {/* Modal */}

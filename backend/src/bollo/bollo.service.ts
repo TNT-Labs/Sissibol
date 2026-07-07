@@ -73,25 +73,21 @@ export class BolloService {
   constructor(private prisma: PrismaService) {}
 
   /**
-   * Calcola l'importo del bollo per un veicolo
+   * Carica la configurazione tariffe per anno/regione con fallback a DEFAULT.
+   * Il parametro cache evita di ricaricare la stessa configurazione quando si
+   * calcolano molti veicoli in sequenza (report per cliente, generazione
+   * scadenze massiva).
    */
-  async calcolaBollo(
-    idVeicolo: number,
-    anno: number = new Date().getFullYear(),
-    periodicita: 'ANNUALE' | 'QUADRIMESTRALE' = 'ANNUALE',
-  ): Promise<CalcolobolloResult> {
-    // Recupera il veicolo con tutti i dati
-    const veicolo = await this.prisma.veicolo.findUnique({
-      where: { id: idVeicolo },
-      include: { cliente: true },
-    });
-
-    if (!veicolo) {
-      throw new NotFoundException(`Veicolo con ID ${idVeicolo} non trovato`);
+  private async getConfigurazioneTariffe(
+    anno: number,
+    regione: string,
+    cache?: Map<string, any>,
+  ) {
+    const cacheKey = `${anno}:${regione}`;
+    if (cache?.has(cacheKey)) {
+      return cache.get(cacheKey);
     }
 
-    // Recupera la configurazione tariffe per anno e regione
-    const regione = veicolo.regione || 'Lombardia';
     let configurazione = await this.prisma.configurazioneBollo.findFirst({
       where: {
         annoValidita: anno,
@@ -112,6 +108,37 @@ export class BolloService {
         include: { tariffe: true },
       });
     }
+
+    // Cache anche il null: evita di ritentare per ogni veicolo
+    cache?.set(cacheKey, configurazione);
+    return configurazione;
+  }
+
+  /**
+   * Calcola l'importo del bollo per un veicolo
+   *
+   * @param configCache - Cache opzionale delle configurazioni (chiave anno:regione)
+   *                      da riusare nei calcoli massivi
+   */
+  async calcolaBollo(
+    idVeicolo: number,
+    anno: number = new Date().getFullYear(),
+    periodicita: 'ANNUALE' | 'QUADRIMESTRALE' = 'ANNUALE',
+    configCache?: Map<string, any>,
+  ): Promise<CalcolobolloResult> {
+    // Recupera il veicolo con tutti i dati
+    const veicolo = await this.prisma.veicolo.findUnique({
+      where: { id: idVeicolo },
+      include: { cliente: true },
+    });
+
+    if (!veicolo) {
+      throw new NotFoundException(`Veicolo con ID ${idVeicolo} non trovato`);
+    }
+
+    // Recupera la configurazione tariffe per anno e regione (con cache)
+    const regione = veicolo.regione || 'Lombardia';
+    const configurazione = await this.getConfigurazioneTariffe(anno, regione, configCache);
 
     if (!configurazione) {
       throw new NotFoundException(
@@ -824,15 +851,17 @@ export class BolloService {
     anno: number = new Date().getFullYear(),
   ): Promise<{ veicolo: any; calcolo: CalcolobolloResult }[]> {
     const veicoli = await this.prisma.veicolo.findMany({
-      where: { idCliente },
+      where: { idCliente, attivo: true },
       include: { cliente: true },
     });
 
     const risultati: { veicolo: any; calcolo: CalcolobolloResult }[] = [];
+    // La configurazione tariffe viene caricata una volta sola per anno/regione
+    const configCache = new Map<string, any>();
 
     for (const veicolo of veicoli) {
       try {
-        const calcolo = await this.calcolaBollo(veicolo.id, anno);
+        const calcolo = await this.calcolaBollo(veicolo.id, anno, 'ANNUALE', configCache);
         risultati.push({ veicolo, calcolo });
       } catch (error) {
         risultati.push({
@@ -869,6 +898,7 @@ export class BolloService {
     });
 
     let aggiornate = 0;
+    const configCache = new Map<string, any>();
 
     for (const scadenza of scadenze) {
       try {
@@ -876,6 +906,7 @@ export class BolloService {
           idVeicolo,
           scadenza.annoScadenza,
           scadenza.periodicita as 'ANNUALE' | 'QUADRIMESTRALE',
+          configCache,
         );
 
         await this.prisma.scadenza.update({

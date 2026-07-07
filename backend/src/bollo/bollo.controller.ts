@@ -10,7 +10,14 @@ import {
 } from '@nestjs/common';
 import { BolloService } from './bollo.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 import { TariffeService } from './tariffe.service';
+import {
+  CreateConfigurazioneDto,
+  DuplicaConfigurazioneDto,
+} from './dto/configurazione.dto';
+import { CreateTariffaDto, UpdateTariffaDto } from './dto/tariffa.dto';
 
 @Controller('bollo')
 @UseGuards(JwtAuthGuard)
@@ -92,30 +99,26 @@ export class BolloController {
   }
 
   /**
-   * Crea una nuova configurazione
+   * Crea una nuova configurazione (solo ADMIN)
    * POST /bollo/configurazioni
    */
   @Post('configurazioni')
-  async createConfigurazione(
-    @Body()
-    data: {
-      annoValidita: number;
-      regione: string;
-      scontoRid?: number;
-      note?: string;
-    },
-  ) {
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN')
+  async createConfigurazione(@Body() data: CreateConfigurazioneDto) {
     return this.tariffeService.createConfigurazione(data);
   }
 
   /**
-   * Duplica una configurazione esistente per un nuovo anno
+   * Duplica una configurazione esistente per un nuovo anno (solo ADMIN)
    * POST /bollo/configurazioni/:id/duplica
    */
   @Post('configurazioni/:id/duplica')
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN')
   async duplicaConfigurazione(
     @Param('id', ParseIntPipe) id: number,
-    @Body() data: { nuovoAnno: number },
+    @Body() data: DuplicaConfigurazioneDto,
   ) {
     return this.tariffeService.duplicaConfigurazione(id, data.nuovoAnno);
   }
@@ -130,42 +133,29 @@ export class BolloController {
   }
 
   /**
-   * Aggiorna una tariffa
+   * Aggiorna una tariffa (solo ADMIN)
    * POST /bollo/tariffe/:id
    */
   @Post('tariffe/:id')
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN')
   async updateTariffa(
     @Param('id', ParseIntPipe) id: number,
-    @Body()
-    data: {
-      importoUnitario?: number;
-      importoFisso?: number;
-      descrizione?: string;
-    },
+    @Body() data: UpdateTariffaDto,
   ) {
     return this.tariffeService.updateTariffa(id, data);
   }
 
   /**
-   * Crea una nuova tariffa
+   * Crea una nuova tariffa (solo ADMIN)
    * POST /bollo/configurazioni/:id/tariffe
    */
   @Post('configurazioni/:id/tariffe')
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN')
   async createTariffa(
     @Param('id', ParseIntPipe) idConfigurazione: number,
-    @Body()
-    data: {
-      tipoVeicolo: string;
-      categoriaEuro?: string;
-      unitaMisura: string;
-      sogliaMin?: number;
-      sogliaMax?: number;
-      importoUnitario: number;
-      importoFisso?: number;
-      tipoSospensione?: string;
-      periodicita?: string;
-      descrizione?: string;
-    },
+    @Body() data: CreateTariffaDto,
   ) {
     return this.tariffeService.createTariffa(idConfigurazione, data);
   }
