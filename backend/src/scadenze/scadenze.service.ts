@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException, BadRequestException, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger, OnModuleInit } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateScadenzaDto } from './dto/create-scadenza.dto';
 import { UpdateScadenzaDto } from './dto/update-scadenza.dto';
@@ -27,13 +28,9 @@ function getMesiScadenzaQuadrimestrale(meseImmatricolazione: number): number[] {
   return mesi;
 }
 
-// Intervallo di aggiornamento automatico degli stati scaduti (6 ore)
-const AGGIORNA_SCADUTE_INTERVAL_MS = 6 * 60 * 60 * 1000;
-
 @Injectable()
-export class ScadenzeService implements OnModuleInit, OnModuleDestroy {
+export class ScadenzeService implements OnModuleInit {
   private readonly logger = new Logger(ScadenzeService.name);
-  private aggiornaScaduteTimer?: NodeJS.Timeout;
 
   constructor(
     private prisma: PrismaService,
@@ -41,23 +38,20 @@ export class ScadenzeService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   /**
-   * All'avvio (e poi ogni 6 ore) marca come SCADUTO le scadenze DA_PAGARE
-   * il cui mese/anno è passato. Sostituisce il cron job esterno mai configurato.
+   * All'avvio marca subito come SCADUTO le scadenze DA_PAGARE il cui mese/anno
+   * è passato, così lo stato è coerente senza attendere il primo cron.
    */
   async onModuleInit() {
     await this.eseguiAggiornamentoScadute();
-    this.aggiornaScaduteTimer = setInterval(
-      () => this.eseguiAggiornamentoScadute(),
-      AGGIORNA_SCADUTE_INTERVAL_MS,
-    );
-    // Non tenere vivo il processo solo per il timer
-    this.aggiornaScaduteTimer.unref?.();
   }
 
-  onModuleDestroy() {
-    if (this.aggiornaScaduteTimer) {
-      clearInterval(this.aggiornaScaduteTimer);
-    }
+  /**
+   * Ogni 6 ore ripete l'aggiornamento degli stati scaduti.
+   * Sostituisce il cron job esterno mai configurato.
+   */
+  @Cron(CronExpression.EVERY_6_HOURS)
+  async aggiornaScaduteSchedulato() {
+    await this.eseguiAggiornamentoScadute();
   }
 
   private async eseguiAggiornamentoScadute() {

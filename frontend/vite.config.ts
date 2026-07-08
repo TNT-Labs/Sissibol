@@ -10,6 +10,21 @@ export default defineConfig({
   define: {
     __BUILD_TIME__: JSON.stringify(buildTime),
   },
+  build: {
+    // exceljs/jspdf sono importati dinamicamente (solo alla generazione di
+    // un report), quindi finiscono in chunk separati e non pesano sul bundle
+    // iniziale: alziamo la soglia per non far scattare warning su di loro.
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Vendor stabile (React + router): cache di lungo periodo separata
+          // dal codice applicativo che cambia più spesso.
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+        },
+      },
+    },
+  },
   plugins: [
     react(),
     VitePWA({

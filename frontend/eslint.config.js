@@ -20,4 +20,13 @@ export default defineConfig([
       globals: globals.browser,
     },
   },
+  {
+    // I file di context co-locano legittimamente il Provider e i relativi
+    // hook (useAuth, useToast, ...): la regola react-refresh qui è un
+    // falso positivo, non un problema di correttezza.
+    files: ['src/context/**/*.{ts,tsx}'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
 ])

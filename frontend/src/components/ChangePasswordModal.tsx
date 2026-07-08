@@ -51,8 +51,9 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen
           : 'La password è stata cambiata con successo.',
       );
       handleClose();
-    } catch (error: any) {
-      const message = error?.response?.status === 401
+    } catch (error: unknown) {
+      const status = (error as { response?: { status?: number } })?.response?.status;
+      const message = status === 401
         ? 'La password attuale non è corretta.'
         : 'Impossibile cambiare la password. Riprova.';
       toast.error('Errore', message);

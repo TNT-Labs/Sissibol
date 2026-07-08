@@ -5,6 +5,7 @@ import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { SearchableSelect } from '../../components/common/SearchableSelect';
 import { Settings, Plus, Copy, ChevronDown, ChevronRight, Edit2, Check, X } from 'lucide-react';
+import { getErrorMessage } from '../../utils/errors';
 
 export const TariffePage: React.FC = () => {
   const [configurazioni, setConfigurazioni] = useState<ConfigurazioneBollo[]>([]);
@@ -30,8 +31,10 @@ export const TariffePage: React.FC = () => {
   const [showDuplicaModal, setShowDuplicaModal] = useState(false);
   const [duplicaAnno, setDuplicaAnno] = useState(new Date().getFullYear() + 1);
 
+  // Caricamento iniziale delle configurazioni (solo al mount).
   useEffect(() => {
     loadConfigurazioni();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadConfigurazioni = async () => {
@@ -77,8 +80,8 @@ export const TariffePage: React.FC = () => {
       setConfigurazioni([newConfig, ...configurazioni]);
       setShowNewConfigModal(false);
       handleSelectConfig(newConfig);
-    } catch (error: any) {
-      alert(error.response?.data?.message || 'Errore nella creazione della configurazione');
+    } catch (error: unknown) {
+      alert(getErrorMessage(error, 'Errore nella creazione della configurazione'));
     }
   };
 
@@ -89,8 +92,8 @@ export const TariffePage: React.FC = () => {
       await loadConfigurazioni();
       handleSelectConfig(newConfig);
       setShowDuplicaModal(false);
-    } catch (error: any) {
-      alert(error.response?.data?.message || 'Errore nella duplicazione della configurazione');
+    } catch (error: unknown) {
+      alert(getErrorMessage(error, 'Errore nella duplicazione della configurazione'));
     }
   };
 

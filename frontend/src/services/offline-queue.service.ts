@@ -137,7 +137,11 @@ class OfflineQueueService {
     if ('serviceWorker' in navigator && 'sync' in ServiceWorkerRegistration.prototype) {
       try {
         const registration = await navigator.serviceWorker.ready;
-        await (registration as any).sync.register('sync-pending-requests');
+        // La Background Sync API non è ancora nei tipi standard del DOM
+        const syncRegistration = registration as ServiceWorkerRegistration & {
+          sync: { register: (tag: string) => Promise<void> };
+        };
+        await syncRegistration.sync.register('sync-pending-requests');
       } catch (error) {
         console.warn('Background Sync non disponibile:', error);
       }

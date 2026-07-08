@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Input } from '../../components/common/Input';
 import { Button } from '../../components/common/Button';
+import { getErrorMessage } from '../../utils/errors';
 
 export const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -20,8 +21,8 @@ export const LoginPage: React.FC = () => {
     try {
       await login(email, password);
       navigate('/dashboard');
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Errore durante il login');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Errore durante il login'));
     } finally {
       setLoading(false);
     }
