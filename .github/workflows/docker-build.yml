@@ -1,4 +1,4 @@
-name: Docker Build and Test
+name: CI
 
 on:
   push:
@@ -7,8 +7,41 @@ on:
     branches: [ main, develop ]
 
 jobs:
+  # Controlli veloci senza Docker: lint, typecheck, build e test unitari.
+  code-quality:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Generate Prisma client
+      run: npm run prisma:generate --workspace=backend
+
+    - name: Build backend
+      run: npm run build --workspace=backend
+
+    - name: Test backend
+      run: npm test --workspace=backend
+
+    - name: Lint frontend
+      run: npm run lint --workspace=frontend
+
+    - name: Build frontend (typecheck + bundle)
+      run: npm run build --workspace=frontend
+
   build-and-test:
     runs-on: ubuntu-latest
+    needs: code-quality
 
     steps:
     - name: Checkout code
@@ -55,12 +88,11 @@ jobs:
     - name: Check services health
       run: |
         docker-compose ps
-        curl -f http://localhost:3000/auth/login || exit 1
+        # /auth/login accetta solo POST: un 401/400 conferma comunque che il
+        # backend risponde (200-499 = servizio raggiungibile).
+        curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:3000/auth/login \
+          -H "Content-Type: application/json" -d '{}' | grep -qE '^[24]' || exit 1
         curl -f http://localhost/ || exit 1
-
-    - name: Run backend tests
-      run: |
-        docker-compose exec -T backend npm test || echo "No tests configured"
 
     - name: Show logs on failure
       if: failure()

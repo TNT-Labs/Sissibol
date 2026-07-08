@@ -1,7 +1,11 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { SchedulerRegistry } from '@nestjs/schedule';
+import { CronJob } from 'cron';
 import * as nodemailer from 'nodemailer';
 import { PrismaService } from '../prisma/prisma.service';
 import { ScadenzeService } from './scadenze.service';
+
+const NOTIFICHE_CRON_JOB = 'notifiche-riepilogo-giornaliero';
 
 /**
  * Notifiche email per le scadenze imminenti.
@@ -17,12 +21,11 @@ import { ScadenzeService } from './scadenze.service';
 export class NotificheService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(NotificheService.name);
   private transporter: nodemailer.Transporter | null = null;
-  private startTimer?: NodeJS.Timeout;
-  private dailyTimer?: NodeJS.Timeout;
 
   constructor(
     private prisma: PrismaService,
     private scadenzeService: ScadenzeService,
+    private schedulerRegistry: SchedulerRegistry,
   ) {}
 
   onModuleInit() {
@@ -41,40 +44,33 @@ export class NotificheService implements OnModuleInit, OnModuleDestroy {
         : undefined,
     });
 
-    // Pianifica l'invio giornaliero all'ora configurata
-    const [ora, minuti] = (process.env.NOTIFICHE_ORA || '07:00')
-      .split(':')
-      .map((v) => parseInt(v, 10));
-    const delay = this.msAllaProssimaOccorrenza(
-      Number.isFinite(ora) ? ora : 7,
-      Number.isFinite(minuti) ? minuti : 0,
-    );
+    // Pianifica l'invio giornaliero all'ora configurata (NOTIFICHE_ORA)
+    const { ora, minuti } = this.parseOra(process.env.NOTIFICHE_ORA);
+    const cronExpression = `${minuti} ${ora} * * *`;
+
+    const job = new CronJob(cronExpression, () => {
+      void this.inviaRiepilogo();
+    });
+    this.schedulerRegistry.addCronJob(NOTIFICHE_CRON_JOB, job);
+    job.start();
 
     this.logger.log(
-      `Notifiche email attive: prossimo invio tra ${Math.round(delay / 60000)} minuti`,
+      `Notifiche email attive: invio giornaliero pianificato alle ${String(ora).padStart(2, '0')}:${String(minuti).padStart(2, '0')}`,
     );
-
-    this.startTimer = setTimeout(() => {
-      void this.inviaRiepilogo();
-      this.dailyTimer = setInterval(() => void this.inviaRiepilogo(), 24 * 60 * 60 * 1000);
-      this.dailyTimer.unref?.();
-    }, delay);
-    this.startTimer.unref?.();
   }
 
   onModuleDestroy() {
-    if (this.startTimer) clearTimeout(this.startTimer);
-    if (this.dailyTimer) clearInterval(this.dailyTimer);
+    if (this.schedulerRegistry.doesExist('cron', NOTIFICHE_CRON_JOB)) {
+      this.schedulerRegistry.deleteCronJob(NOTIFICHE_CRON_JOB);
+    }
   }
 
-  private msAllaProssimaOccorrenza(ora: number, minuti: number): number {
-    const now = new Date();
-    const next = new Date(now);
-    next.setHours(ora, minuti, 0, 0);
-    if (next.getTime() <= now.getTime()) {
-      next.setDate(next.getDate() + 1);
-    }
-    return next.getTime() - now.getTime();
+  /** Interpreta la variabile NOTIFICHE_ORA (formato HH:MM), con fallback 07:00. */
+  private parseOra(valore?: string): { ora: number; minuti: number } {
+    const [oraRaw, minutiRaw] = (valore || '07:00').split(':').map((v) => parseInt(v, 10));
+    const ora = Number.isFinite(oraRaw) && oraRaw >= 0 && oraRaw <= 23 ? oraRaw : 7;
+    const minuti = Number.isFinite(minutiRaw) && minutiRaw >= 0 && minutiRaw <= 59 ? minutiRaw : 0;
+    return { ora, minuti };
   }
 
   private async getDestinatari(): Promise<string[]> {

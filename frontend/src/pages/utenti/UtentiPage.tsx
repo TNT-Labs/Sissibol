@@ -9,6 +9,7 @@ import { Input } from '../../components/common/Input';
 import { SearchableSelect } from '../../components/common/SearchableSelect';
 import type { SelectOption } from '../../components/common/SearchableSelect';
 import { Plus, X, Edit, Trash2, Shield, User } from 'lucide-react';
+import { getErrorMessage } from '../../utils/errors';
 
 // Opzioni per il ruolo
 const RUOLO_OPTIONS: SelectOption[] = [
@@ -106,10 +107,9 @@ export const UtentiPage: React.FC = () => {
       }
       handleCloseModal();
       loadUtenti();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Errore nel salvataggio dell\'utente:', error);
-      const errorMessage = error.response?.data?.message || 'Errore nel salvataggio dell\'utente';
-      setError(Array.isArray(errorMessage) ? errorMessage.join(', ') : errorMessage);
+      setError(getErrorMessage(error, 'Errore nel salvataggio dell\'utente'));
     }
   };
 
@@ -123,10 +123,9 @@ export const UtentiPage: React.FC = () => {
       try {
         await utentiService.delete(id);
         loadUtenti();
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('Errore nell\'eliminazione dell\'utente:', error);
-        const errorMessage = error.response?.data?.message || 'Errore nell\'eliminazione dell\'utente';
-        alert(errorMessage);
+        alert(getErrorMessage(error, 'Errore nell\'eliminazione dell\'utente'));
       }
     }
   };

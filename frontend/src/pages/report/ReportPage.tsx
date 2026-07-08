@@ -11,9 +11,6 @@ import type { SelectOption } from '../../components/common/SearchableSelect';
 import { FileText, Download, FileSpreadsheet } from 'lucide-react';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx';
 import { getMeseLabel } from '../../constants/domini';
 
 // Opzioni per filtro stato
@@ -29,6 +26,64 @@ type ReportType = 'scadenze' | 'pagamenti' | 'clienti';
 // Soglia per attivare il chunking (numero di record)
 const CHUNK_THRESHOLD = 500;
 
+// jsPDF con l'augmentation di jspdf-autotable per leggere la posizione finale
+type AutoTableDoc = { lastAutoTable?: { finalY: number } };
+
+// Definizione colonna per l'export Excel
+interface ExcelColumn {
+  header: string;
+  key: string;
+  width?: number;
+}
+
+/**
+ * Carica jsPDF e il plugin autoTable solo quando servono (lazy import).
+ * Evita di includere ~250 kB di librerie nel bundle iniziale della pagina.
+ */
+async function loadPdf() {
+  const [{ default: JsPDF }, { default: autoTable }] = await Promise.all([
+    import('jspdf'),
+    import('jspdf-autotable'),
+  ]);
+  return { JsPDF, autoTable };
+}
+
+/** Avvia il download di un Blob generato lato client. */
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Costruisce e scarica un file .xlsx con ExcelJS (lazy import).
+ * Sostituisce la libreria `xlsx`, affetta da vulnerabilità critiche senza fix.
+ */
+async function buildAndDownloadExcel(
+  sheetName: string,
+  columns: ExcelColumn[],
+  rows: Record<string, unknown>[],
+  filename: string,
+) {
+  const ExcelJS = (await import('exceljs')).default;
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet(sheetName);
+  worksheet.columns = columns;
+  worksheet.getRow(1).font = { bold: true };
+  worksheet.addRows(rows);
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  downloadBlob(blob, filename);
+}
+
 export const ReportPage: React.FC = () => {
   const [reportType, setReportType] = useState<ReportType>('scadenze');
   const [filterCliente, setFilterCliente] = useState<number | undefined>();
@@ -39,18 +94,76 @@ export const ReportPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
 
-  React.useEffect(() => {
-    loadClienti();
-  }, []);
-
-  const loadClienti = async () => {
+  const loadClienti = useCallback(async () => {
     try {
       const data = await clientiService.getAll();
       setClienti(data);
     } catch (error) {
       console.error('Errore nel caricamento dei clienti:', error);
     }
-  };
+  }, []);
+
+  React.useEffect(() => {
+    loadClienti();
+  }, [loadClienti]);
+
+  /**
+   * Genera il PDF dalle scadenze già caricate in memoria.
+   */
+  const generateScadenzePDFFromData = useCallback(
+    async (scadenze: Scadenza[], totalImporto: number) => {
+      const { JsPDF, autoTable } = await loadPdf();
+      const doc = new JsPDF();
+
+      // Titolo
+      doc.setFontSize(18);
+      doc.text('Report Scadenze Bolli', 14, 20);
+
+      // Filtri applicati
+      doc.setFontSize(10);
+      let yPos = 30;
+      doc.text(`Data generazione: ${format(new Date(), 'dd/MM/yyyy HH:mm', { locale: it })}`, 14, yPos);
+      yPos += 6;
+
+      if (filterStato) {
+        doc.text(`Stato: ${filterStato.replace('_', ' ')}`, 14, yPos);
+        yPos += 6;
+      }
+      if (filterCliente) {
+        const cliente = clienti.find((c) => c.id === filterCliente);
+        if (cliente) {
+          doc.text(`Cliente: ${getClienteDisplayName(cliente)}`, 14, yPos);
+          yPos += 6;
+        }
+      }
+
+      // Tabella scadenze
+      const tableData = scadenze.map((s) => [
+        `${getMeseLabel(s.meseScadenza)} ${s.annoScadenza}`,
+        s.veicolo?.cliente ? getClienteDisplayName(s.veicolo.cliente) : '-',
+        s.veicolo?.targa || '-',
+        s.importoPrevisto ? `€ ${s.importoPrevisto}` : '-',
+        s.stato.replace('_', ' '),
+      ]);
+
+      autoTable(doc, {
+        head: [['Scadenza', 'Cliente', 'Veicolo', 'Importo', 'Stato']],
+        body: tableData,
+        startY: yPos + 5,
+        styles: { fontSize: 9 },
+        headStyles: { fillColor: [37, 99, 235] },
+      });
+
+      // Totali
+      const finalY = (doc as unknown as AutoTableDoc).lastAutoTable?.finalY ?? yPos + 10;
+      doc.setFontSize(10);
+      doc.text(`Totale scadenze: ${scadenze.length}`, 14, finalY + 10);
+      doc.text(`Importo totale: € ${totalImporto.toFixed(2)}`, 14, finalY + 16);
+
+      doc.save(`report-scadenze-${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+    },
+    [filterStato, filterCliente, clienti],
+  );
 
   /**
    * Genera report PDF scadenze con chunking per grandi dataset.
@@ -72,7 +185,7 @@ export const ReportPage: React.FC = () => {
           (sum, s) => sum + (s.importoPrevisto ? Number(s.importoPrevisto) : 0),
           0,
         );
-        generateScadenzePDFFromData(scadenze, totale);
+        await generateScadenzePDFFromData(scadenze, totale);
         return;
       }
 
@@ -97,7 +210,7 @@ export const ReportPage: React.FC = () => {
         0,
       );
 
-      generateScadenzePDFFromData(allScadenze, totalImporto);
+      await generateScadenzePDFFromData(allScadenze, totalImporto);
     } catch (error) {
       console.error('Errore nella generazione del PDF:', error);
       alert('Errore nella generazione del report PDF');
@@ -105,61 +218,58 @@ export const ReportPage: React.FC = () => {
       setLoading(false);
       setProgress(null);
     }
-  }, [filterStato, filterCliente, clienti]);
+  }, [filterStato, filterCliente, generateScadenzePDFFromData]);
 
   /**
-   * Genera il PDF dalle scadenze già caricate in memoria.
+   * Genera il PDF dai pagamenti già caricati in memoria.
    */
-  const generateScadenzePDFFromData = (scadenze: Scadenza[], totalImporto: number) => {
-    const doc = new jsPDF();
+  const generatePagamentiPDFFromData = useCallback(
+    async (pagamenti: Pagamento[], totalImporto: number) => {
+      const { JsPDF, autoTable } = await loadPdf();
+      const doc = new JsPDF();
 
-    // Titolo
-    doc.setFontSize(18);
-    doc.text('Report Scadenze Bolli', 14, 20);
+      doc.setFontSize(18);
+      doc.text('Report Pagamenti', 14, 20);
 
-    // Filtri applicati
-    doc.setFontSize(10);
-    let yPos = 30;
-    doc.text(`Data generazione: ${format(new Date(), 'dd/MM/yyyy HH:mm', { locale: it })}`, 14, yPos);
-    yPos += 6;
-
-    if (filterStato) {
-      doc.text(`Stato: ${filterStato.replace('_', ' ')}`, 14, yPos);
+      doc.setFontSize(10);
+      let yPos = 30;
+      doc.text(`Data generazione: ${format(new Date(), 'dd/MM/yyyy HH:mm', { locale: it })}`, 14, yPos);
       yPos += 6;
-    }
-    if (filterCliente) {
-      const cliente = clienti.find((c) => c.id === filterCliente);
-      if (cliente) {
-        doc.text(`Cliente: ${getClienteDisplayName(cliente)}`, 14, yPos);
+
+      if (dateFrom) {
+        doc.text(`Dal: ${format(new Date(dateFrom), 'dd/MM/yyyy')}`, 14, yPos);
         yPos += 6;
       }
-    }
+      if (dateTo) {
+        doc.text(`Al: ${format(new Date(dateTo), 'dd/MM/yyyy')}`, 14, yPos);
+        yPos += 6;
+      }
 
-    // Tabella scadenze
-    const tableData = scadenze.map((s) => [
-      `${getMeseLabel(s.meseScadenza)} ${s.annoScadenza}`,
-      s.veicolo?.cliente ? getClienteDisplayName(s.veicolo.cliente) : '-',
-      s.veicolo?.targa || '-',
-      s.importoPrevisto ? `€ ${s.importoPrevisto}` : '-',
-      s.stato.replace('_', ' '),
-    ]);
+      const tableData = pagamenti.map((p) => [
+        format(new Date(p.dataPagamento), 'dd/MM/yyyy'),
+        p.scadenza?.veicolo?.cliente ? getClienteDisplayName(p.scadenza.veicolo.cliente) : '-',
+        p.scadenza?.veicolo?.targa || '-',
+        `€ ${Number(p.importoPagato).toFixed(2)}`,
+        p.metodoPagamento || '-',
+      ]);
 
-    autoTable(doc, {
-      head: [['Scadenza', 'Cliente', 'Veicolo', 'Importo', 'Stato']],
-      body: tableData,
-      startY: yPos + 5,
-      styles: { fontSize: 9 },
-      headStyles: { fillColor: [37, 99, 235] },
-    });
+      autoTable(doc, {
+        head: [['Data Pagamento', 'Cliente', 'Veicolo', 'Importo', 'Metodo']],
+        body: tableData,
+        startY: yPos + 5,
+        styles: { fontSize: 9 },
+        headStyles: { fillColor: [37, 99, 235] },
+      });
 
-    // Totali
-    const finalY = (doc as any).lastAutoTable.finalY || yPos + 10;
-    doc.setFontSize(10);
-    doc.text(`Totale scadenze: ${scadenze.length}`, 14, finalY + 10);
-    doc.text(`Importo totale: € ${totalImporto.toFixed(2)}`, 14, finalY + 16);
+      const finalY = (doc as unknown as AutoTableDoc).lastAutoTable?.finalY ?? yPos + 10;
+      doc.setFontSize(10);
+      doc.text(`Totale pagamenti: ${pagamenti.length}`, 14, finalY + 10);
+      doc.text(`Importo totale: € ${totalImporto.toFixed(2)}`, 14, finalY + 16);
 
-    doc.save(`report-scadenze-${format(new Date(), 'yyyy-MM-dd')}.pdf`);
-  };
+      doc.save(`report-pagamenti-${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+    },
+    [dateFrom, dateTo],
+  );
 
   /**
    * Genera report PDF pagamenti con chunking per grandi dataset.
@@ -171,7 +281,6 @@ export const ReportPage: React.FC = () => {
     try {
       // Per grandi dataset, usa chunking con filtri lato server
       const allPagamenti: Pagamento[] = [];
-      let totalImporto = 0;
 
       const result = await pagamentiService.iterateAll(
         {
@@ -185,9 +294,7 @@ export const ReportPage: React.FC = () => {
         CHUNK_THRESHOLD,
       );
 
-      totalImporto = result.importoTotale;
-
-      generatePagamentiPDFFromData(allPagamenti, totalImporto);
+      await generatePagamentiPDFFromData(allPagamenti, result.importoTotale);
     } catch (error) {
       console.error('Errore nella generazione del PDF:', error);
       alert('Errore nella generazione del report PDF');
@@ -195,61 +302,15 @@ export const ReportPage: React.FC = () => {
       setLoading(false);
       setProgress(null);
     }
-  }, [dateFrom, dateTo]);
-
-  /**
-   * Genera il PDF dai pagamenti già caricati in memoria.
-   */
-  const generatePagamentiPDFFromData = (pagamenti: Pagamento[], totalImporto: number) => {
-    const doc = new jsPDF();
-
-    doc.setFontSize(18);
-    doc.text('Report Pagamenti', 14, 20);
-
-    doc.setFontSize(10);
-    let yPos = 30;
-    doc.text(`Data generazione: ${format(new Date(), 'dd/MM/yyyy HH:mm', { locale: it })}`, 14, yPos);
-    yPos += 6;
-
-    if (dateFrom) {
-      doc.text(`Dal: ${format(new Date(dateFrom), 'dd/MM/yyyy')}`, 14, yPos);
-      yPos += 6;
-    }
-    if (dateTo) {
-      doc.text(`Al: ${format(new Date(dateTo), 'dd/MM/yyyy')}`, 14, yPos);
-      yPos += 6;
-    }
-
-    const tableData = pagamenti.map((p) => [
-      format(new Date(p.dataPagamento), 'dd/MM/yyyy'),
-      p.scadenza?.veicolo?.cliente ? getClienteDisplayName(p.scadenza.veicolo.cliente) : '-',
-      p.scadenza?.veicolo?.targa || '-',
-      `€ ${Number(p.importoPagato).toFixed(2)}`,
-      p.metodoPagamento || '-',
-    ]);
-
-    autoTable(doc, {
-      head: [['Data Pagamento', 'Cliente', 'Veicolo', 'Importo', 'Metodo']],
-      body: tableData,
-      startY: yPos + 5,
-      styles: { fontSize: 9 },
-      headStyles: { fillColor: [37, 99, 235] },
-    });
-
-    const finalY = (doc as any).lastAutoTable.finalY || yPos + 10;
-    doc.setFontSize(10);
-    doc.text(`Totale pagamenti: ${pagamenti.length}`, 14, finalY + 10);
-    doc.text(`Importo totale: € ${totalImporto.toFixed(2)}`, 14, finalY + 16);
-
-    doc.save(`report-pagamenti-${format(new Date(), 'yyyy-MM-dd')}.pdf`);
-  };
+  }, [dateFrom, dateTo, generatePagamentiPDFFromData]);
 
   const generateClientiPDF = async () => {
     setLoading(true);
     try {
       const clientiData = await clientiService.getAll();
 
-      const doc = new jsPDF();
+      const { JsPDF, autoTable } = await loadPdf();
+      const doc = new JsPDF();
 
       doc.setFontSize(18);
       doc.text('Report Clienti', 14, 20);
@@ -277,7 +338,7 @@ export const ReportPage: React.FC = () => {
         headStyles: { fillColor: [37, 99, 235] },
       });
 
-      const finalY = (doc as any).lastAutoTable.finalY || 50;
+      const finalY = (doc as unknown as AutoTableDoc).lastAutoTable?.finalY ?? 50;
       doc.setFontSize(10);
       doc.text(`Totale clienti: ${clientiData.length}`, 14, finalY + 10);
 
@@ -292,62 +353,57 @@ export const ReportPage: React.FC = () => {
 
   /**
    * Genera report Excel scadenze con chunking per grandi dataset.
-   * Usa XLSX.utils.sheet_add_json per appendere righe incrementalmente.
+   * Accumula le righe dai chunk e le scrive in un unico foglio con ExcelJS.
    */
   const generateScadenzeExcel = useCallback(async () => {
     setLoading(true);
     setProgress(null);
 
-    try {
-      // Prima ottieni le statistiche per sapere la dimensione totale
-      const stats = await scadenzeService.getStats(filterCliente);
+    const mapRow = (s: Scadenza) => ({
+      scadenza: `${getMeseLabel(s.meseScadenza)} ${s.annoScadenza}`,
+      cliente: s.veicolo?.cliente ? getClienteDisplayName(s.veicolo.cliente) : '-',
+      veicolo: s.veicolo?.targa || '-',
+      tipoVeicolo: s.veicolo?.tipoVeicolo || '-',
+      importoPrevisto: s.importoPrevisto ? Number(s.importoPrevisto) : 0,
+      stato: s.stato.replace('_', ' '),
+    });
 
-      // Se il dataset è piccolo, usa il metodo tradizionale
+    const columns: ExcelColumn[] = [
+      { header: 'Scadenza', key: 'scadenza', width: 18 },
+      { header: 'Cliente', key: 'cliente', width: 30 },
+      { header: 'Veicolo', key: 'veicolo', width: 14 },
+      { header: 'Tipo Veicolo', key: 'tipoVeicolo', width: 20 },
+      { header: 'Importo Previsto', key: 'importoPrevisto', width: 16 },
+      { header: 'Stato', key: 'stato', width: 14 },
+    ];
+
+    try {
+      const stats = await scadenzeService.getStats(filterCliente);
+      const rows: Record<string, unknown>[] = [];
+
       if (stats.totale <= CHUNK_THRESHOLD) {
         const scadenze = await scadenzeService.getAll(filterStato || undefined, filterCliente);
-        generateScadenzeExcelFromData(scadenze);
-        return;
+        rows.push(...scadenze.map(mapRow));
+      } else {
+        await scadenzeService.iterateAll(
+          {
+            stato: filterStato || undefined,
+            idCliente: filterCliente,
+          },
+          (chunk, progressInfo) => {
+            rows.push(...chunk.map(mapRow));
+            setProgress(progressInfo);
+          },
+          CHUNK_THRESHOLD,
+        );
       }
 
-      // Per grandi dataset, costruisci il foglio incrementalmente
-      const wb = XLSX.utils.book_new();
-      let ws: XLSX.WorkSheet | null = null;
-      let rowOffset = 0;
-
-      await scadenzeService.iterateAll(
-        {
-          stato: filterStato || undefined,
-          idCliente: filterCliente,
-        },
-        (chunk, progressInfo) => {
-          const data = chunk.map((s) => ({
-            'Scadenza': `${getMeseLabel(s.meseScadenza)} ${s.annoScadenza}`,
-            Cliente: s.veicolo?.cliente ? getClienteDisplayName(s.veicolo.cliente) : '-',
-            Veicolo: s.veicolo?.targa || '-',
-            'Tipo Veicolo': s.veicolo?.tipoVeicolo || '-',
-            'Importo Previsto': s.importoPrevisto || 0,
-            Stato: s.stato.replace('_', ' '),
-          }));
-
-          if (!ws) {
-            // Prima pagina: crea il foglio con header
-            ws = XLSX.utils.json_to_sheet(data);
-            rowOffset = data.length + 1; // +1 per header
-          } else {
-            // Pagine successive: appendi senza header
-            XLSX.utils.sheet_add_json(ws, data, { skipHeader: true, origin: rowOffset });
-            rowOffset += data.length;
-          }
-
-          setProgress(progressInfo);
-        },
-        CHUNK_THRESHOLD,
+      await buildAndDownloadExcel(
+        'Scadenze',
+        columns,
+        rows,
+        `report-scadenze-${format(new Date(), 'yyyy-MM-dd')}.xlsx`,
       );
-
-      if (ws) {
-        XLSX.utils.book_append_sheet(wb, ws, 'Scadenze');
-        XLSX.writeFile(wb, `report-scadenze-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
-      }
     } catch (error) {
       console.error('Errore nella generazione Excel:', error);
       alert('Errore nella generazione del report Excel');
@@ -358,36 +414,22 @@ export const ReportPage: React.FC = () => {
   }, [filterStato, filterCliente]);
 
   /**
-   * Genera Excel dalle scadenze già caricate (per piccoli dataset).
-   */
-  const generateScadenzeExcelFromData = (scadenze: Scadenza[]) => {
-    const data = scadenze.map((s) => ({
-      'Scadenza': `${getMeseLabel(s.meseScadenza)} ${s.annoScadenza}`,
-      Cliente: s.veicolo?.cliente ? getClienteDisplayName(s.veicolo.cliente) : '-',
-      Veicolo: s.veicolo?.targa || '-',
-      'Tipo Veicolo': s.veicolo?.tipoVeicolo || '-',
-      'Importo Previsto': s.importoPrevisto || 0,
-      Stato: s.stato.replace('_', ' '),
-    }));
-
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Scadenze');
-
-    XLSX.writeFile(wb, `report-scadenze-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
-  };
-
-  /**
    * Genera report Excel pagamenti con chunking per grandi dataset.
    */
   const generatePagamentiExcel = useCallback(async () => {
     setLoading(true);
     setProgress(null);
 
+    const columns: ExcelColumn[] = [
+      { header: 'Data Pagamento', key: 'dataPagamento', width: 16 },
+      { header: 'Cliente', key: 'cliente', width: 30 },
+      { header: 'Veicolo', key: 'veicolo', width: 14 },
+      { header: 'Importo Pagato', key: 'importoPagato', width: 16 },
+      { header: 'Metodo Pagamento', key: 'metodoPagamento', width: 20 },
+    ];
+
     try {
-      const wb = XLSX.utils.book_new();
-      let ws: XLSX.WorkSheet | null = null;
-      let rowOffset = 0;
+      const rows: Record<string, unknown>[] = [];
 
       await pagamentiService.iterateAll(
         {
@@ -395,31 +437,28 @@ export const ReportPage: React.FC = () => {
           dateTo: dateTo || undefined,
         },
         (chunk, progressInfo) => {
-          const data = chunk.map((p) => ({
-            'Data Pagamento': format(new Date(p.dataPagamento), 'dd/MM/yyyy'),
-            Cliente: p.scadenza?.veicolo?.cliente ? getClienteDisplayName(p.scadenza.veicolo.cliente) : '-',
-            Veicolo: p.scadenza?.veicolo?.targa || '-',
-            'Importo Pagato': Number(p.importoPagato),
-            'Metodo Pagamento': p.metodoPagamento || '-',
-          }));
-
-          if (!ws) {
-            ws = XLSX.utils.json_to_sheet(data);
-            rowOffset = data.length + 1;
-          } else {
-            XLSX.utils.sheet_add_json(ws, data, { skipHeader: true, origin: rowOffset });
-            rowOffset += data.length;
-          }
-
+          rows.push(
+            ...chunk.map((p) => ({
+              dataPagamento: format(new Date(p.dataPagamento), 'dd/MM/yyyy'),
+              cliente: p.scadenza?.veicolo?.cliente
+                ? getClienteDisplayName(p.scadenza.veicolo.cliente)
+                : '-',
+              veicolo: p.scadenza?.veicolo?.targa || '-',
+              importoPagato: Number(p.importoPagato),
+              metodoPagamento: p.metodoPagamento || '-',
+            })),
+          );
           setProgress(progressInfo);
         },
         CHUNK_THRESHOLD,
       );
 
-      if (ws) {
-        XLSX.utils.book_append_sheet(wb, ws, 'Pagamenti');
-        XLSX.writeFile(wb, `report-pagamenti-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
-      }
+      await buildAndDownloadExcel(
+        'Pagamenti',
+        columns,
+        rows,
+        `report-pagamenti-${format(new Date(), 'yyyy-MM-dd')}.xlsx`,
+      );
     } catch (error) {
       console.error('Errore nella generazione Excel:', error);
       alert('Errore nella generazione del report Excel');
@@ -434,20 +473,30 @@ export const ReportPage: React.FC = () => {
     try {
       const clientiData = await clientiService.getAll();
 
-      const data = clientiData.map((c) => ({
-        'Nome/Ragione Sociale': getClienteDisplayName(c),
-        'P.IVA/C.F.': c.partitaIva || c.codiceFiscale || '-',
-        Indirizzo: c.indirizzo || '-',
-        Email: c.email || '-',
-        Telefono: c.telefono || '-',
-        'Numero Veicoli': c.veicoli?.length || 0,
+      const columns: ExcelColumn[] = [
+        { header: 'Nome/Ragione Sociale', key: 'nome', width: 30 },
+        { header: 'P.IVA/C.F.', key: 'piva', width: 20 },
+        { header: 'Indirizzo', key: 'indirizzo', width: 30 },
+        { header: 'Email', key: 'email', width: 26 },
+        { header: 'Telefono', key: 'telefono', width: 16 },
+        { header: 'Numero Veicoli', key: 'numeroVeicoli', width: 14 },
+      ];
+
+      const rows = clientiData.map((c) => ({
+        nome: getClienteDisplayName(c),
+        piva: c.partitaIva || c.codiceFiscale || '-',
+        indirizzo: c.indirizzo || '-',
+        email: c.email || '-',
+        telefono: c.telefono || '-',
+        numeroVeicoli: c.veicoli?.length || 0,
       }));
 
-      const ws = XLSX.utils.json_to_sheet(data);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Clienti');
-
-      XLSX.writeFile(wb, `report-clienti-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+      await buildAndDownloadExcel(
+        'Clienti',
+        columns,
+        rows,
+        `report-clienti-${format(new Date(), 'yyyy-MM-dd')}.xlsx`,
+      );
     } catch (error) {
       console.error('Errore nella generazione Excel:', error);
       alert('Errore nella generazione del report Excel');

@@ -2,8 +2,9 @@ import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { scadenzeService } from '../../services/scadenze.service';
 import { veicoliService } from '../../services/veicoli.service';
 import { pagamentiService } from '../../services/pagamenti.service';
-import { StatoScadenza, Periodicita, getClienteDisplayName } from '../../types';
+import { StatoScadenza, Periodicita, TipoCliente, getClienteDisplayName } from '../../types';
 import type { Scadenza, Cliente, Veicolo } from '../../types';
+import { getErrorMessage } from '../../utils/errors';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { SearchableSelect } from '../../components/common/SearchableSelect';
@@ -109,26 +110,16 @@ export const ScadenzePage: React.FC = () => {
     stato: StatoScadenza.DA_PAGARE,
   });
 
-  // Carica veicoli una volta sola (per il modal)
-  useEffect(() => {
-    loadVeicoli();
-  }, []);
-
-  // Ricarica scadenze quando cambia mese/anno
-  useEffect(() => {
-    loadScadenze();
-  }, [meseSelezionato, annoSelezionato]);
-
-  const loadVeicoli = async () => {
+  const loadVeicoli = useCallback(async () => {
     try {
       const veicoliData = await veicoliService.getAll();
       setVeicoli(veicoliData);
     } catch (error) {
       console.error('Errore nel caricamento dei veicoli:', error);
     }
-  };
+  }, []);
 
-  const loadScadenze = async () => {
+  const loadScadenze = useCallback(async () => {
     setLoading(true);
     try {
       // Carica solo le scadenze del mese/anno selezionato (ottimizzato)
@@ -139,7 +130,17 @@ export const ScadenzePage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [meseSelezionato, annoSelezionato]);
+
+  // Carica veicoli una volta sola (per il modal)
+  useEffect(() => {
+    loadVeicoli();
+  }, [loadVeicoli]);
+
+  // Ricarica scadenze quando cambia mese/anno
+  useEffect(() => {
+    loadScadenze();
+  }, [loadScadenze]);
 
   // Raggruppa scadenze per cliente (già filtrate dal server)
   const clientiConScadenze = useMemo((): ClienteConScadenze[] => {
@@ -154,7 +155,7 @@ export const ScadenzePage: React.FC = () => {
         clienteMap.set(effectiveClienteId, {
           cliente: scadenza.veicolo?.cliente || {
             id: -1,
-            tipoCliente: 'PERSONA_GIURIDICA' as any,
+            tipoCliente: TipoCliente.PERSONA_GIURIDICA,
             ragioneSociale: 'Cliente non associato',
           } as Cliente,
           scadenze: [],
@@ -267,13 +268,13 @@ export const ScadenzePage: React.FC = () => {
       setGeneraResult(result);
       // Ricarica le scadenze dopo la generazione
       loadScadenze();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Errore nella generazione delle scadenze:', error);
       setGeneraResult({
         veicoliProcessati: 0,
         scadenzeCreate: 0,
         scadenzeSaltate: 0,
-        errori: [error.message || 'Errore sconosciuto'],
+        errori: [getErrorMessage(error, 'Errore sconosciuto')],
       });
     } finally {
       setGeneraLoading(false);
@@ -332,13 +333,13 @@ export const ScadenzePage: React.FC = () => {
 
       handleClosePagaModal();
       loadScadenze();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Errore nel pagamento multiplo:', error);
-      toast.error('Errore', error.message || 'Impossibile completare il pagamento.');
+      toast.error('Errore', getErrorMessage(error, 'Impossibile completare il pagamento.'));
     } finally {
       setPagaLoading(false);
     }
-  }, [clientePagamento, meseSelezionato, annoSelezionato, pagaFormData, toast, handleClosePagaModal]);
+  }, [clientePagamento, meseSelezionato, annoSelezionato, pagaFormData, toast, handleClosePagaModal, loadScadenze]);
 
   const getStatoColor = (stato: string) => {
     switch (stato) {
