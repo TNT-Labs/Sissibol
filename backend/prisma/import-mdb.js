@@ -17,108 +17,25 @@ const path = require('path');
 
 const prisma = new PrismaClient();
 
-// Enums (copiati da Prisma per evitare problemi di import)
-const TipoCliente = {
-  PERSONA_FISICA: 'PERSONA_FISICA',
-  PERSONA_GIURIDICA: 'PERSONA_GIURIDICA'
-};
-
-const Periodicita = {
-  QUADRIMESTRALE: 'QUADRIMESTRALE',
-  ANNUALE: 'ANNUALE'
-};
-
-const StatoScadenza = {
-  DA_PAGARE: 'DA_PAGARE',
-  PAGATO: 'PAGATO',
-  SCADUTO: 'SCADUTO'
-};
+const {
+  TipoCliente,
+  Periodicita,
+  StatoScadenza,
+  parseCSV,
+  parseMDBDate,
+  parseDecimal,
+  parseInt2,
+  normalizeTipoVeicolo,
+  mapPeriodicita,
+  mapTipoSospensione,
+  mapNumeroAssi,
+  readPeriodicitaRaw,
+} = require('./import-mapping');
 
 // Path ai file CSV (in Docker: /app/import/csv, in locale: ../../import/csv)
 const CSV_DIR = process.env.NODE_ENV === 'production'
   ? '/app/import/csv'
   : path.join(__dirname, '../../import/csv');
-
-// =====================================================
-// UTILITIES
-// =====================================================
-
-function parseCSV(content) {
-  const lines = content.split('\n').filter(line => line.trim());
-  if (lines.length === 0) return [];
-
-  const headers = parseCSVLine(lines[0]);
-  const records = [];
-
-  for (let i = 1; i < lines.length; i++) {
-    const values = parseCSVLine(lines[i]);
-    const record = {};
-    headers.forEach((header, idx) => {
-      record[header] = values[idx] || '';
-    });
-    records.push(record);
-  }
-
-  return records;
-}
-
-function parseCSVLine(line) {
-  const values = [];
-  let current = '';
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-
-    if (char === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        current += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if (char === ',' && !inQuotes) {
-      values.push(current.trim());
-      current = '';
-    } else {
-      current += char;
-    }
-  }
-  values.push(current.trim());
-
-  return values;
-}
-
-function parseMDBDate(dateStr) {
-  if (!dateStr || dateStr === '') return null;
-
-  // Formato MDB: "MM/DD/YY HH:MM:SS" o "MM/DD/YYYY HH:MM:SS"
-  const match = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
-  if (!match) return null;
-
-  const month = parseInt(match[1], 10);
-  const day = parseInt(match[2], 10);
-  let year = parseInt(match[3], 10);
-
-  // Gestione anno a 2 cifre
-  if (year < 100) {
-    year = year > 50 ? 1900 + year : 2000 + year;
-  }
-
-  return new Date(year, month - 1, day);
-}
-
-function parseDecimal(value) {
-  if (!value || value === '') return null;
-  const num = parseFloat(value.replace(',', '.'));
-  return isNaN(num) ? null : num;
-}
-
-function parseInt2(value) {
-  if (!value || value === '') return null;
-  const num = parseInt(value, 10);
-  return isNaN(num) ? null : num;
-}
 
 // =====================================================
 // LOOKUP TABLES
@@ -261,8 +178,8 @@ async function importMezzi(ditteMap, lookups) {
 
     // Periodicità dal CSV mezzi: 12 = ANNUALE, 4 = QUADRIMESTRALE
     // NB: il campo nel CSV ha l'accento "Periodicità"
-    const periodicitaVal = parseInt2(row['Periodicità']) || parseInt2(row['Periodicita']) || parseInt2(row['periodicita']);
-    const periodicita = periodicitaVal === 4 ? Periodicita.QUADRIMESTRALE : Periodicita.ANNUALE;
+    const periodicitaVal = readPeriodicitaRaw(row);
+    const periodicita = mapPeriodicita(periodicitaVal);
     if (periodicitaVal === 4) quadrimestrali++;
 
     // Altri campi
@@ -279,8 +196,8 @@ async function importMezzi(ditteMap, lookups) {
           tipoVeicolo,
           regione,
           potenzaKw: kw,
-          numeroAssi: numAssi && numAssi > 0 ? numAssi : null,
-          tipoSospensione: sospPneum === 1 ? 'Pneumatiche' : (sospPneum === 0 && numAssi && numAssi > 0 ? 'Non pneumatiche' : null),
+          numeroAssi: mapNumeroAssi(numAssi),
+          tipoSospensione: mapTipoSospensione(sospPneum, numAssi),
           dataImmatricolazione: dataImm,
         },
       });
@@ -300,23 +217,6 @@ async function importMezzi(ditteMap, lookups) {
   if (errors > 0) console.log(`  ✗ Errori: ${errors}`);
 
   return veicoliMap;
-}
-
-function normalizeTipoVeicolo(tipo) {
-  const map = {
-    'Trattore': 'Trattore stradale',
-    'Motrice': 'Motrice',
-    'Autocarro': 'Autocarro',
-    'Auto': 'Autovettura',
-    'Furgone': 'Autocarro',
-    'motociclo': 'Motociclo',
-    'AUTOVEICOLO': 'Autovettura',
-    'CISTERNA': 'Autocarro',
-    'BETONIERA': 'Autocarro',
-    'targa prova': 'Altro',
-  };
-
-  return map[tipo] || tipo;
 }
 
 // =====================================================

@@ -3,10 +3,16 @@
 /node_modules
 tsconfig.tsbuildinfo
 
-# Prisma generated files (from ts files in prisma folder)
+# Prisma: output compilato dai .ts presenti in prisma/ (es. seed-tariffe-*.ts).
+# Gli script scritti a mano sono sorgenti e vanno versionati: senza queste
+# eccezioni finirebbero esclusi in silenzio e l'immagine Docker partirebbe
+# senza di loro.
 prisma/*.js
 prisma/*.d.ts
 prisma/*.js.map
+!prisma/seed.js
+!prisma/import-mdb.js
+!prisma/import-mapping.js
 
 # Logs
 logs

@@ -30,7 +30,7 @@ jobs:
     - name: Build backend
       run: npm run build --workspace=backend
 
-    - name: Test backend
+    - name: Test backend (unit + golden master)
       run: npm test --workspace=backend
 
     - name: Lint frontend
@@ -39,9 +39,65 @@ jobs:
     - name: Build frontend (typecheck + bundle)
       run: npm run build --workspace=frontend
 
-  build-and-test:
+  # Test di integrazione su PostgreSQL reale: verificano le migrazioni da zero,
+  # i filtri annidati, le transazioni e il locking ottimistico, che con un mock
+  # di Prisma non sarebbero verificabili.
+  integration-tests:
     runs-on: ubuntu-latest
     needs: code-quality
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: sissibol_test
+          POSTGRES_PASSWORD: sissibol_test
+          POSTGRES_DB: sissibol_test
+        ports:
+        - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sissibol_test -d sissibol_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL_TEST: postgresql://sissibol_test:sissibol_test@localhost:5432/sissibol_test?schema=public
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Generate Prisma client
+      run: npm run prisma:generate --workspace=backend
+
+    # Applica l'intera catena di migrazioni su uno schema vuoto: se una
+    # migrazione non è applicabile da zero, il job fallisce qui.
+    - name: Apply migrations from scratch
+      run: npm run prisma:migrate:deploy --workspace=backend
+      env:
+        DATABASE_URL: ${{ env.DATABASE_URL_TEST }}
+
+    - name: Seed check
+      run: npm run prisma:seed --workspace=backend
+      env:
+        DATABASE_URL: ${{ env.DATABASE_URL_TEST }}
+
+    - name: Integration tests
+      run: npm run test:integration --workspace=backend
+
+  build-and-test:
+    runs-on: ubuntu-latest
+    needs: [code-quality, integration-tests]
 
     steps:
     - name: Checkout code
