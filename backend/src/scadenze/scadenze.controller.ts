@@ -7,6 +7,7 @@ import {
   Param,
   Delete,
   Query,
+  Req,
   UseGuards,
   ParseIntPipe,
 } from '@nestjs/common';
@@ -14,6 +15,11 @@ import { ScadenzeService } from './scadenze.service';
 import { CreateScadenzaDto } from './dto/create-scadenza.dto';
 import { UpdateScadenzaDto } from './dto/update-scadenza.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+
+/** Richiesta con l'utente risolto dal JwtAuthGuard, per il registro di audit. */
+interface RichiestaAutenticata {
+  user?: { email?: string };
+}
 
 // Definiamo il tipo localmente
 type StatoScadenza = 'DA_PAGARE' | 'PAGATO' | 'SCADUTO';
@@ -120,10 +126,11 @@ export class ScadenzeController {
 
   @Patch(':id')
   update(
+    @Req() req: RichiestaAutenticata,
     @Param('id', ParseIntPipe) id: number,
     @Body() updateScadenzaDto: UpdateScadenzaDto,
   ) {
-    return this.scadenzeService.update(id, updateScadenzaDto);
+    return this.scadenzeService.update(id, updateScadenzaDto, req.user?.email);
   }
 
   @Delete(':id')
@@ -136,7 +143,10 @@ export class ScadenzeController {
    * POST /scadenze/:id/ricalcola
    */
   @Post(':id/ricalcola')
-  ricalcolaImporto(@Param('id', ParseIntPipe) id: number) {
-    return this.scadenzeService.ricalcolaImporto(id);
+  ricalcolaImporto(
+    @Req() req: RichiestaAutenticata,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.scadenzeService.ricalcolaImporto(id, req.user?.email);
   }
 }

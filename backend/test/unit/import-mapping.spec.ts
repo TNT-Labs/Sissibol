@@ -68,23 +68,19 @@ describe('parseCSV', () => {
 describe('parseMDBDate', () => {
   it('interpreta il formato Access MM/DD/YY', () => {
     const d = mapping.parseMDBDate('10/31/17 00:00:00');
-    expect(d.getFullYear()).toBe(2017);
-    expect(d.getMonth()).toBe(9); // ottobre
-    expect(d.getDate()).toBe(31);
+    expect(d.toISOString()).toBe('2017-10-31T00:00:00.000Z');
   });
 
   it('interpreta anche gli anni a 4 cifre', () => {
     const d = mapping.parseMDBDate('03/05/2021 00:00:00');
-    expect(d.getFullYear()).toBe(2021);
-    expect(d.getMonth()).toBe(2);
-    expect(d.getDate()).toBe(5);
+    expect(d.toISOString()).toBe('2021-03-05T00:00:00.000Z');
   });
 
   it('usa il 1950 come perno per gli anni a 2 cifre', () => {
     // Regola attuale: anno > 50 -> 1900+anno, altrimenti 2000+anno.
-    expect(mapping.parseMDBDate('01/01/51').getFullYear()).toBe(1951);
-    expect(mapping.parseMDBDate('01/01/50').getFullYear()).toBe(2050);
-    expect(mapping.parseMDBDate('01/01/49').getFullYear()).toBe(2049);
+    expect(mapping.parseMDBDate('01/01/51').getUTCFullYear()).toBe(1951);
+    expect(mapping.parseMDBDate('01/01/50').getUTCFullYear()).toBe(2050);
+    expect(mapping.parseMDBDate('01/01/49').getUTCFullYear()).toBe(2049);
   });
 
   it('restituisce null su valori vuoti o non riconosciuti', () => {
@@ -95,9 +91,17 @@ describe('parseMDBDate', () => {
 
   it('accetta il 29 febbraio degli anni bisestili', () => {
     const d = mapping.parseMDBDate('02/29/16');
-    expect(d.getFullYear()).toBe(2016);
-    expect(d.getMonth()).toBe(1);
-    expect(d.getDate()).toBe(29);
+    expect(d.toISOString()).toBe('2016-02-29T00:00:00.000Z');
+  });
+
+  it('normalizza a mezzanotte UTC, non a mezzanotte locale', () => {
+    // Le date finiscono in colonne DATE: costruirle nel fuso locale le
+    // farebbe slittare di un giorno sui server con offset positivo, e il
+    // difetto sarebbe invisibile su un container UTC.
+    const d = mapping.parseMDBDate('01/01/2020');
+    expect(d.getUTCHours()).toBe(0);
+    expect(d.getUTCMinutes()).toBe(0);
+    expect(d.getTime()).toBe(Date.UTC(2020, 0, 1));
   });
 });
 

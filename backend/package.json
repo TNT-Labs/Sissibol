@@ -22,7 +22,9 @@
     "test:all": "npm run test && npm run test:integration",
     "golden:genera": "ts-node test/tools/generate-golden.ts",
     "golden:corpus": "ts-node test/tools/build-corpus.ts",
-    "golden:tariffario": "ts-node test/tools/dump-tariffario.ts"
+    "golden:tariffario": "ts-node test/tools/dump-tariffario.ts",
+    "dati:completezza": "ts-node test/tools/completezza-dati.ts",
+    "dati:confronto-archivio": "ts-node test/tools/legacy-diff.ts"
   },
   "prisma": {
     "seed": "node prisma/seed.js"

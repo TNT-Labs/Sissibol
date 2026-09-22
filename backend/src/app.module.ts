@@ -11,6 +11,8 @@ import { ScadenzeModule } from './scadenze/scadenze.module';
 import { PagamentiModule } from './pagamenti/pagamenti.module';
 import { BolloModule } from './bollo/bollo.module';
 import { UtentiModule } from './utenti/utenti.module';
+import { AvvisiModule } from './avvisi/avvisi.module';
+import { AuditModule } from './audit/audit.module';
 
 @Module({
   imports: [
@@ -45,6 +47,8 @@ import { UtentiModule } from './utenti/utenti.module';
     PagamentiModule,
     BolloModule,
     UtentiModule,
+    AvvisiModule,
+    AuditModule,
   ],
   providers: [
     // Applica rate limiting globalmente

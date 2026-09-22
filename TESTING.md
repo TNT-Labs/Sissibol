@@ -16,7 +16,7 @@ possa leggere e approvare.
 |---|---|---|---|
 | Unit | Funzioni pure: mapping di import, motore di calcolo con Prisma mockato | No | `npm test --workspace=backend` |
 | Golden master | Il motore di calcolo su tutto il parco veicoli reale + casi limite | No | incluso in `npm test` |
-| Integrazione | Migrazioni, filtri annidati, transazioni, locking ottimistico | Sì | `npm run test:integration --workspace=backend` |
+| Integrazione | Migrazioni, vincoli del database, filtri annidati, transazioni, locking ottimistico | Sì | `npm run test:integration --workspace=backend` |
 
 ```
 backend/test/
@@ -33,7 +33,10 @@ backend/test/
 ├── integration/
 │   ├── setup/                      migrazioni, reset, factory
 │   ├── scadenze.int-spec.ts
-│   └── pagamenti.int-spec.ts
+│   ├── pagamenti.int-spec.ts
+│   ├── modello-dati.int-spec.ts    vincoli applicati dal database
+│   ├── avvisi.int-spec.ts
+│   └── audit.int-spec.ts
 └── tools/                          generatori dei fixture e diagnostica
 ```
 
@@ -107,8 +110,9 @@ livelli non possono divergere.
 
 Girano su un PostgreSQL reale perché molte parti del sistema non sono
 verificabili con un mock: filtri annidati su cliente/veicolo attivi,
-`updateMany` con `OR` su mese/anno, transazioni, vincoli di integrità,
-locking ottimistico.
+aggiornamenti massivi, transazioni, locking ottimistico e soprattutto i
+vincoli applicati dal database — che sono invarianti solo se è il database a
+farli rispettare, non il codice applicativo.
 
 ```bash
 # PostgreSQL locale o in container
@@ -175,6 +179,26 @@ verificarne i progressi in modo oggettivo.
 
 ---
 
+## Diagnostica: completezza dei dati veicolo
+
+`test/tools/completezza-dati.ts` elenca, veicolo per veicolo, quali campi
+mancano al calcolo e su quale riquadro della carta di circolazione trovarli.
+
+```bash
+cd backend
+DATABASE_URL=postgresql://... npm run dati:completezza
+# elenco completo da lavorare:
+DATABASE_URL=postgresql://... npx ts-node test/tools/completezza-dati.ts --csv da-completare.csv
+```
+
+Sul parco attuale nessuno dei 2.438 veicoli ha dati sufficienti al calcolo:
+2.270 sono privi del tipo veicolo, 113 del peso complessivo, 45 della potenza e
+della classe ambientale. È il vincolo che condiziona la Fase 2 — senza questi
+dati, anche un motore corretto continuerebbe a restituire zero. Il dettaglio è
+in `MODELLO-DATI.md`.
+
+---
+
 ## Verificare che la rete funzioni davvero
 
 Una rete di sicurezza che non cattura nulla è peggio di nessuna rete, perché dà
@@ -211,10 +235,14 @@ I punti annotati nei commenti dei test, da affrontare nelle fasi successive:
 - `updateScaduteAutomaticamente` aggiorna anche le scadenze di clienti
   disattivati, mentre `findAll` le esclude: i due percorsi sono incoerenti;
 - un pagamento su veicolo di regione non configurata viene registrato **senza
-  snapshot**, cioè senza tracciabilità dell'importo;
+  snapshot**, cioè senza tracciabilità dell'importo (dalla fase 1 il registro
+  delle modifiche almeno lo annota);
 - il locking ottimistico dei pagamenti si attiva solo se il client invia
-  `version`: un client che la omette lo scavalca;
+  `version`: un client che la omette lo scavalca (anche questo ora annotato);
 - la periodicità letta dall'archivio ricade su `ANNUALE` per qualunque valore
   anomalo (0, 14, 137, 138, 139) senza segnalazione;
 - `normalizeTipoVeicolo` produce `Motrice` e `Altro`, tipi per cui non esiste
-  alcuna tariffa.
+  alcuna tariffa: il rapporto di completezza li elenca come da riclassificare.
+
+Le scelte di modellazione della fase 1 — e le ragioni di quelle non fatte —
+sono documentate in `MODELLO-DATI.md`.

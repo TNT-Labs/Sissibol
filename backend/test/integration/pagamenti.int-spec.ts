@@ -11,6 +11,7 @@
 
 import { PagamentiService } from '../../src/pagamenti/pagamenti.service';
 import { BolloService } from '../../src/bollo/bollo.service';
+import { AuditService } from '../../src/audit/audit.service';
 import {
   creaCliente,
   creaScadenza,
@@ -28,7 +29,8 @@ describe('PagamentiService (integrazione)', () => {
   beforeAll(() => {
     prisma = getPrisma();
     const bollo = new BolloService(prisma as never);
-    service = new PagamentiService(prisma as never, bollo);
+    const audit = new AuditService(prisma as never);
+    service = new PagamentiService(prisma as never, bollo, audit);
   });
 
   beforeEach(async () => {

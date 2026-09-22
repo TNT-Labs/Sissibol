@@ -4,19 +4,42 @@ import { CreatePagamentoDto } from './dto/create-pagamento.dto';
 import { UpdatePagamentoDto } from './dto/update-pagamento.dto';
 import { StatoScadenza } from '../prisma/types';
 import { BolloService } from '../bollo/bollo.service';
+import { AuditService } from '../audit/audit.service';
+
+/** Campi del pagamento conservati nel registro delle modifiche. */
+function istantaneaPagamento(pagamento: {
+  id: number;
+  idScadenza: number;
+  dataPagamento: Date;
+  importoPagato: unknown;
+  metodoPagamento: string | null;
+  ricevutaFile: string | null;
+  version: number;
+}) {
+  return {
+    id: pagamento.id,
+    idScadenza: pagamento.idScadenza,
+    dataPagamento: pagamento.dataPagamento,
+    importoPagato: pagamento.importoPagato,
+    metodoPagamento: pagamento.metodoPagamento,
+    ricevutaFile: pagamento.ricevutaFile,
+    version: pagamento.version,
+  };
+}
 
 @Injectable()
 export class PagamentiService {
   constructor(
     private prisma: PrismaService,
     private bolloService: BolloService,
+    private audit: AuditService,
   ) {}
 
   /**
    * Crea un pagamento con snapshot immutabile del calcolo bollo.
    * Lo snapshot preserva le tariffe applicate per i report storici.
    */
-  async create(createPagamentoDto: CreatePagamentoDto) {
+  async create(createPagamentoDto: CreatePagamentoDto, utente?: string) {
     // Recupera la scadenza con il veicolo per lo snapshot
     const scadenza = await this.prisma.scadenza.findUnique({
       where: { id: createPagamentoDto.idScadenza },
@@ -137,6 +160,17 @@ export class PagamentiService {
       });
 
       return pagamento;
+    });
+
+    await this.audit.registra({
+      entita: 'pagamento',
+      idEntita: result.id,
+      azione: 'CREAZIONE',
+      utente,
+      datiDopo: istantaneaPagamento(result),
+      note: calcoloBollo
+        ? undefined
+        : 'Registrato senza snapshot: calcolo del bollo non disponibile',
     });
 
     return result;
@@ -285,7 +319,7 @@ export class PagamentiService {
    *
    * @throws ConflictException se il pagamento è stato modificato da un altro utente
    */
-  async update(id: number, updatePagamentoDto: UpdatePagamentoDto) {
+  async update(id: number, updatePagamentoDto: UpdatePagamentoDto, utente?: string) {
     const pagamentoCorrente = await this.findOne(id);
 
     // Estrai la versione dal DTO (deve essere fornita dal client)
@@ -328,8 +362,22 @@ export class PagamentiService {
       );
     }
 
-    // Ritorna il pagamento aggiornato
-    return this.findOne(id);
+    const aggiornato = await this.findOne(id);
+
+    await this.audit.registra({
+      entita: 'pagamento',
+      idEntita: id,
+      azione: 'MODIFICA',
+      utente,
+      datiPrima: istantaneaPagamento(pagamentoCorrente),
+      datiDopo: istantaneaPagamento(aggiornato),
+      note:
+        clientVersion === undefined
+          ? 'Modifica senza controllo di versione: il client non ha inviato version'
+          : undefined,
+    });
+
+    return aggiornato;
   }
 
   /**
@@ -351,6 +399,7 @@ export class PagamentiService {
     annoScadenza: number;
     dataPagamento: string;
     metodoPagamento?: string;
+    utente?: string;
   }) {
     const { idCliente, meseScadenza, annoScadenza, dataPagamento, metodoPagamento } = params;
 
@@ -405,12 +454,15 @@ export class PagamentiService {
     // Non usiamo transazione globale per permettere pagamenti parziali con errori dettagliati
     for (const scadenza of scadenzePagabili) {
       try {
-        await this.create({
-          idScadenza: scadenza.id,
-          dataPagamento,
-          importoPagato: scadenza.importoPrevisto!.toNumber(),
-          metodoPagamento,
-        });
+        await this.create(
+          {
+            idScadenza: scadenza.id,
+            dataPagamento,
+            importoPagato: scadenza.importoPrevisto!.toNumber(),
+            metodoPagamento,
+          },
+          params.utente,
+        );
         risultato.pagamentiCreati++;
       } catch (error) {
         risultato.errori.push(`Scadenza ${scadenza.id} (${scadenza.veicolo?.targa}): ${error.message}`);
@@ -423,7 +475,7 @@ export class PagamentiService {
     };
   }
 
-  async remove(id: number) {
+  async remove(id: number, utente?: string) {
     const pagamento = await this.findOne(id); // Check if exists
 
     // Quando si elimina un pagamento, riporta la scadenza a DA_PAGARE
@@ -444,6 +496,15 @@ export class PagamentiService {
           data: { stato: StatoScadenza.DA_PAGARE },
         });
       }
+    });
+
+    await this.audit.registra({
+      entita: 'pagamento',
+      idEntita: id,
+      azione: 'ELIMINAZIONE',
+      utente,
+      datiPrima: istantaneaPagamento(pagamento),
+      note: 'La scadenza collegata torna DA_PAGARE se non restano altri pagamenti',
     });
 
     return { message: 'Pagamento eliminato con successo' };

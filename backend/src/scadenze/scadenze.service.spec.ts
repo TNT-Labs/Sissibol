@@ -2,14 +2,14 @@ import { ScadenzeService } from './scadenze.service';
 
 /**
  * Unit test sulla logica date/scadenze (senza database).
- * PrismaService e BolloService sono mock vuoti: qui si testano solo
- * i metodi puri di calcolo.
+ * PrismaService, BolloService e AuditService sono mock vuoti: qui si testano
+ * solo i metodi puri di calcolo.
  */
 describe('ScadenzeService - logica date', () => {
   let service: ScadenzeService;
 
   beforeEach(() => {
-    service = new ScadenzeService({} as any, {} as any);
+    service = new ScadenzeService({} as any, {} as any, {} as any);
   });
 
   afterEach(() => {

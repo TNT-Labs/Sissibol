@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateScadenzaDto } from './dto/create-scadenza.dto';
 import { UpdateScadenzaDto } from './dto/update-scadenza.dto';
 import { BolloService } from '../bollo/bollo.service';
+import { AuditService } from '../audit/audit.service';
 import { StatoScadenza, Periodicita } from '../prisma/types';
 
 /**
@@ -35,11 +36,12 @@ export class ScadenzeService implements OnModuleInit {
   constructor(
     private prisma: PrismaService,
     private bolloService: BolloService,
+    private audit: AuditService,
   ) {}
 
   /**
-   * All'avvio marca subito come SCADUTO le scadenze DA_PAGARE il cui mese/anno
-   * è passato, così lo stato è coerente senza attendere il primo cron.
+   * All'avvio marca subito come SCADUTO le scadenze DA_PAGARE la cui data è
+   * passata, così lo stato è coerente senza attendere il primo cron.
    */
   async onModuleInit() {
     await this.eseguiAggiornamentoScadute();
@@ -146,16 +148,16 @@ export class ScadenzeService implements OnModuleInit {
    * @returns true se la scadenza è imminente
    */
   isScadenzaImminente(
-    scadenza: { annoScadenza: number; meseScadenza: number; periodicita: string },
+    scadenza: {
+      annoScadenza: number;
+      meseScadenza: number;
+      periodicita: string;
+      dataScadenza?: Date | null;
+    },
     giorniAnticipo: number = 30,
   ): boolean {
     const oggi = this.getOggiNormalizzato();
-
-    const dataScadenza = this.getDataScadenzaEffettiva(
-      scadenza.annoScadenza,
-      scadenza.meseScadenza,
-      scadenza.periodicita as 'ANNUALE' | 'QUADRIMESTRALE',
-    );
+    const dataScadenza = this.risolviDataScadenza(scadenza);
 
     // Calcola data limite usando millisecondi per evitare problemi con DST
     const MILLISECONDI_PER_GIORNO = 24 * 60 * 60 * 1000;
@@ -175,19 +177,68 @@ export class ScadenzeService implements OnModuleInit {
    * @returns Numero di giorni rimanenti (negativo se scaduta)
    */
   getGiorniAllaScadenza(
-    scadenza: { annoScadenza: number; meseScadenza: number; periodicita: string },
+    scadenza: {
+      annoScadenza: number;
+      meseScadenza: number;
+      periodicita: string;
+      dataScadenza?: Date | null;
+    },
   ): number {
     const oggi = this.getOggiNormalizzato();
-
-    const dataScadenza = this.getDataScadenzaEffettiva(
-      scadenza.annoScadenza,
-      scadenza.meseScadenza,
-      scadenza.periodicita as 'ANNUALE' | 'QUADRIMESTRALE',
-    );
+    const dataScadenza = this.risolviDataScadenza(scadenza);
 
     const MILLISECONDI_PER_GIORNO = 24 * 60 * 60 * 1000;
     const diffTime = dataScadenza.getTime() - oggi.getTime();
     return Math.ceil(diffTime / MILLISECONDI_PER_GIORNO);
+  }
+
+  /**
+   * Restituisce la data di scadenza persistita, se presente, altrimenti la
+   * ricostruisce da mese e anno.
+   *
+   * Dalla migrazione `scadenza_data_effettiva` la colonna `data_scadenza` è la
+   * fonte di verità; la ricostruzione serve solo ai chiamanti che passano
+   * ancora il solo mese/anno (test e codice non ancora migrato).
+   */
+  private risolviDataScadenza(scadenza: {
+    annoScadenza: number;
+    meseScadenza: number;
+    periodicita: string;
+    dataScadenza?: Date | null;
+  }): Date {
+    if (scadenza.dataScadenza) {
+      const d = new Date(scadenza.dataScadenza);
+      // La colonna è di tipo DATE: normalizza a mezzanotte UTC per poterla
+      // confrontare con getOggiNormalizzato senza scarti di fuso orario.
+      return new Date(
+        Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0),
+      );
+    }
+
+    return this.getDataScadenzaEffettiva(
+      scadenza.annoScadenza,
+      scadenza.meseScadenza,
+      scadenza.periodicita as 'ANNUALE' | 'QUADRIMESTRALE',
+    );
+  }
+
+  /**
+   * Costruisce i campi data di una scadenza a partire da anno e mese.
+   *
+   * Unico punto in cui `dataScadenza`, `meseScadenza` e `annoScadenza` vengono
+   * valorizzati insieme: il vincolo CHECK sul database rifiuta le righe in cui
+   * divergono, quindi devono essere scritti sempre dalla stessa funzione.
+   */
+  private campiDataScadenza(
+    anno: number,
+    mese: number,
+    periodicita: 'ANNUALE' | 'QUADRIMESTRALE' = 'ANNUALE',
+  ): { dataScadenza: Date; meseScadenza: number; annoScadenza: number } {
+    return {
+      dataScadenza: this.getDataScadenzaEffettiva(anno, mese, periodicita),
+      meseScadenza: mese,
+      annoScadenza: anno,
+    };
   }
 
   /**
@@ -246,8 +297,11 @@ export class ScadenzeService implements OnModuleInit {
     return this.prisma.scadenza.create({
       data: {
         idVeicolo: createScadenzaDto.idVeicolo,
-        meseScadenza: createScadenzaDto.meseScadenza,
-        annoScadenza: createScadenzaDto.annoScadenza,
+        ...this.campiDataScadenza(
+          createScadenzaDto.annoScadenza,
+          createScadenzaDto.meseScadenza,
+          periodicita,
+        ),
         periodicita: periodicita,
         importoPrevisto: importoPrevisto,
         stato: createScadenzaDto.stato,
@@ -265,7 +319,7 @@ export class ScadenzeService implements OnModuleInit {
   /**
    * Ricalcola l'importo di una scadenza esistente
    */
-  async ricalcolaImporto(id: number) {
+  async ricalcolaImporto(id: number, utente?: string) {
     const scadenza = await this.findOne(id);
 
     try {
@@ -275,13 +329,25 @@ export class ScadenzeService implements OnModuleInit {
         scadenza.periodicita as 'ANNUALE' | 'QUADRIMESTRALE',
       );
 
-      return this.prisma.scadenza.update({
+      const aggiornata = await this.prisma.scadenza.update({
         where: { id },
         data: { importoPrevisto: calcolo.importoBase },
         include: {
           veicolo: { include: { cliente: true } },
         },
       });
+
+      await this.audit.registra({
+        entita: 'scadenza',
+        idEntita: id,
+        azione: 'MODIFICA',
+        utente,
+        datiPrima: { importoPrevisto: scadenza.importoPrevisto },
+        datiDopo: { importoPrevisto: aggiornata.importoPrevisto },
+        note: `Ricalcolo dal tariffario: ${calcolo.dettaglioCalcolo || 'nessun dettaglio'}`,
+      });
+
+      return aggiornata;
     } catch (error) {
       throw new BadRequestException(`Impossibile ricalcolare il bollo: ${error.message}`);
     }
@@ -503,12 +569,33 @@ export class ScadenzeService implements OnModuleInit {
     return scadenza;
   }
 
-  async update(id: number, updateScadenzaDto: UpdateScadenzaDto) {
-    await this.findOne(id); // Check if exists
+  async update(id: number, updateScadenzaDto: UpdateScadenzaDto, utente?: string) {
+    const corrente = await this.findOne(id);
 
-    return this.prisma.scadenza.update({
+    const mese = updateScadenzaDto.meseScadenza ?? corrente.meseScadenza;
+    const anno = updateScadenzaDto.annoScadenza ?? corrente.annoScadenza;
+    const periodicita = (updateScadenzaDto.periodicita ??
+      corrente.periodicita) as 'ANNUALE' | 'QUADRIMESTRALE';
+
+    // Se il periodo cambia, la data effettiva va ricalcolata: il vincolo CHECK
+    // sul database rifiuterebbe una riga con mese/anno non coerenti.
+    const cambiaPeriodo =
+      updateScadenzaDto.meseScadenza !== undefined ||
+      updateScadenzaDto.annoScadenza !== undefined;
+
+    if (cambiaPeriodo) {
+      const validazione = this.validaMeseScadenza(mese, periodicita);
+      if (!validazione.valido) {
+        throw new BadRequestException(validazione.messaggio);
+      }
+    }
+
+    const aggiornata = await this.prisma.scadenza.update({
       where: { id },
-      data: updateScadenzaDto,
+      data: {
+        ...updateScadenzaDto,
+        ...(cambiaPeriodo ? this.campiDataScadenza(anno, mese, periodicita) : {}),
+      },
       include: {
         veicolo: {
           include: {
@@ -517,6 +604,38 @@ export class ScadenzeService implements OnModuleInit {
         },
       },
     });
+
+    await this.audit.registra({
+      entita: 'scadenza',
+      idEntita: id,
+      azione: 'MODIFICA',
+      utente,
+      datiPrima: this.istantaneaScadenza(corrente),
+      datiDopo: this.istantaneaScadenza(aggiornata),
+    });
+
+    return aggiornata;
+  }
+
+  /** Campi della scadenza conservati nel registro delle modifiche. */
+  private istantaneaScadenza(scadenza: {
+    id: number;
+    dataScadenza: Date;
+    meseScadenza: number;
+    annoScadenza: number;
+    periodicita: string;
+    importoPrevisto: unknown;
+    stato: string;
+  }) {
+    return {
+      id: scadenza.id,
+      dataScadenza: scadenza.dataScadenza,
+      meseScadenza: scadenza.meseScadenza,
+      annoScadenza: scadenza.annoScadenza,
+      periodicita: scadenza.periodicita,
+      importoPrevisto: scadenza.importoPrevisto,
+      stato: scadenza.stato,
+    };
   }
 
   async remove(id: number) {
@@ -528,31 +647,25 @@ export class ScadenzeService implements OnModuleInit {
   }
 
   /**
-   * Aggiorna automaticamente le scadenze scadute.
-   * Una scadenza è scaduta solo se il mese/anno di scadenza è PRECEDENTE
-   * al mese/anno corrente. Le scadenze del mese corrente restano DA_PAGARE.
+   * Riconcilia lo stato delle scadenze scadute.
    *
-   * BUG FIX: Usa Prisma ORM invece di raw SQL per evitare problemi
-   * se lo schema cambia (colonne hardcoded nel raw SQL sono fragili).
+   * Una scadenza è scaduta quando la sua data effettiva è precedente a oggi:
+   * una scadenza di fine mese resta DA_PAGARE per tutto il mese e diventa
+   * SCADUTO il giorno successivo.
+   *
+   * Lo stato resta una colonna perché su oltre centomila righe i filtri per
+   * stato devono poter usare un indice; questa riconciliazione è ciò che la
+   * mantiene allineata alla data.
    */
   async updateScaduteAutomaticamente() {
     const oggi = this.getOggiNormalizzato();
-    const annoCorrente = oggi.getFullYear();
-    const meseCorrente = oggi.getMonth() + 1;
 
-    // Usa Prisma ORM invece di raw SQL per robustezza
+    // Confronto diretto sulla data effettiva: copre l'indice
+    // (stato, data_scadenza) e non richiede più la clausola OR su mese/anno.
     const result = await this.prisma.scadenza.updateMany({
       where: {
         stato: StatoScadenza.DA_PAGARE,
-        OR: [
-          // Anno passato
-          { annoScadenza: { lt: annoCorrente } },
-          // Stesso anno ma mese passato
-          {
-            annoScadenza: annoCorrente,
-            meseScadenza: { lt: meseCorrente },
-          },
-        ],
+        dataScadenza: { lt: oggi },
       },
       data: {
         stato: StatoScadenza.SCADUTO,
@@ -573,41 +686,24 @@ export class ScadenzeService implements OnModuleInit {
    */
   async getScadenzeInScadenza(giorniAnticipo: number = 30) {
     const oggi = this.getOggiNormalizzato();
-    const dataLimite = new Date(oggi.getTime() + giorniAnticipo * 24 * 60 * 60 * 1000);
+    const MILLISECONDI_PER_GIORNO = 24 * 60 * 60 * 1000;
+    const dataLimite = new Date(oggi.getTime() + giorniAnticipo * MILLISECONDI_PER_GIORNO);
 
-    // Calcola mese/anno corrente e futuro per filtrare nel DB
-    const meseOggi = oggi.getMonth() + 1;
-    const annoOggi = oggi.getFullYear();
-    const meseLimite = dataLimite.getMonth() + 1;
-    const annoLimite = dataLimite.getFullYear();
-
-    // Query ottimizzata: filtra per mese/anno nel DB
+    // Con la data effettiva in colonna il filtro è un semplice intervallo,
+    // coperto dall'indice (stato, data_scadenza). La versione precedente
+    // doveva comporre una OR su mese/anno e poi ri-filtrare in memoria,
+    // perché il confine dei 30 giorni non coincide con il confine del mese.
     const scadenzeDaPagare = await this.prisma.scadenza.findMany({
       where: {
         stato: StatoScadenza.DA_PAGARE,
-        // Filtra solo scadenze di veicoli appartenenti a clienti attivi
+        dataScadenza: { gte: oggi, lte: dataLimite },
+        // Solo scadenze di veicoli e clienti attivi
         veicolo: {
           attivo: true,
           cliente: {
             attivo: true,
           },
         },
-        OR: [
-          // Scadenze di quest'anno nel range di mesi
-          {
-            annoScadenza: annoOggi,
-            meseScadenza: { gte: meseOggi, lte: annoOggi === annoLimite ? meseLimite : 12 },
-          },
-          // Scadenze dell'anno prossimo se il range attraversa l'anno
-          ...(annoLimite > annoOggi
-            ? [
-                {
-                  annoScadenza: annoLimite,
-                  meseScadenza: { lte: meseLimite },
-                },
-              ]
-            : []),
-        ],
       },
       include: {
         veicolo: {
@@ -625,48 +721,24 @@ export class ScadenzeService implements OnModuleInit {
             },
           },
         },
+        avvisi: {
+          select: { id: true, tipo: true, dataInvio: true, esito: true },
+        },
       },
-      orderBy: [
-        { annoScadenza: 'asc' },
-        { meseScadenza: 'asc' },
-      ],
+      orderBy: [{ dataScadenza: 'asc' }],
     });
 
-    // Filtro finale in memoria (per precisione) e arricchimento
-    const scadenzeArricchite = scadenzeDaPagare
-      .filter((scadenza) =>
-        this.isScadenzaImminente(
-          {
-            annoScadenza: scadenza.annoScadenza,
-            meseScadenza: scadenza.meseScadenza,
-            periodicita: scadenza.periodicita,
-          },
-          giorniAnticipo,
-        ),
-      )
-      .map((scadenza) => {
-        const giorniRimanenti = this.getGiorniAllaScadenza({
-          annoScadenza: scadenza.annoScadenza,
-          meseScadenza: scadenza.meseScadenza,
-          periodicita: scadenza.periodicita,
-        });
+    return scadenzeDaPagare.map((scadenza) => {
+      const giorniRimanenti = this.getGiorniAllaScadenza(scadenza);
 
-        const dataScadenzaEffettiva = this.getDataScadenzaEffettiva(
-          scadenza.annoScadenza,
-          scadenza.meseScadenza,
-          scadenza.periodicita as 'ANNUALE' | 'QUADRIMESTRALE',
-        );
-
-        return {
-          ...scadenza,
-          giorniRimanenti,
-          dataScadenzaEffettiva,
-          urgenza: giorniRimanenti <= 7 ? 'CRITICA' : giorniRimanenti <= 14 ? 'ALTA' : 'NORMALE',
-        };
-      });
-
-    // Ordina per urgenza (giorni rimanenti crescenti)
-    return scadenzeArricchite.sort((a, b) => a.giorniRimanenti - b.giorniRimanenti);
+      return {
+        ...scadenza,
+        giorniRimanenti,
+        dataScadenzaEffettiva: scadenza.dataScadenza,
+        urgenza:
+          giorniRimanenti <= 7 ? 'CRITICA' : giorniRimanenti <= 14 ? 'ALTA' : 'NORMALE',
+      };
+    });
   }
 
   /**
@@ -688,8 +760,10 @@ export class ScadenzeService implements OnModuleInit {
     errori: string[];
   }> {
     const oggi = this.getOggiNormalizzato();
-    const annoCorrente = oggi.getFullYear();
-    const meseCorrente = oggi.getMonth() + 1;
+    // oggi e' a mezzanotte UTC: con i getter locali, su un server con offset
+    // negativo si leggerebbe il giorno precedente.
+    const annoCorrente = oggi.getUTCFullYear();
+    const meseCorrente = oggi.getUTCMonth() + 1;
 
     if (!Number.isInteger(annoTarget) || annoTarget < annoCorrente) {
       throw new BadRequestException(`L'anno target (${annoTarget}) non può essere inferiore all'anno corrente (${annoCorrente})`);
@@ -743,7 +817,11 @@ export class ScadenzeService implements OnModuleInit {
         // Estrai il mese di immatricolazione (obbligatorio per calcolare la scadenza)
         if (veicolo.dataImmatricolazione) {
           const dataImm = new Date(veicolo.dataImmatricolazione);
-          meseImmatricolazione = dataImm.getMonth() + 1;
+          // Colonna DATE: Prisma la restituisce a mezzanotte UTC. Con il
+          // getter locale, su un server con offset negativo una
+          // immatricolazione del primo del mese slitterebbe al mese
+          // precedente, generando le scadenze nel mese sbagliato.
+          meseImmatricolazione = dataImm.getUTCMonth() + 1;
         }
 
         // Determina la periodicità dalla scadenza più recente o default ANNUALE
@@ -822,8 +900,11 @@ export class ScadenzeService implements OnModuleInit {
         // Prepara batch di scadenze da creare
         const scadenzeBatch = scadenzeNuove.map(scadenza => ({
           idVeicolo: veicolo.id,
-          meseScadenza: scadenza.meseScadenza,
-          annoScadenza: scadenza.annoScadenza,
+          ...this.campiDataScadenza(
+            scadenza.annoScadenza,
+            scadenza.meseScadenza,
+            periodicita,
+          ),
           periodicita: periodicita,
           importoPrevisto: importoPrevisto,
           stato: StatoScadenza.DA_PAGARE,
