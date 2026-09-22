@@ -11,12 +11,12 @@ datasource db {
 }
 
 model Utente {
-  id            Int            @id @default(autoincrement())
-  email         String         @unique
-  password      String
-  ruolo         Ruolo          @default(OPERATORE)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  ruolo     Ruolo    @default(OPERATORE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   refreshTokens RefreshToken[]
 
@@ -30,17 +30,17 @@ model Utente {
 /// Gestisce i refresh token per il rinnovo sicuro delle sessioni
 /// Supporta revoca token e logout da tutti i dispositivi
 model RefreshToken {
-  id          Int       @id @default(autoincrement())
-  userId      Int       @map("user_id")
-  tokenHash   String    @map("token_hash")       // Hash bcrypt del token
-  jti         String    @unique                  // JWT ID univoco per revoca
-  userAgent   String?   @map("user_agent")       // Browser/dispositivo
-  ipAddress   String?   @map("ip_address")       // IP di origine
-  expiresAt   DateTime  @map("expires_at")
-  revokedAt   DateTime? @map("revoked_at")       // null = attivo
-  createdAt   DateTime  @default(now())
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  tokenHash String    @map("token_hash") // Hash bcrypt del token
+  jti       String    @unique // JWT ID univoco per revoca
+  userAgent String?   @map("user_agent") // Browser/dispositivo
+  ipAddress String?   @map("ip_address") // IP di origine
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at") // null = attivo
+  createdAt DateTime  @default(now())
 
-  user        Utente    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user Utente @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, revokedAt])
   @@map("refresh_tokens")
@@ -57,55 +57,55 @@ enum TipoCliente {
 }
 
 model Cliente {
-  id              Int          @id @default(autoincrement())
-  tipoCliente     TipoCliente  @default(PERSONA_GIURIDICA) @map("tipo_cliente")
+  id             Int         @id @default(autoincrement())
+  tipoCliente    TipoCliente @default(PERSONA_GIURIDICA) @map("tipo_cliente")
   // Campi per Persona Giuridica
-  ragioneSociale  String?      @map("ragione_sociale")
-  partitaIva      String?      @map("partita_iva")
+  ragioneSociale String?     @map("ragione_sociale")
+  partitaIva     String?     @map("partita_iva")
   // Campi per Persona Fisica
-  nome            String?
-  cognome         String?
-  codiceFiscale   String?      @map("codice_fiscale")
+  nome           String?
+  cognome        String?
+  codiceFiscale  String?     @map("codice_fiscale")
   // Campi comuni
-  indirizzo       String?
-  email           String?
-  telefono        String?
-  note            String?
-  attivo          Boolean      @default(true)  // Flag per clienti attivi/inattivi
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  indirizzo      String?
+  email          String?
+  telefono       String?
+  note           String?
+  attivo         Boolean     @default(true) // Flag per clienti attivi/inattivi
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
 
-  veicoli         Veicolo[]
+  veicoli Veicolo[]
 
   @@map("clienti")
 }
 
 model Veicolo {
-  id                    Int       @id @default(autoincrement())
-  idCliente             Int       @map("id_cliente")
-  targa                 String
-  tipoVeicolo           String?   @map("tipo_veicolo")
-  classeAmbientale      String?   @map("classe_ambientale")
-  regione               String?
+  id                   Int       @id @default(autoincrement())
+  idCliente            Int       @map("id_cliente")
+  targa                String
+  tipoVeicolo          String?   @map("tipo_veicolo")
+  classeAmbientale     String?   @map("classe_ambientale")
+  regione              String?
   // Nuovi campi per calcolo bollo (tariffario Lombardia 2026)
-  alimentazione         String?                           // Benzina, Diesel, GPL, Metano, Elettrico, etc.
-  potenzaKw             Decimal?  @map("potenza_kw") @db.Decimal(10, 2)  // Potenza in KW
-  cilindrata            Int?                              // Cilindrata in cc (per motocarri/motofurgoni)
-  portataKg             Int?      @map("portata_kg")      // Portata in KG (autocarri < 12 ton)
-  pesoComplessivoKg     Int?      @map("peso_complessivo_kg") // Peso complessivo (determina categoria autocarro)
-  numeroAssi            Int?      @map("numero_assi")     // Numero assi (autocarri >= 12 ton)
-  tipoSospensione       String?   @map("tipo_sospensione") // Pneumatiche o non pneumatiche
-  numeroPosti           Int?      @map("numero_posti")    // Per rimorchi trasporto persone
-  massaRimorchiabileKg  Int?      @map("massa_rimorchiabile_kg") // Tassa aggiuntiva trattori stradali
-  dataImmatricolazione  DateTime? @map("data_immatricolazione") @db.Date // Per calcolo ultratrentennali
-  note                  String?
-  attivo                Boolean   @default(true) // Soft-delete: false = disattivato
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  alimentazione        String? // Benzina, Diesel, GPL, Metano, Elettrico, etc.
+  potenzaKw            Decimal?  @map("potenza_kw") @db.Decimal(10, 2) // Potenza in KW
+  cilindrata           Int? // Cilindrata in cc (per motocarri/motofurgoni)
+  portataKg            Int?      @map("portata_kg") // Portata in KG (autocarri < 12 ton)
+  pesoComplessivoKg    Int?      @map("peso_complessivo_kg") // Peso complessivo (determina categoria autocarro)
+  numeroAssi           Int?      @map("numero_assi") // Numero assi (autocarri >= 12 ton)
+  tipoSospensione      String?   @map("tipo_sospensione") // Pneumatiche o non pneumatiche
+  numeroPosti          Int?      @map("numero_posti") // Per rimorchi trasporto persone
+  massaRimorchiabileKg Int?      @map("massa_rimorchiabile_kg") // Tassa aggiuntiva trattori stradali
+  dataImmatricolazione DateTime? @map("data_immatricolazione") @db.Date // Per calcolo ultratrentennali
+  note                 String?
+  attivo               Boolean   @default(true) // Soft-delete: false = disattivato
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
-  cliente               Cliente   @relation(fields: [idCliente], references: [id], onDelete: Cascade)
-  scadenze              Scadenza[]
-  storico               StoricoVeicolo[]
+  cliente  Cliente          @relation(fields: [idCliente], references: [id], onDelete: Cascade)
+  scadenze Scadenza[]
+  storico  StoricoVeicolo[]
 
   @@index([idCliente])
   @@index([targa])
@@ -119,26 +119,26 @@ model Veicolo {
 /// Tiene traccia dei cambi di targa e/o proprietario di un veicolo.
 /// Essenziale per: contestazioni, storici bollo, verifiche fiscali.
 model StoricoVeicolo {
-  id                Int       @id @default(autoincrement())
-  idVeicolo         Int       @map("id_veicolo")
+  id        Int @id @default(autoincrement())
+  idVeicolo Int @map("id_veicolo")
 
   // Tipo di modifica
-  tipoModifica      TipoModificaVeicolo @map("tipo_modifica")
+  tipoModifica TipoModificaVeicolo @map("tipo_modifica")
 
   // Dati PRIMA della modifica
-  targaPrecedente   String?   @map("targa_precedente")
+  targaPrecedente     String? @map("targa_precedente")
   idClientePrecedente Int?    @map("id_cliente_precedente")
 
   // Dati DOPO la modifica
-  targaNuova        String?   @map("targa_nuova")
-  idClienteNuovo    Int?      @map("id_cliente_nuovo")
+  targaNuova     String? @map("targa_nuova")
+  idClienteNuovo Int?    @map("id_cliente_nuovo")
 
   // Metadata
-  dataModifica      DateTime  @default(now()) @map("data_modifica")
-  motivazione       String?                    // Motivo del cambio (es. "Vendita", "Reimmatricolazione")
-  utenteModifica    String?   @map("utente_modifica")  // Email utente che ha effettuato la modifica
+  dataModifica   DateTime @default(now()) @map("data_modifica")
+  motivazione    String? // Motivo del cambio (es. "Vendita", "Reimmatricolazione")
+  utenteModifica String?  @map("utente_modifica") // Email utente che ha effettuato la modifica
 
-  veicolo           Veicolo   @relation(fields: [idVeicolo], references: [id], onDelete: Cascade)
+  veicolo Veicolo @relation(fields: [idVeicolo], references: [id], onDelete: Cascade)
 
   @@index([idVeicolo, dataModifica])
   @@map("storico_veicoli")
@@ -151,24 +151,125 @@ enum TipoModificaVeicolo {
 }
 
 model Scadenza {
-  id              Int       @id @default(autoincrement())
-  idVeicolo       Int       @map("id_veicolo")
-  meseScadenza    Int       @map("mese_scadenza")  // 1-12
-  annoScadenza    Int       @map("anno_scadenza")
-  periodicita     Periodicita @default(ANNUALE)
-  importoPrevisto Decimal?  @map("importo_previsto") @db.Decimal(10, 2)
-  stato           StatoScadenza @default(DA_PAGARE)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id        Int @id @default(autoincrement())
+  idVeicolo Int @map("id_veicolo")
 
-  veicolo         Veicolo   @relation(fields: [idVeicolo], references: [id], onDelete: Cascade)
-  pagamenti       Pagamento[]
+  /// Data effettiva di scadenza: è la FONTE DI VERITÀ.
+  /// meseScadenza e annoScadenza sono mantenuti per compatibilità con API e
+  /// interfaccia, e un vincolo CHECK a livello di database garantisce che
+  /// restino coerenti con questa data.
+  dataScadenza DateTime @map("data_scadenza") @db.Date
+  meseScadenza Int      @map("mese_scadenza") // 1-12, derivato da dataScadenza
+  annoScadenza Int      @map("anno_scadenza") // derivato da dataScadenza
+
+  periodicita     Periodicita   @default(ANNUALE)
+  importoPrevisto Decimal?      @map("importo_previsto") @db.Decimal(10, 2)
+  stato           StatoScadenza @default(DA_PAGARE)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  veicolo   Veicolo     @relation(fields: [idVeicolo], references: [id], onDelete: Cascade)
+  pagamenti Pagamento[]
+  avvisi    Avviso[]
 
   @@index([idVeicolo])
   @@index([stato, annoScadenza])
   @@index([annoScadenza, meseScadenza])
   @@index([stato, meseScadenza, annoScadenza])
+  @@index([dataScadenza])
+  @@index([stato, dataScadenza])
   @@map("scadenze")
+}
+
+// =====================================================
+// AVVISI AL CLIENTE
+// =====================================================
+
+/// Traccia gli avvisi di scadenza inviati al cliente.
+///
+/// Ripristina una funzionalità presente nell'archivio Access (colonne
+/// Primo_Avviso e Secondo_Avviso) che la prima migrazione aveva perso:
+/// sapere se e quando un cliente è stato avvisato è il requisito principale
+/// dello scadenziario, ed è la prima cosa da dimostrare in caso di
+/// contestazione.
+model Avviso {
+  id         Int @id @default(autoincrement())
+  idScadenza Int @map("id_scadenza")
+
+  tipo         TipoAvviso
+  canale       CanaleAvviso @default(EMAIL)
+  /// Indirizzo o recapito a cui l'avviso è stato inviato
+  destinatario String?
+  /// Data di invio effettiva; null se non ancora inviato
+  dataInvio    DateTime?    @map("data_invio") @db.Date
+  esito        EsitoAvviso  @default(DA_INVIARE)
+  /// Messaggio di errore in caso di invio fallito
+  errore       String?
+  note         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  scadenza Scadenza @relation(fields: [idScadenza], references: [id], onDelete: Cascade)
+
+  /// Un solo avviso per tipo su una data scadenza: impedisce i doppi invii
+  /// quando la generazione viene rieseguita.
+  @@unique([idScadenza, tipo])
+  @@index([esito, dataInvio])
+  @@index([dataInvio])
+  @@map("avvisi")
+}
+
+enum TipoAvviso {
+  PRIMO
+  SECONDO
+  SOLLECITO
+}
+
+enum CanaleAvviso {
+  EMAIL
+  /// Avviso recuperato dall'archivio storico: il canale originale non è noto
+  ARCHIVIO
+}
+
+enum EsitoAvviso {
+  DA_INVIARE
+  INVIATO
+  ERRORE
+}
+
+// =====================================================
+// REGISTRO DELLE MODIFICHE (AUDIT)
+// =====================================================
+
+/// Registro append-only delle modifiche sui dati che incidono sugli importi.
+///
+/// Serve a rispondere alla domanda "chi ha cambiato questo importo, quando e
+/// da cosa a cosa": senza, una contestazione su un bollo non è difendibile.
+/// Nessun servizio modifica o cancella le righe di questa tabella.
+model AuditLog {
+  id        Int         @id @default(autoincrement())
+  /// Nome dell'entità toccata: 'scadenza', 'pagamento', 'veicolo', ...
+  entita    String
+  idEntita  Int         @map("id_entita")
+  azione    AzioneAudit
+  /// Email dell'utente che ha eseguito l'operazione, se disponibile
+  utente    String?
+  /// Stato dell'entità prima e dopo, limitato ai campi rilevanti
+  datiPrima Json?       @map("dati_prima")
+  datiDopo  Json?       @map("dati_dopo")
+  note      String?
+  createdAt DateTime    @default(now())
+
+  @@index([entita, idEntita, createdAt])
+  @@index([createdAt])
+  @@map("audit_log")
+}
+
+enum AzioneAudit {
+  CREAZIONE
+  MODIFICA
+  ELIMINAZIONE
 }
 
 enum StatoScadenza {
@@ -183,19 +284,19 @@ enum Periodicita {
 }
 
 model Pagamento {
-  id                Int       @id @default(autoincrement())
-  idScadenza        Int       @map("id_scadenza")
-  dataPagamento     DateTime  @map("data_pagamento") @db.Date
-  importoPagato     Decimal   @map("importo_pagato") @db.Decimal(10, 2)
-  metodoPagamento   String?   @map("metodo_pagamento")
-  ricevutaFile      String?   @map("ricevuta_file")
+  id              Int      @id @default(autoincrement())
+  idScadenza      Int      @map("id_scadenza")
+  dataPagamento   DateTime @map("data_pagamento") @db.Date
+  importoPagato   Decimal  @map("importo_pagato") @db.Decimal(10, 2)
+  metodoPagamento String?  @map("metodo_pagamento")
+  ricevutaFile    String?  @map("ricevuta_file")
   // Optimistic locking per gestione concorrenza
-  version           Int       @default(0)
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  version         Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  scadenza          Scadenza  @relation(fields: [idScadenza], references: [id], onDelete: Cascade)
-  snapshotCalcolo   SnapshotCalcoloBollo?
+  scadenza        Scadenza              @relation(fields: [idScadenza], references: [id], onDelete: Cascade)
+  snapshotCalcolo SnapshotCalcoloBollo?
 
   @@index([idScadenza])
   @@index([dataPagamento])
@@ -209,30 +310,30 @@ model Pagamento {
 /// Conserva lo snapshot immutabile delle tariffe applicate al momento del pagamento
 /// Questo garantisce che i report storici non vengano alterati da modifiche alle tariffe
 model SnapshotCalcoloBollo {
-  id                    Int       @id @default(autoincrement())
-  idPagamento           Int       @unique @map("id_pagamento")
+  id          Int @id @default(autoincrement())
+  idPagamento Int @unique @map("id_pagamento")
 
   // Snapshot dati veicolo al momento del calcolo
-  veicoloSnapshot       Json      @map("veicolo_snapshot")
+  veicoloSnapshot Json @map("veicolo_snapshot")
 
   // Snapshot tariffe applicate
-  tariffeApplicate      Json      @map("tariffe_applicate")
-  esenzioniApplicate    Json      @map("esenzioni_applicate")
+  tariffeApplicate   Json @map("tariffe_applicate")
+  esenzioniApplicate Json @map("esenzioni_applicate")
 
   // Dettaglio calcolo
-  importoBase           Decimal   @map("importo_base") @db.Decimal(10, 2)
-  importoRidotto        Decimal?  @map("importo_ridotto") @db.Decimal(10, 2)
-  scontoRidApplicato    Decimal   @map("sconto_rid_applicato") @db.Decimal(5, 2)
-  dettaglioCalcolo      String    @map("dettaglio_calcolo") @db.Text
+  importoBase        Decimal  @map("importo_base") @db.Decimal(10, 2)
+  importoRidotto     Decimal? @map("importo_ridotto") @db.Decimal(10, 2)
+  scontoRidApplicato Decimal  @map("sconto_rid_applicato") @db.Decimal(5, 2)
+  dettaglioCalcolo   String   @map("dettaglio_calcolo") @db.Text
 
   // Riferimento configurazione (per audit)
-  idConfigurazione      Int       @map("id_configurazione")
-  annoConfigurazione    Int       @map("anno_configurazione")
-  regioneConfigurazione String    @map("regione_configurazione")
+  idConfigurazione      Int    @map("id_configurazione")
+  annoConfigurazione    Int    @map("anno_configurazione")
+  regioneConfigurazione String @map("regione_configurazione")
 
-  createdAt             DateTime  @default(now())
+  createdAt DateTime @default(now())
 
-  pagamento             Pagamento @relation(fields: [idPagamento], references: [id], onDelete: Cascade)
+  pagamento Pagamento @relation(fields: [idPagamento], references: [id], onDelete: Cascade)
 
   @@map("snapshot_calcolo_bollo")
 }
@@ -243,17 +344,26 @@ model SnapshotCalcoloBollo {
 
 // Configurazione generale per anno/regione
 model ConfigurazioneBollo {
-  id                    Int       @id @default(autoincrement())
-  annoValidita          Int       @map("anno_validita")
-  regione               String    // "Lombardia", "Piemonte", etc. o "DEFAULT" per tariffa nazionale
-  scontoRid             Decimal   @map("sconto_rid") @db.Decimal(5, 2) @default(0) // Sconto domiciliazione bancaria (es. 15%)
-  attivo                Boolean   @default(true)
-  note                  String?
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  id           Int @id @default(autoincrement())
+  annoValidita Int @map("anno_validita")
 
-  tariffe               TariffaBollo[]
-  esenzioni             EsenzioneBollo[]
+  /// Intervallo di validità effettivo del tariffario.
+  /// annoValidita resta la chiave usata oggi dal motore di calcolo; queste
+  /// date permettono di rappresentare una variazione tariffaria infra-anno,
+  /// che con il solo anno era impossibile.
+  validoDa DateTime  @map("valido_da") @db.Date
+  /// null = ancora in vigore
+  validoA  DateTime? @map("valido_a") @db.Date
+
+  regione   String // "Lombardia", "Piemonte", etc. o "DEFAULT" per tariffa nazionale
+  scontoRid Decimal  @default(0) @map("sconto_rid") @db.Decimal(5, 2) // Sconto domiciliazione bancaria (es. 15%)
+  attivo    Boolean  @default(true)
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tariffe   TariffaBollo[]
+  esenzioni EsenzioneBollo[]
 
   @@unique([annoValidita, regione])
   @@map("configurazioni_bollo")
@@ -261,33 +371,33 @@ model ConfigurazioneBollo {
 
 // Tariffe specifiche per tipo veicolo
 model TariffaBollo {
-  id                    Int       @id @default(autoincrement())
-  idConfigurazione      Int       @map("id_configurazione")
+  id               Int @id @default(autoincrement())
+  idConfigurazione Int @map("id_configurazione")
 
   // Criteri di applicabilità
-  tipoVeicolo           String    @map("tipo_veicolo")           // Autovettura, Motociclo, Autocarro, etc.
-  categoriaEuro         String?   @map("categoria_euro")         // Euro 0, Euro 1, Euro 2, Euro 3, Euro 4-5-6, etc.
+  tipoVeicolo   String  @map("tipo_veicolo") // Autovettura, Motociclo, Autocarro, etc.
+  categoriaEuro String? @map("categoria_euro") // Euro 0, Euro 1, Euro 2, Euro 3, Euro 4-5-6, etc.
 
   // Soglie (per tariffe a scaglioni)
-  unitaMisura           String    @map("unita_misura")           // KW, CC, KG, POSTI, ASSI, FISSO
-  sogliaMin             Decimal?  @map("soglia_min") @db.Decimal(10, 2) // Valore minimo (incluso)
-  sogliaMax             Decimal?  @map("soglia_max") @db.Decimal(10, 2) // Valore massimo (escluso), null = illimitato
+  unitaMisura String   @map("unita_misura") // KW, CC, KG, POSTI, ASSI, FISSO
+  sogliaMin   Decimal? @map("soglia_min") @db.Decimal(10, 2) // Valore minimo (incluso)
+  sogliaMax   Decimal? @map("soglia_max") @db.Decimal(10, 2) // Valore massimo (escluso), null = illimitato
 
   // Importi
-  importoUnitario       Decimal   @map("importo_unitario") @db.Decimal(10, 4) // Importo per unità (es. €/KW)
-  importoFisso          Decimal?  @map("importo_fisso") @db.Decimal(10, 2)    // Importo fisso aggiuntivo
+  importoUnitario Decimal  @map("importo_unitario") @db.Decimal(10, 4) // Importo per unità (es. €/KW)
+  importoFisso    Decimal? @map("importo_fisso") @db.Decimal(10, 2) // Importo fisso aggiuntivo
 
   // Condizioni aggiuntive
-  tipoSospensione       String?   @map("tipo_sospensione")       // Per autocarri: Pneumatiche, Non pneumatiche
-  periodicita           String    @default("ANNUALE")            // ANNUALE, QUADRIMESTRALE
+  tipoSospensione String? @map("tipo_sospensione") // Per autocarri: Pneumatiche, Non pneumatiche
+  periodicita     String  @default("ANNUALE") // ANNUALE, QUADRIMESTRALE
 
   // Metadata
-  descrizione           String?
-  ordine                Int       @default(0)                    // Ordine di valutazione (per priorità)
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  descrizione String?
+  ordine      Int      @default(0) // Ordine di valutazione (per priorità)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  configurazione        ConfigurazioneBollo @relation(fields: [idConfigurazione], references: [id], onDelete: Cascade)
+  configurazione ConfigurazioneBollo @relation(fields: [idConfigurazione], references: [id], onDelete: Cascade)
 
   @@index([idConfigurazione])
   @@index([tipoVeicolo])
@@ -296,25 +406,25 @@ model TariffaBollo {
 
 // Esenzioni e riduzioni
 model EsenzioneBollo {
-  id                    Int       @id @default(autoincrement())
-  idConfigurazione      Int       @map("id_configurazione")
+  id               Int @id @default(autoincrement())
+  idConfigurazione Int @map("id_configurazione")
 
   // Tipo esenzione
-  tipoEsenzione         String    @map("tipo_esenzione")         // TOTALE, PARZIALE
-  percentualeRiduzione  Decimal?  @map("percentuale_riduzione") @db.Decimal(5, 2) // Per riduzioni parziali
+  tipoEsenzione        String   @map("tipo_esenzione") // TOTALE, PARZIALE
+  percentualeRiduzione Decimal? @map("percentuale_riduzione") @db.Decimal(5, 2) // Per riduzioni parziali
 
   // Criteri di applicabilità
-  tipoVeicolo           String?   @map("tipo_veicolo")
-  alimentazione         String?                                  // Elettrico, GPL, Metano
-  anniDaImmatricolazione Int?     @map("anni_da_immatricolazione") // Per ultratrentennali
+  tipoVeicolo            String? @map("tipo_veicolo")
+  alimentazione          String? // Elettrico, GPL, Metano
+  anniDaImmatricolazione Int?    @map("anni_da_immatricolazione") // Per ultratrentennali
 
-  descrizione           String
-  note                  String?
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  descrizione String
+  note        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   // BUG FIX: Relazione con cascade delete - elimina esenzioni quando si elimina la configurazione
-  configurazione        ConfigurazioneBollo @relation(fields: [idConfigurazione], references: [id], onDelete: Cascade)
+  configurazione ConfigurazioneBollo @relation(fields: [idConfigurazione], references: [id], onDelete: Cascade)
 
   @@index([idConfigurazione])
   @@map("esenzioni_bollo")

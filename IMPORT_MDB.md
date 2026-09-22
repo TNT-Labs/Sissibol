@@ -1,3 +1,13 @@
+# Import dall'archivio Access
+
+L'import ricostruisce clienti, veicoli, scadenze, pagamenti e **avvisi al
+cliente** a partire dai CSV esportati dall'archivio Access in `import/csv/`.
+
+Dalla fase 1 l'import conserva la data di scadenza originale dell'archivio
+(non piu' ricostruita da mese e anno), recupera le colonne `Primo_Avviso` e
+`Secondo_Avviso` nella tabella `avvisi`, e scrive `NULL` invece di `0` dove il
+dato tecnico del veicolo manca. Vedi `MODELLO-DATI.md`.
+
 ## 1. Aggiorna il codice
 git pull
 

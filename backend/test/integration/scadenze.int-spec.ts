@@ -11,6 +11,7 @@
 
 import { ScadenzeService } from '../../src/scadenze/scadenze.service';
 import { BolloService } from '../../src/bollo/bollo.service';
+import { AuditService } from '../../src/audit/audit.service';
 import { withFrozenTime } from '../helpers/frozen-time';
 import {
   creaCliente,
@@ -32,7 +33,8 @@ describe('ScadenzeService (integrazione)', () => {
   beforeAll(() => {
     prisma = getPrisma();
     const bollo = new BolloService(prisma as never);
-    service = new ScadenzeService(prisma as never, bollo);
+    const audit = new AuditService(prisma as never);
+    service = new ScadenzeService(prisma as never, bollo, audit);
   });
 
   beforeEach(async () => {

@@ -89,7 +89,16 @@ function parseMDBDate(dateStr) {
     year = year > 50 ? 1900 + year : 2000 + year;
   }
 
-  return new Date(year, month - 1, day);
+  // Mezzanotte UTC, non mezzanotte locale.
+  //
+  // Le date dell'archivio finiscono tutte in colonne di tipo DATE (scadenza,
+  // pagamento, immatricolazione), dove conta il giorno e non l'istante.
+  // Costruendole nel fuso locale, su un server con offset positivo
+  // (per esempio Europe/Rome) mezzanotte locale e' il giorno PRECEDENTE in
+  // UTC, e la data veniva salvata con un giorno di scarto. Il problema non si
+  // manifesta su un container UTC, quindi resterebbe invisibile fino alla
+  // messa in produzione.
+  return new Date(Date.UTC(year, month - 1, day));
 }
 
 function parseDecimal(value) {
@@ -155,6 +164,19 @@ function mapNumeroAssi(numAssi) {
 }
 
 /**
+ * Grandezza fisica di un veicolo (potenza, cilindrata, portata, peso...).
+ *
+ * Nell'archivio lo 0 significa "non rilevato", non "zero": nessun veicolo ha
+ * davvero 0 KW. Scrivendolo come 0 la lacuna diventava invisibile, perche' una
+ * query su IS NULL non la trovava e lo 0 sembrava un valore misurato.
+ * Restituire null la rende interrogabile.
+ */
+function mapGrandezzaFisica(valore) {
+  if (valore === null || valore === undefined) return null;
+  return valore > 0 ? valore : null;
+}
+
+/**
  * Legge dalla riga del CSV mezzi il valore di periodicità, tollerando le
  * varianti di intestazione presenti negli export ("Periodicità" con accento).
  */
@@ -179,5 +201,6 @@ module.exports = {
   mapPeriodicita,
   mapTipoSospensione,
   mapNumeroAssi,
+  mapGrandezzaFisica,
   readPeriodicitaRaw,
 };

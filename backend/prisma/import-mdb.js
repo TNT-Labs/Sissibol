@@ -29,6 +29,7 @@ const {
   mapPeriodicita,
   mapTipoSospensione,
   mapNumeroAssi,
+  mapGrandezzaFisica,
   readPeriodicitaRaw,
 } = require('./import-mapping');
 
@@ -195,7 +196,7 @@ async function importMezzi(ditteMap, lookups) {
           targa,
           tipoVeicolo,
           regione,
-          potenzaKw: kw,
+          potenzaKw: mapGrandezzaFisica(kw),
           numeroAssi: mapNumeroAssi(numAssi),
           tipoSospensione: mapTipoSospensione(sospPneum, numAssi),
           dataImmatricolazione: dataImm,
@@ -231,6 +232,7 @@ async function importScadenziario(veicoliMap) {
 
   let scadenzeImported = 0;
   let pagamentiImported = 0;
+  let avvisiImported = 0;
   let skipped = 0;
   let errors = 0;
 
@@ -257,11 +259,14 @@ async function importScadenziario(veicoliMap) {
       continue;
     }
 
-    const meseScadenza = dataScadenza.getMonth() + 1;
-    const annoScadenza = dataScadenza.getFullYear();
+    // Le date sono costruite a mezzanotte UTC: i getter da usare sono quelli UTC.
+    const meseScadenza = dataScadenza.getUTCMonth() + 1;
+    const annoScadenza = dataScadenza.getUTCFullYear();
 
     const importoPrevisto = parseDecimal(row['Bollo']);
     const dataPagamento = parseMDBDate(row['Data_pagamento']);
+    const primoAvviso = parseMDBDate(row['Primo_Avviso']);
+    const secondoAvviso = parseMDBDate(row['Secondo_Avviso']);
 
     const key = `${targa}-${annoScadenza}-${meseScadenza}`;
 
@@ -272,11 +277,14 @@ async function importScadenziario(veicoliMap) {
     scadenzeCreate.get(key).push({
       idVeicolo: veicoloInfo.id,
       periodicita: veicoloInfo.periodicita, // Periodicità dal CSV mezzi
+      dataScadenza,
       meseScadenza,
       annoScadenza,
       importoPrevisto,
       dataPagamento,
       importoPagato: dataPagamento ? importoPrevisto : null,
+      primoAvviso,
+      secondoAvviso,
     });
   }
 
@@ -316,6 +324,9 @@ async function importScadenziario(veicoliMap) {
         const scadenza = await prisma.scadenza.create({
           data: {
             idVeicolo: first.idVeicolo,
+            // La data dell'archivio viene conservata com'è: è il dato
+            // originale, non una ricostruzione da mese e anno.
+            dataScadenza: first.dataScadenza,
             meseScadenza: first.meseScadenza,
             annoScadenza: first.annoScadenza,
             periodicita: first.periodicita,
@@ -325,6 +336,37 @@ async function importScadenziario(veicoliMap) {
         });
 
         scadenzeImported++;
+
+        // Avvisi al cliente registrati nell'archivio.
+        // Il canale originale non è noto (l'archivio registrava solo la data),
+        // quindi vengono marcati come provenienti da archivio storico.
+        const avvisiDaCreare = [];
+        const primo = items.find((item) => item.primoAvviso !== null);
+        if (primo) {
+          avvisiDaCreare.push({
+            idScadenza: scadenza.id,
+            tipo: 'PRIMO',
+            canale: 'ARCHIVIO',
+            dataInvio: primo.primoAvviso,
+            esito: 'INVIATO',
+            note: 'Recuperato dall\'archivio Access',
+          });
+        }
+        const secondo = items.find((item) => item.secondoAvviso !== null);
+        if (secondo) {
+          avvisiDaCreare.push({
+            idScadenza: scadenza.id,
+            tipo: 'SECONDO',
+            canale: 'ARCHIVIO',
+            dataInvio: secondo.secondoAvviso,
+            esito: 'INVIATO',
+            note: 'Recuperato dall\'archivio Access',
+          });
+        }
+        if (avvisiDaCreare.length > 0) {
+          await prisma.avviso.createMany({ data: avvisiDaCreare });
+          avvisiImported += avvisiDaCreare.length;
+        }
 
         // Crea pagamento se presente
         if (hasPagamento) {
@@ -357,6 +399,7 @@ async function importScadenziario(veicoliMap) {
   console.log(''); // newline after progress
   console.log(`  ✓ Scadenze importate: ${scadenzeImported}`);
   console.log(`  ✓ Pagamenti importati: ${pagamentiImported}`);
+  console.log(`  ✓ Avvisi recuperati: ${avvisiImported}`);
   console.log(`  ⊘ Saltati: ${skipped}`);
   if (errors > 0) console.log(`  ✗ Errori: ${errors}`);
 }

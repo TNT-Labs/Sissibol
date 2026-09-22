@@ -1,4 +1,5 @@
 import {
+  Req,
   Controller,
   Get,
   Post,
@@ -24,6 +25,14 @@ import { PagamentiService } from './pagamenti.service';
 import { CreatePagamentoDto } from './dto/create-pagamento.dto';
 import { UpdatePagamentoDto } from './dto/update-pagamento.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+
+/**
+ * Richiesta con l'utente risolto dal JwtAuthGuard.
+ * L'email serve a tracciare l'autore delle modifiche nel registro di audit.
+ */
+interface RichiestaAutenticata {
+  user?: { email?: string };
+}
 
 // Tipo per file uploadato tramite multer
 interface MulterFile {
@@ -154,6 +163,7 @@ export class PagamentiController {
     }),
   )
   create(
+    @Req() req: RichiestaAutenticata,
     @Body() createPagamentoDto: CreatePagamentoDto,
     @UploadedFile() file?: MulterFile,
   ) {
@@ -161,7 +171,7 @@ export class PagamentiController {
       // Salva solo il filename, non il path completo (sicurezza)
       createPagamentoDto.ricevutaFile = file.filename;
     }
-    return this.pagamentiService.create(createPagamentoDto);
+    return this.pagamentiService.create(createPagamentoDto, req.user?.email);
   }
 
   @Get()
@@ -201,6 +211,7 @@ export class PagamentiController {
    */
   @Post('multiplo')
   createMultiplo(
+    @Req() req: RichiestaAutenticata,
     @Body() body: {
       idCliente: number;
       meseScadenza: number;
@@ -209,7 +220,7 @@ export class PagamentiController {
       metodoPagamento?: string;
     },
   ) {
-    return this.pagamentiService.createMultiplo(body);
+    return this.pagamentiService.createMultiplo({ ...body, utente: req.user?.email });
   }
 
   @Get(':id')
@@ -263,14 +274,18 @@ export class PagamentiController {
 
   @Patch(':id')
   update(
+    @Req() req: RichiestaAutenticata,
     @Param('id', ParseIntPipe) id: number,
     @Body() updatePagamentoDto: UpdatePagamentoDto,
   ) {
-    return this.pagamentiService.update(id, updatePagamentoDto);
+    return this.pagamentiService.update(id, updatePagamentoDto, req.user?.email);
   }
 
   @Delete(':id')
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.pagamentiService.remove(id);
+  remove(
+    @Req() req: RichiestaAutenticata,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.pagamentiService.remove(id, req.user?.email);
   }
 }

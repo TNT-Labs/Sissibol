@@ -94,8 +94,13 @@ export interface Veicolo {
 export interface Scadenza {
   id: number;
   idVeicolo: number;
-  meseScadenza: number;  // 1-12
-  annoScadenza: number;
+  /**
+   * Data effettiva di scadenza (ISO, YYYY-MM-DD): e' la fonte di verita'.
+   * meseScadenza e annoScadenza ne derivano e restano per compatibilita'.
+   */
+  dataScadenza: string;
+  meseScadenza: number;  // 1-12, derivato da dataScadenza
+  annoScadenza: number;  // derivato da dataScadenza
   periodicita: Periodicita;
   importoPrevisto?: number;
   stato: StatoScadenza;
@@ -103,6 +108,28 @@ export interface Scadenza {
   updatedAt: string;
   veicolo?: Veicolo;
   pagamenti?: Pagamento[];
+  avvisi?: Avviso[];
+}
+
+export type TipoAvviso = 'PRIMO' | 'SECONDO' | 'SOLLECITO';
+export type CanaleAvviso = 'EMAIL' | 'ARCHIVIO';
+export type EsitoAvviso = 'DA_INVIARE' | 'INVIATO' | 'ERRORE';
+
+/**
+ * Avviso di scadenza al cliente.
+ * Il canale ARCHIVIO indica un avviso recuperato dallo storico Access, di cui
+ * si conosce la data ma non il mezzo con cui fu inviato.
+ */
+export interface Avviso {
+  id: number;
+  idScadenza: number;
+  tipo: TipoAvviso;
+  canale: CanaleAvviso;
+  destinatario?: string | null;
+  dataInvio?: string | null;
+  esito: EsitoAvviso;
+  errore?: string | null;
+  note?: string | null;
 }
 
 export interface Pagamento {

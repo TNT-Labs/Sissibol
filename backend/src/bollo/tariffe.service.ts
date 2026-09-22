@@ -67,6 +67,7 @@ export class TariffeService {
     return this.prisma.configurazioneBollo.create({
       data: {
         annoValidita: data.annoValidita,
+        ...this.intervalloValiditaAnno(data.annoValidita),
         regione: data.regione,
         scontoRid: data.scontoRid || 0,
         note: data.note,
@@ -74,6 +75,21 @@ export class TariffeService {
       },
     });
   }
+
+  /**
+   * Intervallo di validità predefinito per una configurazione: l'anno solare.
+   *
+   * È la semantica che `annoValidita` ha sempre avuto implicitamente; averla
+   * come date esplicite permetterà di rappresentare variazioni infra-anno
+   * senza cambiare le configurazioni esistenti.
+   */
+  private intervalloValiditaAnno(anno: number): { validoDa: Date; validoA: Date } {
+    return {
+      validoDa: new Date(Date.UTC(anno, 0, 1)),
+      validoA: new Date(Date.UTC(anno, 11, 31)),
+    };
+  }
+
 
   /**
    * Duplica una configurazione esistente per un nuovo anno
@@ -111,6 +127,7 @@ export class TariffeService {
       const config = await tx.configurazioneBollo.create({
         data: {
           annoValidita: nuovoAnno,
+          ...this.intervalloValiditaAnno(nuovoAnno),
           regione: configOriginale.regione,
           scontoRid: configOriginale.scontoRid,
           note: `Duplicata da configurazione ${configOriginale.annoValidita}`,

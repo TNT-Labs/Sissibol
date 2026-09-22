@@ -47,6 +47,8 @@ export async function disconnectPrisma(): Promise<void> {
 
 /** Tabelle azzerate fra un test e l'altro, in ordine irrilevante grazie a CASCADE. */
 const TABELLE = [
+  'audit_log',
+  'avvisi',
   'snapshot_calcolo_bollo',
   'pagamenti',
   'scadenze',
@@ -84,6 +86,8 @@ export async function seedTariffario(): Promise<void> {
     const config = await prisma.configurazioneBollo.create({
       data: {
         annoValidita: c.annoValidita,
+        validoDa: new Date(Date.UTC(c.annoValidita, 0, 1)),
+        validoA: new Date(Date.UTC(c.annoValidita, 11, 31)),
         regione: c.regione,
         scontoRid: c.scontoRid,
         attivo: c.attivo,
@@ -127,18 +131,32 @@ export async function seedTariffario(): Promise<void> {
 // FACTORY
 // =====================================================
 
+/** Ultimo giorno del mese, normalizzato a mezzanotte UTC. */
+export function ultimoGiornoDelMese(anno: number, mese: number): Date {
+  // Date.UTC(anno, mese, 0) restituisce l'ultimo giorno del mese precedente:
+  // passando `mese` (1-12, quindi gia' spostato di uno) si ottiene l'ultimo
+  // giorno del mese desiderato, anni bisestili compresi.
+  return new Date(Date.UTC(anno, mese, 0));
+}
+
 export async function creaCliente(
   override: Partial<{
     ragioneSociale: string;
-    email: string;
+    /** Passare esplicitamente `null` per un cliente senza recapito. */
+    email: string | null;
     attivo: boolean;
   }> = {},
 ) {
+  // Come per l'importo previsto, `??` non distingue "non specificato" da
+  // "esplicitamente null": un cliente senza email è un caso da testare, non
+  // un campo da riempire col valore di comodo.
+  const email = 'email' in override ? override.email : 'test@example.com';
+
   return getPrisma().cliente.create({
     data: {
       tipoCliente: 'PERSONA_GIURIDICA',
       ragioneSociale: override.ragioneSociale ?? 'Trasporti Test Srl',
-      email: override.email ?? 'test@example.com',
+      email,
       attivo: override.attivo ?? true,
     },
   });
@@ -196,11 +214,17 @@ export async function creaScadenza(
   const importoPrevisto =
     'importoPrevisto' in override ? override.importoPrevisto : '258';
 
+  const mese = override.meseScadenza ?? 6;
+  const anno = override.annoScadenza ?? 2026;
+
   return getPrisma().scadenza.create({
     data: {
       idVeicolo,
-      meseScadenza: override.meseScadenza ?? 6,
-      annoScadenza: override.annoScadenza ?? 2026,
+      // La data effettiva e' la fonte di verita': un vincolo CHECK sul
+      // database rifiuta le righe in cui divergerebbe da mese/anno.
+      dataScadenza: ultimoGiornoDelMese(anno, mese),
+      meseScadenza: mese,
+      annoScadenza: anno,
       periodicita: override.periodicita ?? 'ANNUALE',
       importoPrevisto,
       stato: override.stato ?? 'DA_PAGARE',
