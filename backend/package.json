@@ -17,7 +17,12 @@
     "prisma:studio": "prisma studio",
     "prisma:import-mdb": "node prisma/import-mdb.js",
     "test": "jest",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "test:integration": "jest --config jest.integration.config.js",
+    "test:all": "npm run test && npm run test:integration",
+    "golden:genera": "ts-node test/tools/generate-golden.ts",
+    "golden:corpus": "ts-node test/tools/build-corpus.ts",
+    "golden:tariffario": "ts-node test/tools/dump-tariffario.ts"
   },
   "prisma": {
     "seed": "node prisma/seed.js"
@@ -71,18 +76,5 @@
     "ts-loader": "^9.5.4",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
-  },
-  "jest": {
-    "preset": "ts-jest",
-    "testEnvironment": "node",
-    "roots": [
-      "<rootDir>/src"
-    ],
-    "moduleFileExtensions": [
-      "ts",
-      "js",
-      "json"
-    ],
-    "testRegex": ".*\\.spec\\.ts$"
   }
 }
