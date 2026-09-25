@@ -13,12 +13,12 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Setup Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v5
       with:
-        node-version: '20'
+        node-version: '22'
         cache: 'npm'
 
     - name: Install dependencies
@@ -66,12 +66,12 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Setup Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v5
       with:
-        node-version: '20'
+        node-version: '22'
         cache: 'npm'
 
     - name: Install dependencies
@@ -101,13 +101,13 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v5
 
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v2
+      uses: docker/setup-buildx-action@v4
 
     - name: Cache Docker layers
-      uses: actions/cache@v3
+      uses: actions/cache@v5
       with:
         path: /tmp/.buildx-cache
         key: ${{ runner.os }}-buildx-${{ github.sha }}
@@ -115,7 +115,7 @@ jobs:
           ${{ runner.os }}-buildx-
 
     - name: Build Backend Image
-      uses: docker/build-push-action@v4
+      uses: docker/build-push-action@v7
       with:
         context: ./backend
         file: ./backend/Dockerfile
@@ -125,7 +125,7 @@ jobs:
         cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
 
     - name: Build Frontend Image
-      uses: docker/build-push-action@v4
+      uses: docker/build-push-action@v7
       with:
         context: ./frontend
         file: ./frontend/Dockerfile
@@ -137,27 +137,32 @@ jobs:
         cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
 
     - name: Start services
-      run: |
-        docker-compose up -d
-        sleep 30  # Wait for services to be ready
+      run: docker compose up -d
 
     - name: Check services health
       run: |
-        docker-compose ps
-        # /auth/login accetta solo POST: un 401/400 conferma comunque che il
+        # Il backend applica migrazioni e seed prima di avviarsi: si attende
+        # finché risponde (al massimo 3 minuti) invece di un'attesa fissa.
+        # /auth/login accetta solo POST: un 400/401 conferma comunque che il
         # backend risponde (200-499 = servizio raggiungibile).
-        curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:3000/auth/login \
-          -H "Content-Type: application/json" -d '{}' | grep -qE '^[24]' || exit 1
-        curl -f http://localhost/ || exit 1
+        for i in $(seq 1 36); do
+          code=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:3000/auth/login \
+            -H "Content-Type: application/json" -d '{}' || true)
+          if echo "$code" | grep -qE '^[24]'; then echo "Backend pronto (HTTP $code)"; break; fi
+          if [ "$i" -eq 36 ]; then echo "Backend non raggiungibile (ultimo HTTP $code)"; docker compose ps; exit 1; fi
+          sleep 5
+        done
+        docker compose ps
+        curl -fsS -o /dev/null http://localhost/ && echo "Frontend pronto"
 
     - name: Show logs on failure
       if: failure()
       run: |
-        docker-compose logs
+        docker compose logs
 
     - name: Stop services
       if: always()
-      run: docker-compose down -v
+      run: docker compose down -v
 
     - name: Move cache
       run: |

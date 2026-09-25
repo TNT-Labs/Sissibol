@@ -1,5 +1,7 @@
 # Build stage
-FROM node:18-alpine AS builder
+# Node 22 LTS: Vite 7 e il plugin PWA richiedono Node >= 20, e Node 18 e 20
+# sono fuori supporto. Deve coincidere con la versione usata dalla CI.
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 

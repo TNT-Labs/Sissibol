@@ -1,5 +1,7 @@
 # Build stage
-FROM node:18-alpine AS builder
+# Node 22 LTS: Node 18 e 20 sono fuori supporto. Deve coincidere con la
+# versione usata dalla CI e dall'immagine del frontend.
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
@@ -23,7 +25,7 @@ RUN npx prisma generate
 RUN npm run build
 
 # Production stage
-FROM node:18-alpine AS production
+FROM node:22-alpine AS production
 
 WORKDIR /app
 
@@ -34,7 +36,7 @@ RUN apk add --no-cache openssl libc6-compat
 COPY package*.json ./
 COPY prisma ./prisma/
 
-RUN npm install --only=production && \
+RUN npm install --omit=dev && \
     npx prisma generate && \
     npm cache clean --force
 
