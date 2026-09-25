@@ -130,6 +130,22 @@ esegui() {
   scrivi_stato "OK" ""
 }
 
+# Attende (al massimo ATTESA_TABELLE secondi) che esista la tabella delle
+# scadenze, creata dalle migrazioni all'avvio del backend.
+attendi_tabelle() {
+  limite=$(( $(date +%s) + ${ATTESA_TABELLE:-600} ))
+  avvisato=""
+  while [ "$(psql -tAc "select to_regclass('public.scadenze') is not null" 2>/dev/null)" != "t" ]; do
+    if [ "$(date +%s)" -ge "$limite" ]; then
+      log "tabelle ancora assenti: si prova comunque il backup"
+      return 0
+    fi
+    [ -n "$avvisato" ] || log "in attesa che il backend crei le tabelle del database"
+    avvisato=1
+    sleep 10
+  done
+}
+
 backup_di_oggi() {
   ls "$BACKUP_DIR"/"$PREFISSO-$(date '+%Y%m%d')"-*.dump >/dev/null 2>&1
 }
@@ -139,8 +155,11 @@ ciclo() {
   log "attivo: backup giornaliero alle $BACKUP_ORA (fuso ${TZ:-UTC}), conservazione $BACKUP_GIORNI giorni e $BACKUP_MESI mensili"
 
   # Alla prima installazione un backup subito: una configurazione sbagliata
-  # si scopre adesso, non domattina.
+  # si scopre adesso, non domattina. Prima però si aspetta che il backend
+  # abbia creato le tabelle: il database appena avviato è vuoto, e un dump
+  # vuoto veniva scartato (stato in errore fino al tentativo successivo).
   if [ -z "$(ultimo_riuscito || true)" ]; then
+    attendi_tabelle
     esegui || true
   fi
 
