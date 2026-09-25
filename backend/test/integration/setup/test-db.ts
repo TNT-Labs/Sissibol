@@ -145,6 +145,7 @@ export async function creaCliente(
     /** Passare esplicitamente `null` per un cliente senza recapito. */
     email: string | null;
     attivo: boolean;
+    avvisiEmail: boolean;
   }> = {},
 ) {
   // Come per l'importo previsto, `??` non distingue "non specificato" da
@@ -158,6 +159,7 @@ export async function creaCliente(
       ragioneSociale: override.ragioneSociale ?? 'Trasporti Test Srl',
       email,
       attivo: override.attivo ?? true,
+      avvisiEmail: override.avvisiEmail ?? true,
     },
   });
 }

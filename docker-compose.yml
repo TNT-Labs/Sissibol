@@ -33,6 +33,26 @@ services:
       JWT_EXPIRATION: 24h
       PORT: 3000
       NODE_ENV: production
+      # Origini esterne ammesse dal CORS (la stessa origine lo è sempre)
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      APP_FUSO_ORARIO: ${APP_FUSO_ORARIO:-Europe/Rome}
+      # Server di posta: senza SMTP_HOST nessuna email parte
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      # Riepilogo interno giornaliero allo studio
+      NOTIFICHE_EMAIL_TO: ${NOTIFICHE_EMAIL_TO:-}
+      NOTIFICHE_GIORNI_ANTICIPO: ${NOTIFICHE_GIORNI_ANTICIPO:-30}
+      NOTIFICHE_ORA: ${NOTIFICHE_ORA:-07:00}
+      # Avvisi ai clienti (vedi AVVISI.md)
+      AVVISI_INVIO_AUTOMATICO: ${AVVISI_INVIO_AUTOMATICO:-false}
+      AVVISI_ORA: ${AVVISI_ORA:-09:00}
+      AVVISI_MAX_EMAIL_PER_ESECUZIONE: ${AVVISI_MAX_EMAIL_PER_ESECUZIONE:-200}
+      AVVISI_FIRMA: ${AVVISI_FIRMA:-}
+      AVVISI_RISPONDI_A: ${AVVISI_RISPONDI_A:-}
     ports:
       - "3000:3000"
     volumes:

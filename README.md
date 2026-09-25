@@ -25,7 +25,8 @@ Progressive Web App per la gestione dello scadenziario bolli per autotrasporto.
 - Tracking scadenze con stati: DA_PAGARE, PAGATO, SCADUTO
 - Periodicità: ANNUALE o QUADRIMESTRALE
 - Aggiornamento automatico scadenze scadute
-- Notifiche scadenze imminenti (30 giorni)
+- Avvisi di scadenza ai clienti via email, un'email per cliente (vedi [AVVISI.md](AVVISI.md))
+- Riepilogo giornaliero interno delle scadenze imminenti
 - Calcolo automatico importo previsto
 
 ### Sistema Calcolo Bollo
@@ -467,7 +468,6 @@ docker-compose exec backend npm run prisma:seed
 
 ## Funzionalità Future
 
-- [ ] Sistema notifiche email automatiche
 - [ ] Integrazione calendario Google/Outlook
 - [ ] Dashboard con grafici e statistiche avanzate
 - [ ] Gestione allegati multipli per pagamento

@@ -140,9 +140,8 @@ il mezzo con cui fu inviato.
 Un vincolo di unicità `(id_scadenza, tipo)` rende la generazione idempotente:
 rieseguirla non produce doppioni né doppi invii.
 
-**Ambito**: gli avvisi vengono maturati e registrati; l'invio vero e proprio
-(email al cliente, gestione dei fallimenti di consegna, solleciti) è della fase
-successiva. `esito` resta `DA_INVIARE` finché un mittente non lo aggiorna.
+L'invio al cliente, con le sue garanzie (niente doppi invii, prova del
+contenuto, ritentativi), è della fase 3 ed è descritto in `AVVISI.md`.
 
 ### Registro delle modifiche
 

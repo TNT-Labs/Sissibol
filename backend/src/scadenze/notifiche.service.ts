@@ -1,17 +1,20 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { CronJob } from 'cron';
-import * as nodemailer from 'nodemailer';
 import { PrismaService } from '../prisma/prisma.service';
 import { ScadenzeService } from './scadenze.service';
+import { MailerService } from '../mail/mailer.service';
+import { formattaOrario, fusoOrarioApplicazione, leggiOrario } from '../mail/fuso-orario';
+import { escapeHtml } from '../avvisi/composizione';
 
 const NOTIFICHE_CRON_JOB = 'notifiche-riepilogo-giornaliero';
 
 /**
  * Notifiche email per le scadenze imminenti.
  *
- * Disattivato di default: si attiva solo se SMTP_HOST è configurato.
- * Ogni giorno all'ora configurata (NOTIFICHE_ORA, default 07:00) invia un
+ * Disattivato di default: si attiva solo se il server di posta è configurato
+ * (vedi MailerService). Ogni giorno all'ora configurata (NOTIFICHE_ORA,
+ * default 07:00, nel fuso di APP_FUSO_ORARIO) invia un
  * riepilogo delle scadenze in scadenza nei prossimi N giorni
  * (NOTIFICHE_GIORNI_ANTICIPO, default 30) ai destinatari di
  * NOTIFICHE_EMAIL_TO (lista separata da virgole) o, in mancanza,
@@ -20,42 +23,32 @@ const NOTIFICHE_CRON_JOB = 'notifiche-riepilogo-giornaliero';
 @Injectable()
 export class NotificheService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(NotificheService.name);
-  private transporter: nodemailer.Transporter | null = null;
 
   constructor(
     private prisma: PrismaService,
     private scadenzeService: ScadenzeService,
     private schedulerRegistry: SchedulerRegistry,
+    private mailer: MailerService,
   ) {}
 
   onModuleInit() {
-    const host = process.env.SMTP_HOST;
-    if (!host) {
-      this.logger.log('Notifiche email disabilitate (SMTP_HOST non configurato)');
+    if (!this.mailer.configurato) {
+      this.logger.log('Riepilogo email disabilitato (server di posta non configurato)');
       return;
     }
 
-    this.transporter = nodemailer.createTransport({
-      host,
-      port: parseInt(process.env.SMTP_PORT || '587', 10),
-      secure: process.env.SMTP_SECURE === 'true',
-      auth: process.env.SMTP_USER
-        ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
-        : undefined,
-    });
-
     // Pianifica l'invio giornaliero all'ora configurata (NOTIFICHE_ORA)
-    const { ora, minuti } = this.parseOra(process.env.NOTIFICHE_ORA);
-    const cronExpression = `${minuti} ${ora} * * *`;
+    const orario = leggiOrario(process.env.NOTIFICHE_ORA, '07:00');
+    const fuso = fusoOrarioApplicazione();
 
-    const job = new CronJob(cronExpression, () => {
+    const job = new CronJob(`${orario.minuti} ${orario.ora} * * *`, () => {
       void this.inviaRiepilogo();
-    });
+    }, null, false, fuso);
     this.schedulerRegistry.addCronJob(NOTIFICHE_CRON_JOB, job);
     job.start();
 
     this.logger.log(
-      `Notifiche email attive: invio giornaliero pianificato alle ${String(ora).padStart(2, '0')}:${String(minuti).padStart(2, '0')}`,
+      `Riepilogo email attivo: invio giornaliero alle ${formattaOrario(orario)} (${fuso})`,
     );
   }
 
@@ -63,14 +56,6 @@ export class NotificheService implements OnModuleInit, OnModuleDestroy {
     if (this.schedulerRegistry.doesExist('cron', NOTIFICHE_CRON_JOB)) {
       this.schedulerRegistry.deleteCronJob(NOTIFICHE_CRON_JOB);
     }
-  }
-
-  /** Interpreta la variabile NOTIFICHE_ORA (formato HH:MM), con fallback 07:00. */
-  private parseOra(valore?: string): { ora: number; minuti: number } {
-    const [oraRaw, minutiRaw] = (valore || '07:00').split(':').map((v) => parseInt(v, 10));
-    const ora = Number.isFinite(oraRaw) && oraRaw >= 0 && oraRaw <= 23 ? oraRaw : 7;
-    const minuti = Number.isFinite(minutiRaw) && minutiRaw >= 0 && minutiRaw <= 59 ? minutiRaw : 0;
-    return { ora, minuti };
   }
 
   private async getDestinatari(): Promise<string[]> {
@@ -92,7 +77,7 @@ export class NotificheService implements OnModuleInit, OnModuleDestroy {
    * invocare manualmente (endpoint di test) oltre che dallo scheduler.
    */
   async inviaRiepilogo(): Promise<{ inviata: boolean; scadenze: number; destinatari: number }> {
-    if (!this.transporter) {
+    if (!this.mailer.configurato) {
       return { inviata: false, scadenze: 0, destinatari: 0 };
     }
 
@@ -120,9 +105,10 @@ export class NotificheService implements OnModuleInit, OnModuleDestroy {
             || [cliente?.cognome, cliente?.nome].filter(Boolean).join(' ')
             || 'N/A';
           const importo = s.importoPrevisto ? `€ ${Number(s.importoPrevisto).toFixed(2)}` : '-';
+          // Nomi e targhe vengono dall'archivio: vanno trattati come testo.
           return `<tr>
-            <td style="padding:4px 8px;border:1px solid #ddd">${s.veicolo?.targa || '-'}</td>
-            <td style="padding:4px 8px;border:1px solid #ddd">${nomeCliente}</td>
+            <td style="padding:4px 8px;border:1px solid #ddd">${escapeHtml(s.veicolo?.targa || '-')}</td>
+            <td style="padding:4px 8px;border:1px solid #ddd">${escapeHtml(nomeCliente)}</td>
             <td style="padding:4px 8px;border:1px solid #ddd">${s.meseScadenza}/${s.annoScadenza}</td>
             <td style="padding:4px 8px;border:1px solid #ddd">${importo}</td>
             <td style="padding:4px 8px;border:1px solid #ddd">${s.giorniRimanenti} giorni (${s.urgenza})</td>
@@ -144,10 +130,10 @@ export class NotificheService implements OnModuleInit, OnModuleDestroy {
           ${righe}
         </table>`;
 
-      await this.transporter.sendMail({
-        from: process.env.SMTP_FROM || process.env.SMTP_USER,
-        to: destinatari.join(', '),
-        subject: `Sissibol: ${scadenze.length} scadenze bolli imminenti`,
+      await this.mailer.spedisci({
+        a: destinatari,
+        oggetto: `Sissibol: ${scadenze.length} scadenze bolli imminenti`,
+        testo: `Ci sono ${scadenze.length} scadenze nei prossimi giorni. Il dettaglio è nella versione HTML di questo messaggio.`,
         html,
       });
 

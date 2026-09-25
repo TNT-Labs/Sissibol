@@ -51,6 +51,8 @@ export interface Cliente {
   telefono?: string;
   note?: string;
   attivo: boolean;
+  /** Il cliente riceve gli avvisi di scadenza via email */
+  avvisiEmail: boolean;
   createdAt: string;
   updatedAt: string;
   veicoli?: Veicolo[];
@@ -113,7 +115,7 @@ export interface Scadenza {
 
 export type TipoAvviso = 'PRIMO' | 'SECONDO' | 'SOLLECITO';
 export type CanaleAvviso = 'EMAIL' | 'ARCHIVIO';
-export type EsitoAvviso = 'DA_INVIARE' | 'INVIATO' | 'ERRORE';
+export type EsitoAvviso = 'DA_INVIARE' | 'IN_INVIO' | 'INVIATO' | 'ERRORE' | 'ANNULLATO';
 
 /**
  * Avviso di scadenza al cliente.
@@ -130,6 +132,13 @@ export interface Avviso {
   esito: EsitoAvviso;
   errore?: string | null;
   note?: string | null;
+  tentativi?: number;
+  prossimoTentativo?: string | null;
+  /** Istante esatto dell'invio (dataInvio ne è il giorno) */
+  inviatoIl?: string | null;
+  idMessaggio?: string | null;
+  oggetto?: string | null;
+  testo?: string | null;
 }
 
 export interface Pagamento {

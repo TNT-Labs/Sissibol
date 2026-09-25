@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { clientiService } from '../../services/clienti.service';
 import { TipoCliente, getClienteDisplayName } from '../../types';
 import type { Cliente } from '../../types';
@@ -28,12 +29,16 @@ const emptyFormData = {
   telefono: '',
   note: '',
   attivo: true,
+  avvisiEmail: true,
 };
 
 export const ClientiPage: React.FC = () => {
   const [clienti, setClienti] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  // ?cerca= precompila la ricerca: la pagina Avvisi vi rimanda per completare
+  // l'email dei clienti che non possono essere avvisati.
+  const [searchParams] = useSearchParams();
+  const [search, setSearch] = useState(() => searchParams.get('cerca') ?? '');
   const [filtroAttivo, setFiltroAttivo] = useState<FiltroAttivo>('attivi');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -96,6 +101,7 @@ export const ClientiPage: React.FC = () => {
         telefono: cliente.telefono || '',
         note: cliente.note || '',
         attivo: cliente.attivo ?? true,
+        avvisiEmail: cliente.avvisiEmail ?? true,
       });
     } else {
       setEditingCliente(null);
@@ -115,28 +121,38 @@ export const ClientiPage: React.FC = () => {
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
-      // Converte le stringhe vuote in undefined: il backend valida i campi
-      // opzionali (es. @IsEmail) anche se vuoti, e '' li farebbe fallire
+      // Le stringhe vuote non si possono inviare: il backend valida i campi
+      // opzionali (es. @IsEmail) anche se vuoti, e '' li farebbe fallire.
+      // In creazione un campo vuoto si omette; in modifica si invia null,
+      // altrimenti svuotarlo (es. un'email errata) non avrebbe effetto.
+      const vuoto = editingCliente ? null : undefined;
       const isPersonaFisica = formData.tipoCliente === TipoCliente.PERSONA_FISICA;
       const payload = {
         tipoCliente: formData.tipoCliente,
         attivo: formData.attivo,
+        avvisiEmail: formData.avvisiEmail,
         ragioneSociale: !isPersonaFisica ? formData.ragioneSociale || undefined : undefined,
         partitaIva: !isPersonaFisica ? formData.partitaIva || undefined : undefined,
         nome: isPersonaFisica ? formData.nome || undefined : undefined,
         cognome: isPersonaFisica ? formData.cognome || undefined : undefined,
         codiceFiscale: isPersonaFisica ? formData.codiceFiscale || undefined : undefined,
-        indirizzo: formData.indirizzo || undefined,
-        email: formData.email || undefined,
-        telefono: formData.telefono || undefined,
-        note: formData.note || undefined,
+        indirizzo: formData.indirizzo.trim() || vuoto,
+        email: formData.email.trim() || vuoto,
+        telefono: formData.telefono.trim() || vuoto,
+        note: formData.note.trim() || vuoto,
       };
 
       if (editingCliente) {
         await clientiService.update(editingCliente.id, payload);
         toast.success('Cliente aggiornato', 'I dati del cliente sono stati salvati.');
       } else {
-        await clientiService.create(payload);
+        await clientiService.create({
+          ...payload,
+          indirizzo: payload.indirizzo ?? undefined,
+          email: payload.email ?? undefined,
+          telefono: payload.telefono ?? undefined,
+          note: payload.note ?? undefined,
+        });
         toast.success('Cliente creato', 'Il nuovo cliente è stato aggiunto.');
       }
       handleCloseModal();
@@ -506,6 +522,28 @@ export const ClientiPage: React.FC = () => {
               aria-checked={formData.attivo}
             >
               <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${formData.attivo ? 'translate-x-5' : 'translate-x-0'}`} />
+            </button>
+          </div>
+
+          {/* Toggle avvisi via email */}
+          <div className="flex items-center justify-between gap-4 p-4 bg-gray-50 rounded-lg">
+            <div className="min-w-0">
+              <label id="label-avvisi-email" className="text-sm font-medium text-gray-900">Avvisi di scadenza via email</label>
+              <p className="text-sm text-gray-500">
+                {formData.avvisiEmail && !formData.email.trim()
+                  ? 'Serve un indirizzo email perché gli avvisi possano partire'
+                  : 'Il cliente riceve un promemoria prima di ogni scadenza del bollo'}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => updateFormField('avvisiEmail', !formData.avvisiEmail)}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${formData.avvisiEmail ? 'bg-green-600' : 'bg-gray-200'}`}
+              role="switch"
+              aria-checked={formData.avvisiEmail}
+              aria-labelledby="label-avvisi-email"
+            >
+              <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${formData.avvisiEmail ? 'translate-x-5' : 'translate-x-0'}`} />
             </button>
           </div>
 

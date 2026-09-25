@@ -72,6 +72,8 @@ model Cliente {
   telefono       String?
   note           String?
   attivo         Boolean     @default(true) // Flag per clienti attivi/inattivi
+  /// Il cliente riceve gli avvisi di scadenza via email
+  avvisiEmail    Boolean     @default(true) @map("avvisi_email")
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
@@ -207,6 +209,18 @@ model Avviso {
   errore       String?
   note         String?
 
+  /// Tentativi d'invio falliti per errori temporanei del server di posta
+  tentativi         Int       @default(0)
+  /// Prima del quale l'avviso non va ritentato (attesa dopo un errore)
+  prossimoTentativo DateTime? @map("prossimo_tentativo")
+  /// Istante esatto dell'invio (dataInvio ne è il giorno)
+  inviatoIl         DateTime? @map("inviato_il")
+  /// Message-ID restituito dal server di posta: identifica l'email inviata
+  idMessaggio       String?   @map("id_messaggio")
+  /// Oggetto e testo inviati: la prova del contenuto dell'avviso
+  oggetto           String?
+  testo             String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -217,6 +231,7 @@ model Avviso {
   @@unique([idScadenza, tipo])
   @@index([esito, dataInvio])
   @@index([dataInvio])
+  @@index([esito, prossimoTentativo])
   @@map("avvisi")
 }
 
@@ -234,8 +249,12 @@ enum CanaleAvviso {
 
 enum EsitoAvviso {
   DA_INVIARE
+  /// Preso in carico da un invio in corso
+  IN_INVIO
   INVIATO
   ERRORE
+  /// Non più da inviare (scadenza pagata, avviso superato...): resta il motivo
+  ANNULLATO
 }
 
 // =====================================================

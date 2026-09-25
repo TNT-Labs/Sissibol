@@ -10,6 +10,11 @@ export class UpdateClienteDto {
   @IsOptional()
   attivo?: boolean;
 
+  /** Il cliente riceve gli avvisi di scadenza via email */
+  @IsBoolean()
+  @IsOptional()
+  avvisiEmail?: boolean;
+
   // Campi Persona Giuridica
   @ValidateIf(o => o.tipoCliente === 'PERSONA_GIURIDICA')
   @IsString()
