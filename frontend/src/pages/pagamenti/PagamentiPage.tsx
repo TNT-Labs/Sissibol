@@ -326,7 +326,7 @@ export const PagamentiPage: React.FC = () => {
             </div>
             <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
               <SearchableSelect
-                label="Scadenza *"
+                label="Scadenza"
                 options={(() => {
                   const opts: SelectOption[] = scadenze.map((scadenza) => ({
                     value: scadenza.id,

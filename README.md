@@ -439,8 +439,16 @@ npm run preview  # Preview della build
 
 ## Sicurezza
 
-- Password criptate con bcrypt (salt rounds: 10)
-- Autenticazione JWT con scadenza configurabile
+- Password personali robuste: almeno 12 caratteri con maiuscole, minuscole,
+  numeri e simboli, senza parole ovvie né il nome dell'email (bcrypt, costo 12)
+- Password iniziali e assegnate dall'amministratore sono provvisorie: vanno
+  cambiate al primo accesso, e fino ad allora nessun dato è visibile
+- Dopo 5 password errate l'utente è sospeso per 15 minuti (l'amministratore
+  può riattivarlo subito assegnando una password provvisoria)
+- Token di accesso di 15 minuti, rinnovati con un cookie `HttpOnly`,
+  `SameSite=Strict` limitato alle rotte di autenticazione; utente eliminato o
+  cambio di ruolo hanno effetto immediato
+- `JWT_SECRET` di almeno 32 caratteri: altrimenti il backend non parte
 - Guards NestJS per protezione routes
 - Validazione input con class-validator e decoratori
 - CORS configurato per origini specifiche
@@ -459,6 +467,21 @@ make admin-password
 
 In sviluppo (fuori da Docker, `NODE_ENV` diverso da `production`) resta
 `admin123`. In ogni caso va cambiata al primo accesso.
+
+### Aggiornando da una versione precedente
+
+- `JWT_SECRET` più corta di 32 caratteri va rigenerata
+  (`openssl rand -base64 48`), altrimenti il backend non parte; gli utenti
+  dovranno rifare il login.
+- Al primo accesso dopo l'aggiornamento **tutti gli utenti** devono scegliere
+  una nuova password che rispetti i requisiti.
+
+## Pubblicazione su Internet
+
+- [CLOUDFLARE.md](CLOUDFLARE.md): tunnel Cloudflare su
+  `https://shopbeautylab.it/bolli` (o un sottodominio), senza porte aperte,
+  con Cloudflare Access — la via consigliata
+- [HTTPS.md](HTTPS.md): HTTPS diretto con DuckDNS e Let's Encrypt (porta 443)
 
 ## Backup
 

@@ -1,13 +1,14 @@
-import { IsNotEmpty, IsString, MinLength, MaxLength } from 'class-validator';
+import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
+import { PasswordComplessa } from '../politica-password';
 
 export class ChangePasswordDto {
   @IsString()
   @IsNotEmpty({ message: 'La password attuale è obbligatoria' })
+  @MaxLength(128, { message: 'La password non può superare 128 caratteri' })
   currentPassword: string;
 
   @IsString()
   @IsNotEmpty({ message: 'La nuova password è obbligatoria' })
-  @MinLength(6, { message: 'La password deve avere almeno 6 caratteri' })
-  @MaxLength(128, { message: 'La password non può superare 128 caratteri' })
+  @PasswordComplessa()
   newPassword: string;
 }

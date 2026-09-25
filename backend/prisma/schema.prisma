@@ -18,6 +18,14 @@ model Utente {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// Deve scegliere una nuova password prima di usare l'applicazione
+  deveCambiarePassword Boolean   @default(false) @map("deve_cambiare_password")
+  /// Errori di password consecutivi, azzerati da un accesso riuscito
+  tentativiFalliti     Int       @default(0) @map("tentativi_falliti")
+  /// Accesso sospeso fino a questo istante dopo troppi errori
+  bloccatoFinoA        DateTime? @map("bloccato_fino_a")
+  passwordCambiataIl   DateTime? @map("password_cambiata_il")
+
   refreshTokens RefreshToken[]
 
   @@map("utenti")

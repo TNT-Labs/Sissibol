@@ -41,7 +41,7 @@ Scarica [Docker Desktop](https://www.docker.com/products/docker-desktop)
 # 1. Configurazione: JWT_SECRET è obbligatoria
 cp .env.example .env
 # impostare in .env:  JWT_SECRET=<output di: openssl rand -base64 48>
-# facoltativo:        ADMIN_PASSWORD_INIZIALE=<password di almeno 8 caratteri>
+# facoltativo:        ADMIN_PASSWORD_INIZIALE=<password provvisoria di almeno 12 caratteri>
 
 # 2. Avvio (con Make, oppure: docker compose up -d --build)
 make up
@@ -54,7 +54,13 @@ make admin-password
 
 Al primo avvio il backend applica le migrazioni e crea l'amministratore. In
 produzione la password non è più `admin123`: si usa `ADMIN_PASSWORD_INIZIALE`
-oppure se ne genera una casuale, mostrata una sola volta nei log.
+oppure se ne genera una casuale, mostrata una sola volta nei log. È
+provvisoria: al primo accesso l'applicazione chiede di sceglierne una
+personale (almeno 12 caratteri con maiuscole, minuscole, numeri e simboli).
+
+Per raggiungere l'applicazione da Internet: [CLOUDFLARE.md](CLOUDFLARE.md)
+(tunnel Cloudflare, `docker-compose.cloudflare.yml`, consigliato) oppure
+[HTTPS.md](HTTPS.md) (DuckDNS, `docker-compose.https.yml`).
 
 ## Modalità Produzione
 
@@ -328,7 +334,7 @@ Richiede un load balancer (nginx/traefik) davanti.
 |-----------|---------|-------------|
 | `DATABASE_URL` | - | Connection string PostgreSQL |
 | `JWT_SECRET` | - | Chiave segreta JWT |
-| `JWT_EXPIRATION` | `24h` | Durata token |
+| `JWT_EXPIRATION` | — | Non più usata: l'accesso dura 15 minuti e si rinnova da solo per 7 giorni |
 | `PORT` | `3000` | Porta backend |
 | `NODE_ENV` | `production` | Ambiente |
 

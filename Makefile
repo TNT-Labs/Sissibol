@@ -1,6 +1,7 @@
 .PHONY: help build up down logs clean restart backend-shell frontend-shell db-shell prisma-studio prisma-migrate dev-up dev-down dev-logs backup backup-stato ripristina admin-password
 
 # File compose da usare: in produzione COMPOSE=docker-compose.https.yml
+# (HTTPS con DuckDNS) oppure COMPOSE=docker-compose.cloudflare.yml (tunnel).
 COMPOSE ?= docker-compose.yml
 DC = docker compose -f $(COMPOSE)
 

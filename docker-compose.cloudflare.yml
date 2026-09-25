@@ -1,0 +1,212 @@
+# =============================================================================
+# Docker Compose - Produzione dietro Cloudflare Tunnel
+# =============================================================================
+# L'applicazione risponde su https://<dominio>/bolli (es. shopbeautylab.it/bolli)
+# attraverso un tunnel Cloudflare: nessuna porta aperta sul router né sul
+# computer, certificati gestiti da Cloudflare. Guida completa: CLOUDFLARE.md.
+#
+#   cp .env.cloudflare.example .env      # e compilarlo
+#   docker compose -f docker-compose.cloudflare.yml up -d
+#   make ... COMPOSE=docker-compose.cloudflare.yml
+#
+# Reti:
+#   sissibol-interna  database, backend, backup, frontend (senza Internet)
+#   sissibol-tunnel   solo frontend e cloudflared (senza Internet)
+#   sissibol-uscita   connessioni in uscita: cloudflared verso Cloudflare,
+#                     backend verso il server di posta
+# cloudflared raggiunge solo il frontend (nginx), mai backend e database.
+# =============================================================================
+
+x-log: &log
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: sissibol-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-sissibol}
+      POSTGRES_USER: ${POSTGRES_USER:-sissibol_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Impostare POSTGRES_PASSWORD nel file .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - sissibol-interna
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sissibol_user} -d ${POSTGRES_DB:-sissibol}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    security_opt:
+      - no-new-privileges:true
+    logging: *log
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: sissibol-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sissibol_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-sissibol}?schema=public
+      # Almeno 32 caratteri casuali (openssl rand -base64 48): il backend non
+      # parte con un segreto corto o d'esempio.
+      JWT_SECRET: ${JWT_SECRET:?Impostare JWT_SECRET nel file .env (openssl rand -base64 48)}
+      PORT: 3000
+      NODE_ENV: production
+      # Un solo proxy davanti (nginx), che indica l'IP reale del client.
+      TRUST_PROXY: "true"
+      # Cookie di sessione: solo HTTPS, solo sulle rotte di autenticazione.
+      COOKIE_PATH: /bolli/api/auth
+      COOKIE_SECURE: "true"
+      # L'indirizzo pubblico dell'applicazione (con il Worker l'host che arriva
+      # al backend è quello nascosto del tunnel, non quello del browser).
+      CORS_ORIGINS: https://${APP_DOMINIO:?Impostare APP_DOMINIO nel file .env (es. shopbeautylab.it)}
+      ADMIN_PASSWORD_INIZIALE: ${ADMIN_PASSWORD_INIZIALE:-}
+      BACKUP_STATO_FILE: /backups/stato.json
+      APP_FUSO_ORARIO: ${APP_FUSO_ORARIO:-Europe/Rome}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      NOTIFICHE_EMAIL_TO: ${NOTIFICHE_EMAIL_TO:-}
+      NOTIFICHE_GIORNI_ANTICIPO: ${NOTIFICHE_GIORNI_ANTICIPO:-30}
+      NOTIFICHE_ORA: ${NOTIFICHE_ORA:-07:00}
+      AVVISI_INVIO_AUTOMATICO: ${AVVISI_INVIO_AUTOMATICO:-false}
+      AVVISI_ORA: ${AVVISI_ORA:-09:00}
+      AVVISI_MAX_EMAIL_PER_ESECUZIONE: ${AVVISI_MAX_EMAIL_PER_ESECUZIONE:-200}
+      AVVISI_FIRMA: ${AVVISI_FIRMA:-}
+      AVVISI_RISPONDI_A: ${AVVISI_RISPONDI_A:-}
+    volumes:
+      - ./backend/uploads:/app/backend/uploads
+      - ./backups:/backups:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - sissibol-interna
+      # Solo in uscita, per il server di posta.
+      - sissibol-uscita
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+    logging: *log
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile.tunnel
+    container_name: sissibol-frontend
+    restart: unless-stopped
+    # Nessuna porta pubblicata: lo raggiunge solo cloudflared.
+    environment:
+      # Vuota: accesso diretto dal tunnel. Impostata: solo tramite il Worker
+      # cloudflare/worker-bolli.js, che la invia (vedi CLOUDFLARE.md).
+      ORIGINE_SEGRETO: ${ORIGINE_SEGRETO:-}
+    read_only: true
+    tmpfs:
+      - /etc/nginx/conf.d
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - sissibol-interna
+      - sissibol-tunnel
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    logging: *log
+
+  cloudflared:
+    image: cloudflare/cloudflared:2026.9.3
+    container_name: sissibol-cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      # Token del tunnel (Zero Trust > Networks > Tunnels): è una credenziale,
+      # sta solo nel file .env.
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?Impostare TUNNEL_TOKEN nel file .env (vedi CLOUDFLARE.md)}
+      # Metriche solo all'interno del container, per il controllo di salute.
+      TUNNEL_METRICS: 127.0.0.1:20241
+      # Niente diagnostica remota (profilazione, metriche) via Cloudflare.
+      TUNNEL_MANAGEMENT_DIAGNOSTICS: "false"
+    read_only: true
+    healthcheck:
+      test: ["CMD", "cloudflared", "tunnel", "ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    depends_on:
+      frontend:
+        condition: service_healthy
+    networks:
+      - sissibol-tunnel
+      - sissibol-uscita
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    logging: *log
+
+  # Backup giornaliero del database e delle ricevute (vedi BACKUP.md)
+  backup:
+    image: postgres:15-alpine
+    container_name: sissibol-backup
+    restart: unless-stopped
+    entrypoint: ["sh", "/script/backup.sh", "ciclo"]
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER:-sissibol_user}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB:-sissibol}
+      TZ: ${APP_FUSO_ORARIO:-Europe/Rome}
+      BACKUP_ORA: ${BACKUP_ORA:-02:30}
+      BACKUP_GIORNI: ${BACKUP_GIORNI:-14}
+      BACKUP_MESI: ${BACKUP_MESI:-12}
+    volumes:
+      - ./backups:/backups
+      - ./backend/uploads:/uploads:ro
+      - ./scripts/backup:/script:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - sissibol-interna
+    security_opt:
+      - no-new-privileges:true
+    logging: *log
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  sissibol-interna:
+    driver: bridge
+    internal: true
+  sissibol-tunnel:
+    driver: bridge
+    internal: true
+  sissibol-uscita:
+    driver: bridge

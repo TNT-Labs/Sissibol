@@ -2,6 +2,10 @@
 
 Questa guida spiega come configurare Sissibol per funzionare via HTTPS usando DuckDNS e certificati Let's Encrypt, **senza bisogno di aprire la porta 80**.
 
+> In alternativa, senza porte aperte né certificati da gestire e con
+> l'accesso limitato al personale: [CLOUDFLARE.md](CLOUDFLARE.md) (tunnel
+> Cloudflare, anche su un dominio proprio come `shopbeautylab.it/bolli`).
+
 ## Panoramica
 
 La configurazione utilizza:

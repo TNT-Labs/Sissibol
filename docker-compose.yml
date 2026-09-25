@@ -55,6 +55,14 @@ services:
       JWT_EXPIRATION: ${JWT_EXPIRATION:-24h}
       PORT: 3000
       NODE_ENV: production
+      # Dietro nginx: l'IP del client arriva in X-Forwarded-For (limiti dei
+      # tentativi per singolo client, non condivisi da tutti).
+      TRUST_PROXY: "true"
+      # Cookie di sessione limitato alle rotte di autenticazione. Secure solo
+      # se l'applicazione è servita in HTTPS: su http:// in rete locale il
+      # browser scarterebbe il cookie e la sessione durerebbe 15 minuti.
+      COOKIE_PATH: /api/auth
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
       # Password del primo amministratore; se assente se ne genera una casuale,
       # mostrata una sola volta nei log del backend.
       ADMIN_PASSWORD_INIZIALE: ${ADMIN_PASSWORD_INIZIALE:-}

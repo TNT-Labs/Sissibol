@@ -68,6 +68,9 @@ services:
       NODE_ENV: production
       # Trust proxy headers from nginx
       TRUST_PROXY: "true"
+      # Cookie di sessione solo in HTTPS e solo sulle rotte di autenticazione
+      COOKIE_PATH: /api/auth
+      COOKIE_SECURE: "true"
       # Password del primo amministratore; se assente se ne genera una casuale,
       # mostrata una sola volta nei log del backend.
       ADMIN_PASSWORD_INIZIALE: ${ADMIN_PASSWORD_INIZIALE:-}

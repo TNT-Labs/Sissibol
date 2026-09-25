@@ -1,4 +1,5 @@
-import { IsEmail, IsEnum, IsOptional, MinLength, MaxLength } from 'class-validator';
+import { IsEmail, IsEnum, IsOptional } from 'class-validator';
+import { PasswordComplessa } from '../../auth/politica-password';
 import { Ruolo } from './create-utente.dto';
 
 export class UpdateUtenteDto {
@@ -6,9 +7,10 @@ export class UpdateUtenteDto {
   @IsEmail({}, { message: 'Email non valida' })
   email?: string;
 
+  // Password provvisoria assegnata dall'amministratore: l'utente dovrà
+  // cambiarla al primo accesso.
   @IsOptional()
-  @MinLength(6, { message: 'La password deve avere almeno 6 caratteri' })
-  @MaxLength(128, { message: 'La password non può superare 128 caratteri' })
+  @PasswordComplessa()
   password?: string;
 
   @IsOptional()

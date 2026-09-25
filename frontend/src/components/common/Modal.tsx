@@ -7,6 +7,8 @@ interface ModalProps {
   title: string;
   children: React.ReactNode;
   maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
+  /** false nasconde il pulsante di chiusura (azione obbligatoria) */
+  closable?: boolean;
 }
 
 /**
@@ -23,6 +25,7 @@ export const Modal: React.FC<ModalProps> = ({
   title,
   children,
   maxWidth = '2xl',
+  closable = true,
 }) => {
   const modalRef = useRef<HTMLDivElement>(null);
   const previousActiveElement = useRef<HTMLElement | null>(null);
@@ -126,13 +129,15 @@ export const Modal: React.FC<ModalProps> = ({
           <h2 id="modal-title" className="text-xl font-semibold text-gray-900">
             {title}
           </h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100 transition-colors"
-            aria-label="Chiudi"
-          >
-            <X size={24} />
-          </button>
+          {closable && (
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100 transition-colors"
+              aria-label="Chiudi"
+            >
+              <X size={24} />
+            </button>
+          )}
         </div>
         <div className="px-6 py-4">{children}</div>
       </div>

@@ -124,6 +124,14 @@ api.interceptors.response.use(
       }
     }
 
+    // Password da cambiare: l'interfaccia mostra il cambio obbligatorio.
+    if (
+      error.response.status === 403 &&
+      (error.response.data as { codice?: string } | undefined)?.codice === 'PASSWORD_DA_CAMBIARE'
+    ) {
+      window.dispatchEvent(new CustomEvent('auth:password-da-cambiare'));
+    }
+
     // Altri errori 401 (login fallito, etc.)
     if (error.response.status === 401) {
       // Solo se non è una richiesta di login/register
@@ -167,9 +175,10 @@ function handleLogout() {
   // Emetti evento per mostrare toast nella UI
   window.dispatchEvent(new CustomEvent('auth:session-expired'));
 
-  // Redirect solo se non siamo già sulla pagina di login
+  // Redirect solo se non siamo già sulla pagina di login. BASE_URL è il
+  // percorso in cui è pubblicata l'app (es. /bolli/ dietro Cloudflare).
   if (!window.location.pathname.includes('/login')) {
-    window.location.href = '/login';
+    window.location.href = `${import.meta.env.BASE_URL}login`;
   }
 }
 

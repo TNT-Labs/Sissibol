@@ -5,8 +5,13 @@ import { VitePWA } from 'vite-plugin-pwa'
 // Genera un timestamp di build per forzare l'aggiornamento del SW
 const buildTime = new Date().toISOString()
 
+// Percorso in cui è pubblicata l'app: "/" in locale, "/bolli/" dietro il
+// tunnel Cloudflare (shopbeautylab.it/bolli). Sempre con la barra finale.
+const base = `/${(process.env.VITE_BASE_PATH ?? '/').replace(/^\/+|\/+$/g, '')}/`.replace('//', '/')
+
 // https://vite.dev/config/
 export default defineConfig({
+  base,
   define: {
     __BUILD_TIME__: JSON.stringify(buildTime),
   },
@@ -29,50 +34,46 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'prompt',
-      includeAssets: ['favicon.ico', 'robots.txt'],
+      includeAssets: ['vite.svg'],
       manifest: {
         name: 'Sissibol - Gestione Scadenziario Bolli',
         short_name: 'Sissibol',
+        lang: 'it',
         description: 'PWA per la gestione dello scadenziario bolli per autotrasporto',
         theme_color: '#2563eb',
         background_color: '#ffffff',
         display: 'standalone',
-        start_url: '/',
+        // Relativi: il manifest vale sotto qualunque percorso base.
+        start_url: '.',
+        scope: '.',
         icons: [
           {
-            src: '/icon-192x192.png',
+            src: 'icon-192x192.png',
             sizes: '192x192',
             type: 'image/png',
           },
           {
-            src: '/icon-512x512.png',
+            src: 'icon-512x512.png',
             sizes: '512x512',
             type: 'image/png',
           },
         ],
       },
       workbox: {
-        // Forza la rigenerazione del SW ad ogni build
-        additionalManifestEntries: [
-          { url: '/version.json', revision: buildTime }
-        ],
+        // (Prima qui c'era version.json, un file che non esiste: un file
+        // mancante nel precache fa fallire l'installazione del service worker.)
         runtimeCaching: [
           {
-            // Cache API calls - pattern corretto per qualsiasi origine
-            // Matcha sia localhost:3000 che domini di produzione
-            urlPattern: ({ url }) => {
-              // Lista dei path API da cachare
-              const apiPaths = [
-                '/auth',
-                '/clienti',
-                '/veicoli',
-                '/scadenze',
-                '/pagamenti',
-                '/bollo',
-                '/utenti',
-                '/tariffe',
-              ];
-              return apiPaths.some(path => url.pathname.startsWith(path));
+            // Risposte delle API per l'uso offline, solo sotto il percorso
+            // dell'app e solo risposte riuscite. Mai autenticazione e stato
+            // del sistema. La cache viene svuotata al logout (clearApiCache).
+            urlPattern: ({ url, sameOrigin }) => {
+              const api = `${base}api/`
+              const percorso = sameOrigin && url.pathname.startsWith(api)
+                ? url.pathname.slice(api.length - 1)
+                : url.pathname
+              const apiPaths = ['/clienti', '/veicoli', '/scadenze', '/pagamenti', '/bollo', '/tariffe']
+              return apiPaths.some(path => percorso.startsWith(path))
             },
             handler: 'NetworkFirst',
             options: {
@@ -83,7 +84,8 @@ export default defineConfig({
               },
               networkTimeoutSeconds: 10, // Fallback a cache dopo 10s di timeout
               cacheableResponse: {
-                statuses: [0, 200], // Cache anche opaque responses
+                // Solo 200: una risposta opaca (0) potrebbe essere un errore.
+                statuses: [200],
               },
             },
           },

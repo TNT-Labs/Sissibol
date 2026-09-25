@@ -39,6 +39,9 @@ jobs:
     - name: Build frontend (typecheck + bundle)
       run: npm run build --workspace=frontend
 
+    - name: Test Worker Cloudflare
+      run: node --test cloudflare/worker-bolli.test.mjs
+
   # Test di integrazione su PostgreSQL reale: verificano le migrazioni da zero,
   # i filtri annidati, le transazioni e il locking ottimistico, che con un mock
   # di Prisma non sarebbero verificabili.
@@ -101,7 +104,7 @@ jobs:
     env:
       # Obbligatoria nel compose (ogni comando docker compose la interpola):
       # un valore diverso a ogni esecuzione.
-      JWT_SECRET: ci-${{ github.run_id }}-${{ github.run_attempt }}
+      JWT_SECRET: ci-${{ github.run_id }}-${{ github.run_attempt }}-segreto-solo-per-la-verifica-in-ci
 
     steps:
     - name: Checkout code
@@ -178,10 +181,65 @@ jobs:
           sleep 5
         done
 
+    - name: Build Frontend Tunnel Image
+      uses: docker/build-push-action@v7
+      with:
+        context: .
+        file: ./frontend/Dockerfile.tunnel
+        push: false
+        load: true
+        tags: sissibol-frontend-tunnel:test
+        # Solo lettura della cache: esportarla qui sostituirebbe quella delle
+        # immagini precedenti.
+        cache-from: type=local,src=/tmp/.buildx-cache
+
+    - name: Check tunnel frontend (Cloudflare)
+      run: |
+        # Come in docker-compose.cloudflare.yml: file system in sola lettura.
+        avvia() {
+          docker run -d --name "$1" --read-only \
+            --tmpfs /etc/nginx/conf.d --tmpfs /var/cache/nginx --tmpfs /var/run --tmpfs /tmp \
+            --add-host backend:127.0.0.1 -p "127.0.0.1:$2:8080" -e ORIGINE_SEGRETO="$3" \
+            sissibol-frontend-tunnel:test
+        }
+        attendi() {
+          for i in $(seq 1 20); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' "$1")" = healthy ] && return 0
+            sleep 2
+          done
+          docker logs "$1"; return 1
+        }
+        codice() { curl -s -o /dev/null -w "%{http_code}" "$@"; }
+
+        # Accesso diretto dal tunnel
+        avvia tunnel-diretto 18080 ""
+        attendi tunnel-diretto
+        [ "$(codice http://127.0.0.1:18080/bolli/)" = 200 ]
+        [ "$(codice http://127.0.0.1:18080/bolli/clienti)" = 200 ]
+        [ "$(codice http://127.0.0.1:18080/bolli)" = 301 ]
+        [ "$(codice http://127.0.0.1:18080/altro)" = 404 ]
+        intestazioni=$(curl -sI http://127.0.0.1:18080/bolli/)
+        echo "$intestazioni" | grep -qi "content-security-policy: default-src 'self'; script-src 'self';"
+
+        # Tramite Worker: senza il segreto nessuna risposta utile
+        segreto=$(openssl rand -hex 32)
+        avvia tunnel-worker 18081 "$segreto"
+        attendi tunnel-worker
+        [ "$(codice http://127.0.0.1:18081/bolli/)" = 403 ]
+        [ "$(codice -H "X-Sissibol-Origine: sbagliato" http://127.0.0.1:18081/bolli/)" = 403 ]
+        [ "$(codice -H "X-Sissibol-Origine: $segreto" http://127.0.0.1:18081/bolli/)" = 200 ]
+
+        # Un segreto non valido impedisce l'avvio
+        avvia tunnel-errato 18082 "corto"
+        sleep 3
+        [ "$(docker inspect -f '{{.State.Running}}' tunnel-errato)" = false ]
+        echo "Frontend tunnel: OK"
+
     - name: Show logs on failure
       if: failure()
       run: |
         docker compose logs
+        docker logs tunnel-diretto 2>&1 | tail -50 || true
 
     - name: Stop services
       if: always()

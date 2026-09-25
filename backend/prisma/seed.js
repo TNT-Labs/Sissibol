@@ -462,13 +462,14 @@ async function seedTariffeLombardia2026() {
 function passwordIniziale() {
   const indicata = process.env.ADMIN_PASSWORD_INIZIALE;
   if (indicata) {
-    if (indicata.length < 8) {
-      throw new Error('ADMIN_PASSWORD_INIZIALE deve avere almeno 8 caratteri');
+    // Provvisoria (va cambiata al primo accesso), ma comunque non banale.
+    if (indicata.length < 12) {
+      throw new Error('ADMIN_PASSWORD_INIZIALE deve avere almeno 12 caratteri');
     }
     return { password: indicata, origine: 'variabile' };
   }
   if (process.env.NODE_ENV === 'production') {
-    return { password: crypto.randomBytes(12).toString('base64url'), origine: 'generata' };
+    return { password: crypto.randomBytes(15).toString('base64url'), origine: 'generata' };
   }
   return { password: 'admin123', origine: 'sviluppo' };
 }
@@ -495,6 +496,8 @@ async function main() {
         email: 'admin@sissibol.it',
         password: hashedPassword,
         ruolo: Ruolo.ADMIN,
+        // La password iniziale va sostituita al primo accesso.
+        deveCambiarePassword: true,
       },
     });
 

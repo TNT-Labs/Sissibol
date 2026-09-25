@@ -8,6 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateUtenteDto } from './dto/create-utente.dto';
 import { UpdateUtenteDto } from './dto/update-utente.dto';
 import * as bcrypt from 'bcryptjs';
+import { problemiPassword } from '../auth/politica-password';
 
 @Injectable()
 export class UtentiService {
@@ -19,6 +20,8 @@ export class UtentiService {
         id: true,
         email: true,
         ruolo: true,
+        deveCambiarePassword: true,
+        bloccatoFinoA: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -33,6 +36,8 @@ export class UtentiService {
         id: true,
         email: true,
         ruolo: true,
+        deveCambiarePassword: true,
+        bloccatoFinoA: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -55,19 +60,28 @@ export class UtentiService {
       throw new ConflictException('Email già registrata');
     }
 
+    const problemi = problemiPassword(createUtenteDto.password, createUtenteDto.email);
+    if (problemi.length) {
+      throw new BadRequestException(`Password non abbastanza sicura: ${problemi.join('; ')}`);
+    }
+
     // Hash della password
-    const hashedPassword = await bcrypt.hash(createUtenteDto.password, 10);
+    const hashedPassword = await bcrypt.hash(createUtenteDto.password, 12);
 
     const utente = await this.prisma.utente.create({
       data: {
         email: createUtenteDto.email,
         password: hashedPassword,
         ruolo: createUtenteDto.ruolo,
+        // La password l'ha scelta l'amministratore: l'utente deve cambiarla.
+        deveCambiarePassword: true,
       },
       select: {
         id: true,
         email: true,
         ruolo: true,
+        deveCambiarePassword: true,
+        bloccatoFinoA: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -76,9 +90,23 @@ export class UtentiService {
     return utente;
   }
 
-  async update(id: number, updateUtenteDto: UpdateUtenteDto) {
+  async update(id: number, updateUtenteDto: UpdateUtenteDto, currentUserId?: number) {
     // Verifica che l'utente esista
-    await this.findOne(id);
+    const attuale = await this.findOne(id);
+
+    // La propria password si cambia solo conoscendo quella attuale
+    // (/auth/change-password): una sessione rubata non deve bastare.
+    if (updateUtenteDto.password && id === currentUserId) {
+      throw new BadRequestException('Per cambiare la tua password usa "Cambia password" dal menu utente');
+    }
+
+    // Senza amministratori nessuno potrebbe più gestire utenti e configurazioni.
+    if (attuale.ruolo === 'ADMIN' && updateUtenteDto.ruolo && updateUtenteDto.ruolo !== 'ADMIN') {
+      const amministratori = await this.prisma.utente.count({ where: { ruolo: 'ADMIN' } });
+      if (amministratori <= 1) {
+        throw new BadRequestException('Non puoi togliere il ruolo all\'ultimo amministratore del sistema');
+      }
+    }
 
     // Se si sta aggiornando l'email, verifica che non sia già in uso
     if (updateUtenteDto.email) {
@@ -106,7 +134,21 @@ export class UtentiService {
     }
 
     if (updateUtenteDto.password) {
-      updateData.password = await bcrypt.hash(updateUtenteDto.password, 10);
+      const email = updateUtenteDto.email ?? attuale.email;
+      const problemi = problemiPassword(updateUtenteDto.password, email);
+      if (problemi.length) {
+        throw new BadRequestException(`Password non abbastanza sicura: ${problemi.join('; ')}`);
+      }
+      updateData.password = await bcrypt.hash(updateUtenteDto.password, 12);
+      // Password reimpostata dall'amministratore: l'utente deve cambiarla, e
+      // le sessioni aperte con la vecchia password vengono chiuse.
+      updateData.deveCambiarePassword = true;
+      updateData.tentativiFalliti = 0;
+      updateData.bloccatoFinoA = null;
+      await this.prisma.refreshToken.updateMany({
+        where: { userId: id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
     }
 
     return this.prisma.utente.update({
@@ -116,6 +158,8 @@ export class UtentiService {
         id: true,
         email: true,
         ruolo: true,
+        deveCambiarePassword: true,
+        bloccatoFinoA: true,
         createdAt: true,
         updatedAt: true,
       },

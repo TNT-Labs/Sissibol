@@ -6,6 +6,7 @@
 #
 #   file.dump     un file della cartella backups/ (es. sissibol-20261001-023000.dump)
 #   file-compose  default docker-compose.yml; in produzione docker-compose.https.yml
+#                 o docker-compose.cloudflare.yml
 #
 # Passi:
 #   1. verifica che il backup sia leggibile;

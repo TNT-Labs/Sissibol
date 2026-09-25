@@ -54,6 +54,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => clearInterval(interval);
   }, []);
 
+  // Il server rifiuta le richieste di chi deve cambiare la password (403
+  // PASSWORD_DA_CAMBIARE): l'interfaccia mostra subito il cambio obbligatorio.
+  useEffect(() => {
+    const passwordDaCambiare = () =>
+      setUser((prec) => {
+        if (!prec || prec.deveCambiarePassword) return prec;
+        const aggiornato = { ...prec, deveCambiarePassword: true };
+        localStorage.setItem('user', JSON.stringify(aggiornato));
+        return aggiornato;
+      });
+    window.addEventListener('auth:password-da-cambiare', passwordDaCambiare);
+    return () => window.removeEventListener('auth:password-da-cambiare', passwordDaCambiare);
+  }, []);
+
   // Inizializzazione auth
   useEffect(() => {
     const initAuth = async () => {

@@ -42,8 +42,9 @@ export class UtentiController {
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateUtenteDto: UpdateUtenteDto,
+    @Request() req,
   ) {
-    return this.utentiService.update(id, updateUtenteDto);
+    return this.utentiService.update(id, updateUtenteDto, req.user.id);
   }
 
   @Delete(':id')

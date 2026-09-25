@@ -15,13 +15,14 @@ import {
 } from '@nestjs/common';
 import type { Response as ExpressResponse, Request as ExpressRequest } from 'express';
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
-import { AuthService } from './auth.service';
+import { AuthService, MAX_TENTATIVI_FALLITI, MINUTI_BLOCCO } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { Roles } from './decorators/roles.decorator';
+import { ConsentitoConPasswordDaCambiare } from './decorators/password-da-cambiare.decorator';
 
 const REFRESH_COOKIE = 'refresh_token';
 const REFRESH_COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 giorni, allineato a REFRESH_TOKEN_EXPIRY_DAYS
@@ -31,24 +32,42 @@ export class AuthController {
   constructor(private authService: AuthService) {}
 
   /**
-   * Imposta il refresh token come cookie httpOnly: non leggibile da JavaScript,
-   * quindi non esfiltrabile via XSS.
-   * SameSite=Lax è sufficiente: frontend e API sono same-site sia in sviluppo
-   * (localhost:5173 → localhost:3000, la porta non conta per SameSite) sia in
-   * produzione (stesso host dietro nginx /api).
+   * Refresh token in cookie httpOnly: non leggibile da JavaScript, quindi non
+   * esfiltrabile via XSS, e mai restituito nel corpo della risposta.
+   *
+   * - SameSite=Strict: il browser non lo invia in richieste partite da altri siti.
+   * - Secure: solo su HTTPS (COOKIE_SECURE=false solo per l'installazione HTTP
+   *   in rete locale, dove altrimenti il browser lo scarterebbe).
+   * - Path: limitato alle rotte di autenticazione così come le vede il browser
+   *   (COOKIE_PATH, es. /bolli/api/auth dietro Cloudflare): il cookie non
+   *   viaggia con le altre richieste.
    */
-  private setRefreshCookie(res: ExpressResponse, refreshToken: string) {
-    res.cookie(REFRESH_COOKIE, refreshToken, {
+  private opzioniCookie() {
+    return {
       httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: REFRESH_COOKIE_MAX_AGE_MS,
-      path: '/',
-    });
+      sameSite: 'strict' as const,
+      secure: process.env.COOKIE_SECURE
+        ? process.env.COOKIE_SECURE === 'true'
+        : process.env.NODE_ENV === 'production',
+      path: process.env.COOKIE_PATH || '/',
+    };
+  }
+
+  private setRefreshCookie(res: ExpressResponse, refreshToken: string) {
+    res.cookie(REFRESH_COOKIE, refreshToken, { ...this.opzioniCookie(), maxAge: REFRESH_COOKIE_MAX_AGE_MS });
   }
 
   private clearRefreshCookie(res: ExpressResponse) {
-    res.clearCookie(REFRESH_COOKIE, { path: '/' });
+    const opzioni = this.opzioniCookie();
+    res.clearCookie(REFRESH_COOKIE, opzioni);
+    // Le versioni precedenti usavano il percorso '/': anche quel cookie va tolto.
+    if (opzioni.path !== '/') res.clearCookie(REFRESH_COOKIE, { ...opzioni, path: '/' });
+  }
+
+  /** Risposta al browser: il refresh token resta solo nel cookie. */
+  private senzaRefreshToken<T extends { refresh_token?: string }>(risultato: T) {
+    const { refresh_token: _nascosto, ...corpo } = risultato;
+    return corpo;
   }
 
   /**
@@ -57,20 +76,26 @@ export class AuthController {
    * Max 5 tentativi per minuto, 20 per ora per IP
    */
   @Post('login')
-  @Throttle({ default: { limit: 5, ttl: 60000 } }) // 5 tentativi al minuto
+  // Il nome deve essere uno dei limitatori configurati in AppModule (short,
+  // medium, long): con "default", che non esiste, il limite non si applicava.
+  @Throttle({ medium: { limit: 5, ttl: 60000 } }) // 5 tentativi al minuto per IP
   async login(
     @Body() loginDto: LoginDto,
     @Response({ passthrough: true }) res: ExpressResponse,
     @Headers('user-agent') userAgent?: string,
     @Ip() ipAddress?: string,
   ) {
-    const user = await this.authService.validateUser(loginDto.email, loginDto.password);
+    const user = await this.authService.verificaCredenziali(loginDto.email, loginDto.password, ipAddress);
     if (!user) {
-      throw new UnauthorizedException('Credenziali non valide');
+      // Stesso messaggio per email inesistente, password errata e account
+      // sospeso: non si rivela quali account esistono.
+      throw new UnauthorizedException(
+        `Credenziali non valide. Dopo ${MAX_TENTATIVI_FALLITI} tentativi errati l'accesso viene sospeso per ${MINUTI_BLOCCO} minuti.`,
+      );
     }
     const result = await this.authService.login(user, { userAgent, ipAddress });
     this.setRefreshCookie(res, result.refresh_token);
-    return result;
+    return this.senzaRefreshToken(result);
   }
 
   /**
@@ -92,7 +117,7 @@ export class AuthController {
     }
     const result = await this.authService.refreshTokens(refreshToken, { userAgent, ipAddress });
     this.setRefreshCookie(res, result.refresh_token);
-    return result;
+    return this.senzaRefreshToken(result);
   }
 
   /**
@@ -112,7 +137,7 @@ export class AuthController {
    * BUG FIX: Rate limiting molto restrittivo per prevenire abuse
    */
   @Post('setup')
-  @Throttle({ default: { limit: 3, ttl: 60000 } }) // 3 tentativi al minuto
+  @Throttle({ medium: { limit: 3, ttl: 60000 } }) // 3 tentativi al minuto
   async initialSetup(@Body() registerDto: RegisterDto) {
     return this.authService.register(registerDto, false);
   }
@@ -130,6 +155,7 @@ export class AuthController {
    */
   @Post('logout')
   @UseGuards(JwtAuthGuard)
+  @ConsentitoConPasswordDaCambiare()
   async logout(@Request() req, @Response({ passthrough: true }) res: ExpressResponse) {
     const jti = req.user.jti;
     this.clearRefreshCookie(res);
@@ -141,6 +167,7 @@ export class AuthController {
    */
   @Post('logout/all')
   @UseGuards(JwtAuthGuard)
+  @ConsentitoConPasswordDaCambiare()
   async logoutAll(@Request() req, @Response({ passthrough: true }) res: ExpressResponse) {
     this.clearRefreshCookie(res);
     return this.authService.logoutAll(req.user.id);
@@ -152,7 +179,8 @@ export class AuthController {
    */
   @Post('change-password')
   @UseGuards(JwtAuthGuard)
-  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @ConsentitoConPasswordDaCambiare()
+  @Throttle({ medium: { limit: 5, ttl: 60000 } })
   async changePassword(@Request() req, @Body() dto: ChangePasswordDto) {
     return this.authService.changePassword(req.user.id, dto, req.user.jti);
   }
@@ -162,6 +190,7 @@ export class AuthController {
    */
   @UseGuards(JwtAuthGuard)
   @Get('profile')
+  @ConsentitoConPasswordDaCambiare()
   async getProfile(@Request() req) {
     return this.authService.getProfile(req.user.id);
   }
