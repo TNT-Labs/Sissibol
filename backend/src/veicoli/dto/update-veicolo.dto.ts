@@ -1,5 +1,10 @@
-import { IsString, IsInt, IsOptional, IsNumber, IsDateString, IsBoolean } from 'class-validator';
+import { IsString, IsInt, IsOptional, IsNumber, IsDateString, IsBoolean, IsIn, IsPositive } from 'class-validator';
 import { Type } from 'class-transformer';
+import { ALIMENTAZIONI, CLASSI_AMBIENTALI, REGIONI, TIPI_SOSPENSIONE, TIPI_VEICOLO } from '../domini';
+
+const ammessi = (valori: readonly string[]) => ({
+  message: `$property: valore "$value" non ammesso. Valori validi: ${valori.join(', ')}`,
+});
 
 export class UpdateVeicoloDto {
   @IsInt()
@@ -15,57 +20,64 @@ export class UpdateVeicoloDto {
   @IsOptional()
   targa?: string;
 
-  @IsString()
+  @IsIn(TIPI_VEICOLO, ammessi(TIPI_VEICOLO))
   @IsOptional()
   tipoVeicolo?: string;
 
-  @IsString()
+  @IsIn(CLASSI_AMBIENTALI, ammessi(CLASSI_AMBIENTALI))
   @IsOptional()
   classeAmbientale?: string;
 
-  @IsString()
+  @IsIn(REGIONI, ammessi(REGIONI))
   @IsOptional()
   regione?: string;
 
-  @IsString()
+  @IsIn(ALIMENTAZIONI, ammessi(ALIMENTAZIONI))
   @IsOptional()
   alimentazione?: string;
 
   @IsNumber()
+  @IsPositive({ message: '$property deve essere maggiore di zero: se il dato non è noto, lasciare vuoto' })
   @IsOptional()
   @Type(() => Number)
   potenzaKw?: number;
 
   @IsInt()
+  @IsPositive({ message: '$property deve essere maggiore di zero: se il dato non è noto, lasciare vuoto' })
   @IsOptional()
   @Type(() => Number)
   cilindrata?: number;
 
   @IsInt()
+  @IsPositive({ message: '$property deve essere maggiore di zero: se il dato non è noto, lasciare vuoto' })
   @IsOptional()
   @Type(() => Number)
   portataKg?: number;
 
   @IsInt()
+  @IsPositive({ message: '$property deve essere maggiore di zero: se il dato non è noto, lasciare vuoto' })
   @IsOptional()
   @Type(() => Number)
   pesoComplessivoKg?: number;
 
   @IsInt()
+  @IsPositive({ message: '$property deve essere maggiore di zero: se il dato non è noto, lasciare vuoto' })
   @IsOptional()
   @Type(() => Number)
   numeroAssi?: number;
 
-  @IsString()
+  @IsIn(TIPI_SOSPENSIONE, ammessi(TIPI_SOSPENSIONE))
   @IsOptional()
   tipoSospensione?: string;
 
   @IsInt()
+  @IsPositive({ message: '$property deve essere maggiore di zero: se il dato non è noto, lasciare vuoto' })
   @IsOptional()
   @Type(() => Number)
   numeroPosti?: number;
 
   @IsInt()
+  @IsPositive({ message: '$property deve essere maggiore di zero: se il dato non è noto, lasciare vuoto' })
   @IsOptional()
   @Type(() => Number)
   massaRimorchiabileKg?: number;

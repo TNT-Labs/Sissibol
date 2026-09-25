@@ -200,6 +200,9 @@ di circolazione trovarli. Sul parco attuale:
 calcolo corretto continuerebbe a restituire zero. La riscrittura del motore e la
 bonifica dei dati vanno pianificate insieme.
 
+La fase 4 porta questo lavoro nell'applicazione (pagina **Dati veicoli**): si
+veda `DATI-VEICOLI.md`.
+
 ### Altri punti annotati nei test
 
 - ~~il motore restituisce `0` invece di dichiarare il calcolo impossibile~~:

@@ -25,6 +25,7 @@ Progressive Web App per la gestione dello scadenziario bolli per autotrasporto.
 - Tracking scadenze con stati: DA_PAGARE, PAGATO, SCADUTO
 - Periodicità: ANNUALE o QUADRIMESTRALE
 - Aggiornamento automatico scadenze scadute
+- Bonifica guidata dei dati veicolo per il calcolo del bollo (vedi [DATI-VEICOLI.md](DATI-VEICOLI.md))
 - Avvisi di scadenza ai clienti via email, un'email per cliente (vedi [AVVISI.md](AVVISI.md))
 - Riepilogo giornaliero interno delle scadenze imminenti
 - Calcolo automatico importo previsto

@@ -1,15 +1,10 @@
 /**
- * Rapporto sulla completezza dei dati dei veicoli.
+ * Rapporto sulla completezza dei dati dei veicoli, da riga di comando.
  *
- * Elenca, veicolo per veicolo, cosa impedisce di calcolare il bollo e dove
- * trovare il dato mancante. È l'elenco di lavoro della bonifica: senza questi
- * dati anche un motore di calcolo corretto non può produrre un importo.
- *
- * I dati richiesti NON sono elencati qui a mano: il rapporto esegue il motore
- * di calcolo su ogni veicolo e ne raccoglie i motivi di non calcolabilità.
- * Un elenco parallelo diverge alla prima modifica delle regole (la versione
- * precedente di questo strumento non chiedeva, per esempio, assi e
- * sospensioni degli autocarri pesanti).
+ * Stampa lo stesso rapporto della pagina "Dati veicoli" dell'applicazione:
+ * usa lo stesso servizio (CompletezzaService), quindi i due non possono
+ * divergere. I dati richiesti non sono elencati a mano: li dice il motore di
+ * calcolo, veicolo per veicolo.
  *
  * Uso:
  *   DATABASE_URL=... npx ts-node test/tools/completezza-dati.ts [--anno 2026] [--csv percorso.csv]
@@ -19,51 +14,9 @@ import { PrismaClient } from '@prisma/client';
 import { writeFileSync } from 'fs';
 import { BolloService } from '../../src/bollo/bollo.service';
 import { AuditService } from '../../src/audit/audit.service';
-import { etichetta } from '../../src/bollo/motore';
+import { CompletezzaService } from '../../src/completezza/completezza.service';
 
 const prisma = new PrismaClient();
-
-/** Dove l'operatore trova il dato mancante. */
-const DOVE_TROVARLO: Record<string, string> = {
-  tipoVeicolo: 'Carta di circolazione, riquadro J (categoria del veicolo)',
-  potenzaKw: 'Carta di circolazione, riquadro P.2 (potenza netta massima)',
-  classeAmbientale: 'Carta di circolazione, riquadro V.9 (classe ambientale)',
-  cilindrata: 'Carta di circolazione, riquadro P.1 (cilindrata)',
-  portataKg: 'Carta di circolazione, differenza fra F.2 e G',
-  pesoComplessivoKg: 'Carta di circolazione, riquadro F.2 (massa massima ammissibile)',
-  numeroAssi: 'Carta di circolazione, riquadro L (numero di assi)',
-  tipoSospensione: 'Carta di circolazione, annotazioni (sospensioni pneumatiche)',
-  numeroPosti: 'Carta di circolazione, riquadro S.1 (numero di posti)',
-  massaRimorchiabileKg: 'Carta di circolazione, riquadro O.1 (massa rimorchiabile)',
-  regione: 'Residenza o sede del proprietario',
-  alimentazione: 'Carta di circolazione, riquadro P.3 (tipo di alimentazione)',
-  dataImmatricolazione: 'Carta di circolazione, riquadro B (prima immatricolazione)',
-};
-
-/** Motivi che dipendono dal tariffario, non dai dati del veicolo. */
-const MOTIVI_TARIFFARIO = new Set([
-  'TARIFFA_MANCANTE',
-  'TARIFFA_AMBIGUA',
-  'FUORI_FASCIA',
-  'PERIODICITA_NON_PREVISTA',
-  'TARIFFARIO_ASSENTE',
-]);
-
-interface RigaVeicolo {
-  targa: string;
-  cliente: string;
-  tipoVeicolo: string | null;
-  /** Dati indispensabili al calcolo */
-  mancanti: string[];
-  /** Dati che servono a valutare esenzioni e riduzioni */
-  consigliati: string[];
-  /** Problemi del tariffario che bloccano il calcolo */
-  tariffario: string[];
-}
-
-function nomeCliente(c: { ragioneSociale: string | null; nome: string | null; cognome: string | null }): string {
-  return c.ragioneSociale || [c.nome, c.cognome].filter(Boolean).join(' ') || '(senza nome)';
-}
 
 function argomento(nome: string): string | undefined {
   const i = process.argv.indexOf(nome);
@@ -72,93 +25,61 @@ function argomento(nome: string): string | undefined {
 
 async function main() {
   const anno = Number(argomento('--anno') ?? new Date().getFullYear());
-  const bollo = new BolloService(prisma as never, new AuditService(prisma as never));
+  const servizio = new CompletezzaService(
+    prisma as never,
+    new BolloService(prisma as never, new AuditService(prisma as never)),
+  );
 
-  const veicoli = await prisma.veicolo.findMany({
-    where: { attivo: true, cliente: { attivo: true } },
-    include: { cliente: { select: { ragioneSociale: true, nome: true, cognome: true } } },
-    orderBy: { targa: 'asc' },
-  });
-
-  const cache = new Map();
-  const righe: RigaVeicolo[] = [];
-  const contaMancanti = new Map<string, number>();
-  const contaConsigliati = new Map<string, number>();
-  const contaTariffario = new Map<string, number>();
-  let calcolabili = 0;
-
-  for (const v of veicoli) {
-    const r = await bollo.calcolaBollo(v.id, anno, 'ANNUALE', cache);
-
-    const mancanti = r.motivi
-      .filter((m) => !MOTIVI_TARIFFARIO.has(m.codice) && m.campo)
-      .map((m) => (m.codice === 'TIPO_NON_GESTITO' ? `tipoVeicolo (da riclassificare: ${v.tipoVeicolo})` : m.campo!));
-    const tariffario = r.motivi.filter((m) => MOTIVI_TARIFFARIO.has(m.codice)).map((m) => m.messaggio);
-    const consigliati = [
-      ...(r.assunzioni.some((a) => a.startsWith('Alimentazione')) ? ['alimentazione'] : []),
-      ...(r.assunzioni.some((a) => a.startsWith('Data di immatricolazione')) ? ['dataImmatricolazione'] : []),
-    ];
-
-    if (r.esito !== 'NON_CALCOLABILE') calcolabili++;
-    for (const m of mancanti) contaMancanti.set(m, (contaMancanti.get(m) ?? 0) + 1);
-    for (const c of consigliati) contaConsigliati.set(c, (contaConsigliati.get(c) ?? 0) + 1);
-    for (const t of tariffario) contaTariffario.set(t, (contaTariffario.get(t) ?? 0) + 1);
-
-    if (mancanti.length || consigliati.length || tariffario.length) {
-      righe.push({ targa: v.targa, cliente: nomeCliente(v.cliente), tipoVeicolo: v.tipoVeicolo, mancanti, consigliati, tariffario });
-    }
-  }
-
-  const totale = veicoli.length;
-  const pct = (n: number) => `${((n / Math.max(totale, 1)) * 100).toFixed(1)}%`;
-  const ordina = (m: Map<string, number>) => [...m.entries()].sort((a, b) => b[1] - a[1]);
+  const { rapporto: r, righe } = await servizio.elenco({ stato: 'TUTTI', perPagina: 5000 }, anno);
+  const pct = (n: number) => `${((n / Math.max(r.totale, 1)) * 100).toFixed(1)}%`;
 
   console.log(`=== COMPLETEZZA DATI VEICOLI (tariffario ${anno}) ===\n`);
-  console.log(`  veicoli attivi:                ${totale}`);
-  console.log(`  bollo calcolabile:             ${calcolabili} (${pct(calcolabili)})`);
-  console.log(`  bollo non calcolabile:         ${totale - calcolabili} (${pct(totale - calcolabili)})`);
+  console.log(`  veicoli attivi:                ${r.totale}`);
+  console.log(`  bollo calcolabile:             ${r.calcolabili} (${pct(r.calcolabili)})`);
+  console.log(`  bollo non calcolabile:         ${r.nonCalcolabili} (${pct(r.nonCalcolabili)})`);
+  console.log(`  scadenze senza importo (anni con tariffario): ${r.scadenzeSenzaImporto}`);
 
   console.log('\n=== DATI INDISPENSABILI MANCANTI (un veicolo può averne più di uno) ===');
-  for (const [campo, n] of ordina(contaMancanti)) {
-    const chiave = campo.split(' ')[0];
-    console.log(`  ${String(n).padStart(5)}x  ${etichetta(chiave).padEnd(24)} ${DOVE_TROVARLO[chiave] ?? ''}${campo.includes('(') ? `  ${campo.slice(campo.indexOf('('))}` : ''}`);
+  for (const c of r.perCampo) {
+    console.log(`  ${String(c.veicoli).padStart(5)}x  ${c.etichetta.padEnd(24)} ${c.doveTrovarlo ?? ''}`);
   }
   console.log('\n  Nota: si vede solo il primo blocco di ogni veicolo. Chi non ha il tipo, per');
   console.log('  esempio, avrà quasi certamente bisogno anche di potenza o peso una volta indicato.');
 
-  if (contaTariffario.size) {
+  if (r.problemiTariffario.length) {
     console.log('\n=== PROBLEMI DEL TARIFFARIO (da correggere nella pagina Tariffe) ===');
-    for (const [messaggio, n] of ordina(contaTariffario)) console.log(`  ${String(n).padStart(5)}x  ${messaggio}`);
+    for (const t of r.problemiTariffario) console.log(`  ${String(t.veicoli).padStart(5)}x  ${t.messaggio}`);
   }
 
-  if (contaConsigliati.size) {
+  if (r.perConsigliato.length) {
     console.log('\n=== DATI CONSIGLIATI (esenzioni e riduzioni non valutate senza di essi) ===');
-    for (const [campo, n] of ordina(contaConsigliati)) {
-      console.log(`  ${String(n).padStart(5)}x  ${etichetta(campo).padEnd(24)} ${DOVE_TROVARLO[campo] ?? ''}`);
+    for (const c of r.perConsigliato) {
+      console.log(`  ${String(c.veicoli).padStart(5)}x  ${c.etichetta.padEnd(24)} ${c.doveTrovarlo ?? ''}`);
     }
   }
 
   const csv = argomento('--csv');
   if (csv) {
     const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
+    const daLavorare = righe.filter((v) => v.mancanti.length || v.consigliati.length || v.tariffario.length);
     const contenuto = [
       'Targa,Cliente,TipoVeicolo,DatiMancanti,DoveTrovarli,DatiConsigliati,ProblemiTariffario',
-      ...righe.map((r) =>
+      ...daLavorare.map((v) =>
         [
-          r.targa,
-          r.cliente,
-          r.tipoVeicolo ?? '',
-          r.mancanti.map((m) => etichetta(m.split(' ')[0])).join('; '),
-          r.mancanti.map((m) => DOVE_TROVARLO[m.split(' ')[0]]).filter(Boolean).join('; '),
-          r.consigliati.map((c) => etichetta(c)).join('; '),
-          r.tariffario.join('; '),
+          v.targa,
+          v.cliente,
+          v.tipoVeicolo ?? '',
+          v.mancanti.map((m) => m.etichetta).join('; '),
+          v.mancanti.map((m) => m.doveTrovarlo).filter(Boolean).join('; '),
+          v.consigliati.map((c) => c.etichetta).join('; '),
+          v.tariffario.join('; '),
         ]
           .map(esc)
           .join(','),
       ),
     ].join('\n');
     writeFileSync(csv, contenuto + '\n', 'utf-8');
-    console.log(`\nElenco completo scritto in ${csv} (${righe.length} veicoli)`);
+    console.log(`\nElenco completo scritto in ${csv} (${daLavorare.length} veicoli)`);
   }
 }
 

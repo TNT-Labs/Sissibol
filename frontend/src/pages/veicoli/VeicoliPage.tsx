@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { veicoliService } from '../../services/veicoli.service';
+import type { DatiVeicolo } from '../../services/veicoli.service';
 import { clientiService } from '../../services/clienti.service';
 import { getClienteDisplayName } from '../../types';
 import type { Veicolo, Cliente } from '../../types';
@@ -19,6 +20,8 @@ import {
 import { Plus, Edit, Trash2, X, Car, XCircle, RotateCcw } from 'lucide-react';
 import { Pagination } from '../../components/common/Pagination';
 import { useIsAdmin } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
+import { getErrorMessage } from '../../utils/errors';
 
 const PAGE_SIZE = 50;
 
@@ -61,6 +64,7 @@ const emptyFormData: VeicoloFormData = {
 };
 
 export const VeicoliPage: React.FC = () => {
+  const toast = useToast();
   const [veicoli, setVeicoli] = useState<Veicolo[]>([]);
   const [clienti, setClienti] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
@@ -77,18 +81,19 @@ export const VeicoliPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isAdmin = useIsAdmin();
 
-  useEffect(() => {
-    loadClienti();
-  }, []);
-
-  const loadClienti = async () => {
+  const loadClienti = useCallback(async () => {
     try {
       const data = await clientiService.getAll();
       setClienti(data);
     } catch (error) {
       console.error('Errore nel caricamento dei clienti:', error);
+      toast.error('Errore', getErrorMessage(error, 'Impossibile caricare i clienti'));
     }
-  };
+  }, [toast]);
+
+  useEffect(() => {
+    loadClienti();
+  }, [loadClienti]);
 
   // Filtri riportano alla prima pagina
   useEffect(() => {
@@ -111,10 +116,11 @@ export const VeicoliPage: React.FC = () => {
       setTotal(result.pagination.total);
     } catch (error) {
       console.error('Errore nel caricamento dei veicoli:', error);
+      toast.error('Errore', getErrorMessage(error, 'Impossibile caricare i veicoli'));
     } finally {
       setLoading(false);
     }
-  }, [filterCliente, search, page, mostraDisattivati]);
+  }, [filterCliente, search, page, mostraDisattivati, toast]);
 
   // loadVeicoli dipende da filtri/pagina: quando cambiano l'effect si ri-esegue
   useEffect(() => {
@@ -161,7 +167,7 @@ export const VeicoliPage: React.FC = () => {
         setShowModal(true);
       } catch (error) {
         console.error('Errore nel caricamento del veicolo:', error);
-        alert('Errore nel caricamento dei dettagli del veicolo');
+        toast.error('Errore', getErrorMessage(error, 'Impossibile caricare i dettagli del veicolo'));
       }
     } else {
       setEditingVeicolo(null);
@@ -204,46 +210,57 @@ export const VeicoliPage: React.FC = () => {
     // BUG FIX: validazione valori numerici prima del submit
     const potenzaKw = formData.potenzaKw ? parseFloat(formData.potenzaKw) : undefined;
     const cilindrata = formData.cilindrata ? parseInt(formData.cilindrata) : undefined;
-    if (potenzaKw !== undefined && isNaN(potenzaKw)) {
-      alert('La potenza deve essere un numero valido');
+    if (potenzaKw !== undefined && (isNaN(potenzaKw) || potenzaKw <= 0)) {
+      toast.warning('Dato non valido', 'La potenza deve essere un numero maggiore di zero');
       return;
     }
-    if (cilindrata !== undefined && isNaN(cilindrata)) {
-      alert('La cilindrata deve essere un numero valido');
+    if (cilindrata !== undefined && (isNaN(cilindrata) || cilindrata <= 0)) {
+      toast.warning('Dato non valido', 'La cilindrata deve essere un numero intero maggiore di zero');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      // Prepara i dati convertendo i valori numerici
-      const submitData: Partial<Veicolo> = {
+      // Prepara i dati convertendo i valori numerici. In modifica un campo
+      // svuotato si invia come null, altrimenti il valore precedente resterebbe.
+      const vuoto = editingVeicolo ? null : undefined;
+      const intero = (v: string) => (v ? parseInt(v) : vuoto);
+      const submitData: DatiVeicolo = {
         idCliente: formData.idCliente,
         targa: formData.targa,
-        tipoVeicolo: formData.tipoVeicolo || undefined,
-        classeAmbientale: formData.classeAmbientale || undefined,
-        regione: formData.regione || undefined,
-        alimentazione: formData.alimentazione || undefined,
-        potenzaKw: potenzaKw,
-        cilindrata: cilindrata,
-        portataKg: formData.portataKg ? parseInt(formData.portataKg) : undefined,
-        pesoComplessivoKg: formData.pesoComplessivoKg ? parseInt(formData.pesoComplessivoKg) : undefined,
-        numeroAssi: formData.numeroAssi ? parseInt(formData.numeroAssi) : undefined,
-        tipoSospensione: formData.tipoSospensione || undefined,
-        numeroPosti: formData.numeroPosti ? parseInt(formData.numeroPosti) : undefined,
-        massaRimorchiabileKg: formData.massaRimorchiabileKg ? parseInt(formData.massaRimorchiabileKg) : undefined,
-        dataImmatricolazione: formData.dataImmatricolazione || undefined,
-        note: formData.note || undefined,
+        tipoVeicolo: formData.tipoVeicolo || vuoto,
+        classeAmbientale: formData.classeAmbientale || vuoto,
+        regione: formData.regione || vuoto,
+        alimentazione: formData.alimentazione || vuoto,
+        potenzaKw: potenzaKw ?? vuoto,
+        cilindrata: cilindrata ?? vuoto,
+        portataKg: intero(formData.portataKg),
+        pesoComplessivoKg: intero(formData.pesoComplessivoKg),
+        numeroAssi: intero(formData.numeroAssi),
+        tipoSospensione: formData.tipoSospensione || vuoto,
+        numeroPosti: intero(formData.numeroPosti),
+        massaRimorchiabileKg: intero(formData.massaRimorchiabileKg),
+        dataImmatricolazione: formData.dataImmatricolazione || vuoto,
+        note: formData.note || vuoto,
       };
 
       if (editingVeicolo) {
-        await veicoliService.update(editingVeicolo.id, submitData);
+        const aggiornato = await veicoliService.update(editingVeicolo.id, submitData);
+        toast.success(
+          'Veicolo aggiornato',
+          aggiornato.importiCompletati
+            ? `${aggiornato.importiCompletati === 1 ? '1 scadenza ha' : `${aggiornato.importiCompletati} scadenze hanno`} ricevuto l'importo del bollo.`
+            : undefined,
+        );
       } else {
-        await veicoliService.create(submitData);
+        await veicoliService.create(submitData as Partial<Veicolo>);
+        toast.success('Veicolo creato');
       }
       handleCloseModal();
       loadVeicoli();
     } catch (error) {
       console.error('Errore nel salvataggio del veicolo:', error);
+      toast.error('Salvataggio non riuscito', getErrorMessage(error, 'Controllare i dati inseriti'));
     } finally {
       setIsSubmitting(false);
     }
@@ -257,6 +274,7 @@ export const VeicoliPage: React.FC = () => {
         loadVeicoli();
       } catch (error) {
         console.error('Errore nella disattivazione del veicolo:', error);
+        toast.error('Errore', getErrorMessage(error, 'Impossibile disattivare il veicolo'));
       }
     }
   };
@@ -267,6 +285,7 @@ export const VeicoliPage: React.FC = () => {
       loadVeicoli();
     } catch (error) {
       console.error('Errore nella riattivazione del veicolo:', error);
+      toast.error('Errore', getErrorMessage(error, 'Impossibile riattivare il veicolo'));
     }
   };
 
@@ -278,6 +297,7 @@ export const VeicoliPage: React.FC = () => {
         loadVeicoli();
       } catch (error) {
         console.error('Errore nell\'eliminazione del veicolo:', error);
+        toast.error('Errore', getErrorMessage(error, 'Impossibile eliminare il veicolo'));
       }
     }
   };

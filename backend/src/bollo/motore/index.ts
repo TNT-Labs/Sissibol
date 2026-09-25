@@ -8,5 +8,5 @@
 export { calcolaBollo, risultatoNonCalcolabile } from './calcola';
 export { VERSIONE_MOTORE } from './versione';
 export { REGOLE, CATEGORIA_AUTOVETTURE, CATEGORIA_MOTOCICLI, etichetta, datoMancante } from './regole';
-export { valutaEsenzioni, POLITICA_CUMULO } from './esenzioni';
+export { valutaEsenzioni, POLITICA_CUMULO, TESTO_ASSUNZIONE } from './esenzioni';
 export * from './tipi';

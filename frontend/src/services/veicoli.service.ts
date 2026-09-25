@@ -11,6 +11,9 @@ export interface PaginatedVeicoli {
   };
 }
 
+/** Dati inviabili: null svuota un campo in modifica. */
+export type DatiVeicolo = { [K in keyof Veicolo]?: Veicolo[K] | null };
+
 export const veicoliService = {
   async getAll(idCliente?: number, search?: string): Promise<Veicolo[]> {
     const response = await api.get<Veicolo[]>('/veicoli', {
@@ -46,8 +49,12 @@ export const veicoliService = {
     return response.data;
   },
 
-  async update(id: number, data: Partial<Veicolo>): Promise<Veicolo> {
-    const response = await api.patch<Veicolo>(`/veicoli/${id}`, data);
+  /**
+   * null svuota un campo. La risposta indica quante scadenze senza importo lo
+   * hanno ricevuto grazie ai dati completati.
+   */
+  async update(id: number, data: DatiVeicolo): Promise<Veicolo & { importiCompletati?: number }> {
+    const response = await api.patch<Veicolo & { importiCompletati?: number }>(`/veicoli/${id}`, data);
     return response.data;
   },
 
