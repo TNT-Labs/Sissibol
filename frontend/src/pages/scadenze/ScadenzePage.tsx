@@ -3,12 +3,13 @@ import { scadenzeService } from '../../services/scadenze.service';
 import { veicoliService } from '../../services/veicoli.service';
 import { pagamentiService } from '../../services/pagamenti.service';
 import { StatoScadenza, Periodicita, TipoCliente, getClienteDisplayName } from '../../types';
-import type { Scadenza, Cliente, Veicolo } from '../../types';
+import type { Scadenza, Cliente } from '../../types';
 import { getErrorMessage } from '../../utils/errors';
 import { haImporto, formattaImporto, IMPORTO_MANCANTE } from '../../utils/importi';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { SearchableSelect } from '../../components/common/SearchableSelect';
+import { RicercaRemota } from '../../components/common/RicercaRemota';
 import type { SelectOption } from '../../components/common/SearchableSelect';
 import { Modal } from '../../components/common/Modal';
 import { useToast } from '../../context/ToastContext';
@@ -59,7 +60,8 @@ interface ClienteConScadenze {
 
 export const ScadenzePage: React.FC = () => {
   const [scadenze, setScadenze] = useState<Scadenza[]>([]);
-  const [veicoli, setVeicoli] = useState<Veicolo[]>([]);
+  // Veicolo scelto nel modulo: si cerca sul server (i veicoli sono migliaia).
+  const [veicoloScelto, setVeicoloScelto] = useState<SelectOption | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Filtro mese/anno - default mese corrente
@@ -112,13 +114,12 @@ export const ScadenzePage: React.FC = () => {
     stato: StatoScadenza.DA_PAGARE,
   });
 
-  const loadVeicoli = useCallback(async () => {
-    try {
-      const veicoliData = await veicoliService.getAll();
-      setVeicoli(veicoliData);
-    } catch (error) {
-      console.error('Errore nel caricamento dei veicoli:', error);
-    }
+  const cercaVeicoli = useCallback(async (testo: string): Promise<SelectOption[]> => {
+    const risultato = await veicoliService.getAllPaginated({ search: testo || undefined, pageSize: 20 });
+    return risultato.data.map((v) => ({
+      value: v.id,
+      label: `${v.targa} · ${v.cliente ? getClienteDisplayName(v.cliente) : 'cliente non indicato'}`,
+    }));
   }, []);
 
   const loadScadenze = useCallback(async () => {
@@ -134,10 +135,6 @@ export const ScadenzePage: React.FC = () => {
     }
   }, [meseSelezionato, annoSelezionato]);
 
-  // Carica veicoli una volta sola (per il modal)
-  useEffect(() => {
-    loadVeicoli();
-  }, [loadVeicoli]);
 
   // Ricarica scadenze quando cambia mese/anno
   useEffect(() => {
@@ -199,10 +196,16 @@ export const ScadenzePage: React.FC = () => {
         importoPrevisto: scadenza.importoPrevisto?.toString() || '',
         stato: scadenza.stato,
       });
+      setVeicoloScelto({
+        value: scadenza.idVeicolo,
+        label: `${scadenza.veicolo?.targa ?? ''} · ${scadenza.veicolo?.cliente ? getClienteDisplayName(scadenza.veicolo.cliente) : ''}`,
+      });
     } else {
       setEditingScadenza(null);
+      setVeicoloScelto(null);
       setFormData({
-        idVeicolo: veicoli.length > 0 ? veicoli[0].id : 0,
+        // Nessun veicolo preselezionato: va cercato e scelto.
+        idVeicolo: 0,
         meseScadenza: meseSelezionato,
         annoScadenza: annoSelezionato,
         periodicita: Periodicita.ANNUALE,
@@ -220,6 +223,10 @@ export const ScadenzePage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.idVeicolo) {
+      toast.error('Veicolo mancante', 'Cerca e scegli il veicolo della scadenza.');
+      return;
+    }
     try {
       const data = {
         idVeicolo: formData.idVeicolo,
@@ -584,15 +591,15 @@ export const ScadenzePage: React.FC = () => {
               </button>
             </div>
             <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
-              <SearchableSelect
+              <RicercaRemota
                 label="Veicolo"
-                options={veicoli.map(v => ({
-                  value: v.id,
-                  label: `${v.targa} - ${v.cliente ? getClienteDisplayName(v.cliente) : 'N/A'}`
-                }))}
-                value={formData.idVeicolo}
-                onChange={(value) => setFormData({ ...formData, idVeicolo: Number(value) })}
-                placeholder="Cerca veicolo per targa o cliente..."
+                valore={veicoloScelto}
+                onChange={(opzione) => {
+                  setVeicoloScelto(opzione);
+                  setFormData({ ...formData, idVeicolo: opzione ? Number(opzione.value) : 0 });
+                }}
+                cerca={cercaVeicoli}
+                placeholder="Cerca per targa o cliente..."
                 required
               />
               <div className="grid grid-cols-2 gap-4">

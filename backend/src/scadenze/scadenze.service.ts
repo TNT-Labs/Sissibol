@@ -6,6 +6,11 @@ import { UpdateScadenzaDto } from './dto/update-scadenza.dto';
 import { BolloService } from '../bollo/bollo.service';
 import { AuditService } from '../audit/audit.service';
 import { StatoScadenza, Periodicita } from '../prisma/types';
+import { paginazioneSicura } from '../common/paginazione';
+
+/** Risultati della ricerca di scadenze da pagare: pochi, per una tendina. */
+export const LIMITE_RICERCA = 20;
+export const LIMITE_RICERCA_MASSIMO = 50;
 
 /**
  * Calcola i 3 mesi di scadenza quadrimestrale partendo dal mese di immatricolazione.
@@ -421,6 +426,58 @@ export class ScadenzeService implements OnModuleInit {
   }
 
   /**
+   * Scadenze non ancora pagate (da pagare o scadute), per scegliere quella a
+   * cui registrare un pagamento. Cerca per targa e nome del cliente: ogni
+   * parola deve comparire nell'uno o nell'altro ("rossi AB123").
+   *
+   * Prima la pagina Pagamenti scaricava tutte le scadenze DA_PAGARE (oltre
+   * 74.000 sull'archivio reale, fino al 2050) per riempire una tendina, e non
+   * proponeva quelle scadute, che pure si pagano.
+   * Le più vecchie per prime: quelle scadute sono le prime da regolare.
+   */
+  async cercaDaPagare(testo: string | undefined, limite: number = LIMITE_RICERCA) {
+    const parole = (testo ?? '').slice(0, 100).trim().split(/\s+/).filter(Boolean).slice(0, 5);
+    const quante = Number.isInteger(limite) && limite >= 1 ? Math.min(limite, LIMITE_RICERCA_MASSIMO) : LIMITE_RICERCA;
+
+    return this.prisma.scadenza.findMany({
+      where: {
+        stato: { in: [StatoScadenza.DA_PAGARE, StatoScadenza.SCADUTO] },
+        veicolo: { attivo: true, cliente: { attivo: true } },
+        AND: parole.map((parola) => ({
+          veicolo: {
+            OR: [
+              { targa: { contains: parola, mode: 'insensitive' as const } },
+              { cliente: { ragioneSociale: { contains: parola, mode: 'insensitive' as const } } },
+              { cliente: { nome: { contains: parola, mode: 'insensitive' as const } } },
+              { cliente: { cognome: { contains: parola, mode: 'insensitive' as const } } },
+            ],
+          },
+        })),
+      },
+      select: {
+        id: true,
+        dataScadenza: true,
+        meseScadenza: true,
+        annoScadenza: true,
+        periodicita: true,
+        importoPrevisto: true,
+        stato: true,
+        veicolo: {
+          select: {
+            id: true,
+            targa: true,
+            cliente: {
+              select: { id: true, tipoCliente: true, ragioneSociale: true, nome: true, cognome: true },
+            },
+          },
+        },
+      },
+      orderBy: [{ dataScadenza: 'asc' }, { id: 'asc' }],
+      take: quante,
+    });
+  }
+
+  /**
    * Versione paginata di findAll per dataset grandi (report, export).
    * Previene memory overflow caricando i dati in chunk.
    *
@@ -435,9 +492,8 @@ export class ScadenzeService implements OnModuleInit {
     annoFrom?: number;
     annoTo?: number;
   }) {
+    const { page, pageSize } = paginazioneSicura(options.page, options.pageSize, 100);
     const {
-      page = 1,
-      pageSize = 100,
       stato,
       idCliente,
       annoFrom,

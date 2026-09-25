@@ -45,21 +45,26 @@ Progressive Web App per la gestione dello scadenziario bolli per autotrasporto.
   - Sconto RID (domiciliazione bancaria)
 
 ### Pagamenti
-- Registrazione pagamenti con data e importo
+- Registrazione pagamenti con data e importo: la scadenza si cerca per targa o
+  cliente fra quelle da pagare e scadute, e l'importo previsto viene proposto
 - Upload ricevute (file allegati)
 - Metodi di pagamento configurabili
 - Aggiornamento automatico stato scadenza
 
 ### Report
-- Export PDF con jsPDF
-- Export Excel con xlsx
-- Filtri per periodo, cliente, stato
+- Excel e PDF generati dal server, leggendo i dati a blocchi: anche l'intero
+  archivio (oltre 120.000 scadenze) si esporta in pochi secondi senza pesare
+  sul browser
+- Scadenze per periodo (mese/anno), stato e cliente; pagamenti per date; clienti
+- Importi mancanti dichiarati a parte nel riepilogo, mai conteggiati come zero
+- PDF fino a 3.000 righe (per la stampa); Excel senza limiti pratici
+- Ogni esportazione è annotata nel registro delle attività (chi, quando, filtri)
 
 ### PWA - Progressive Web App
 - Installabile su Desktop e Mobile
-- Funzionamento offline (Service Worker)
+- Interfaccia disponibile anche senza rete (Service Worker); i dati dei
+  clienti invece non vengono mai salvati sul dispositivo
 - **Aggiornamento automatico**: prompt quando disponibile nuova versione
-- Cache intelligente (NetworkFirst per API)
 - Controllo aggiornamenti ogni 60 secondi
 
 ### Autenticazione e Sicurezza
@@ -72,6 +77,7 @@ Progressive Web App per la gestione dello scadenziario bolli per autotrasporto.
 
 ### Backend
 - **NestJS 10** - Framework Node.js
+- **ExcelJS / PDFKit** - Report generati dal server in streaming
 - **Prisma ORM 5** - Database ORM con migrations
 - **PostgreSQL 14+** - Database relazionale
 - **JWT** - Autenticazione stateless
@@ -88,7 +94,6 @@ Progressive Web App per la gestione dello scadenziario bolli per autotrasporto.
 - **date-fns** - Manipolazione date
 - **lucide-react** - Icone moderne
 - **vite-plugin-pwa** - PWA support con Workbox
-- **jsPDF / xlsx** - Export documenti
 
 ## Setup e Installazione
 
@@ -389,7 +394,7 @@ Il sistema supporta i seguenti tipi di veicolo con tariffe specifiche:
 - `postgres_data`: Persistenza dati PostgreSQL
 - `./backend/uploads`: Upload file ricevute
 
-## PWA - Funzionalità Offline
+## PWA
 
 L'applicazione è una Progressive Web App completa:
 
@@ -398,9 +403,11 @@ L'applicazione è una Progressive Web App completa:
 - **Mobile**: iOS Safari ("Aggiungi a Home"), Android Chrome
 
 ### Caching
-- **Risorse statiche**: Pre-cached al primo caricamento
-- **API calls**: NetworkFirst con fallback cache (24h)
-- **Immagini/Font**: Cache with revalidation
+- **Risorse statiche** (codice, icone, font): salvate al primo caricamento
+- **Risposte API**: mai salvate sul dispositivo. Contengono dati dei clienti,
+  che resterebbero leggibili a chiunque usi quel computer anche dopo aver
+  chiuso il browser; quelle salvate dalle versioni precedenti vengono
+  eliminate all'avvio
 
 ### Aggiornamento Automatico
 - Controllo nuove versioni ogni 60 secondi

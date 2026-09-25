@@ -5,6 +5,7 @@ import { UpdatePagamentoDto } from './dto/update-pagamento.dto';
 import { StatoScadenza } from '../prisma/types';
 import { BolloService } from '../bollo/bollo.service';
 import { AuditService } from '../audit/audit.service';
+import { paginazioneSicura } from '../common/paginazione';
 
 /** Campi del pagamento conservati nel registro delle modifiche. */
 function istantaneaPagamento(pagamento: {
@@ -196,9 +197,8 @@ export class PagamentiService {
     dateTo?: Date;
     idCliente?: number;
   }) {
+    const { page, pageSize } = paginazioneSicura(options.page, options.pageSize, 100);
     const {
-      page = 1,
-      pageSize = 100,
       idScadenza,
       dateFrom,
       dateTo,

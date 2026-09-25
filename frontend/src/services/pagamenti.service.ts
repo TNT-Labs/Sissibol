@@ -18,7 +18,8 @@ export interface PaginatedPagamentiResponse {
 }
 
 export const pagamentiService = {
-  async getAll(idScadenza?: number): Promise<Pagamento[]> {
+  /** Pagamenti di una scadenza. */
+  async getByScadenza(idScadenza: number): Promise<Pagamento[]> {
     const response = await api.get<Pagamento[]>('/pagamenti', {
       params: { idScadenza },
     });
@@ -41,42 +42,6 @@ export const pagamentiService = {
       params: options,
     });
     return response.data;
-  },
-
-  /**
-   * Itera su tutte le pagine e chiama il callback per ogni chunk.
-   * Utile per generare report senza caricare tutto in memoria.
-   *
-   * @param options - Opzioni di filtro
-   * @param onChunk - Callback chiamata per ogni pagina di dati
-   * @param pageSize - Dimensione della pagina (default: 500)
-   */
-  async iterateAll(
-    options: { dateFrom?: string; dateTo?: string; idCliente?: number },
-    onChunk: (pagamenti: Pagamento[], progress: { current: number; total: number }) => Promise<void> | void,
-    pageSize: number = 500,
-  ): Promise<{ totalCount: number; importoTotale: number }> {
-    let page = 1;
-    let totalCount = 0;
-    let importoTotale = 0;
-
-    while (true) {
-      const response = await this.getAllPaginated({ ...options, page, pageSize });
-      totalCount = response.pagination.totalCount;
-      importoTotale = response.summary.importoTotale;
-
-      if (response.data.length === 0) break;
-
-      await onChunk(response.data, {
-        current: Math.min(page * pageSize, totalCount),
-        total: totalCount,
-      });
-
-      if (!response.pagination.hasNextPage) break;
-      page++;
-    }
-
-    return { totalCount, importoTotale };
   },
 
   async getById(id: number): Promise<Pagamento> {

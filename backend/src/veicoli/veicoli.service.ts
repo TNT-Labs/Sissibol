@@ -5,6 +5,7 @@ import { AuditService } from '../audit/audit.service';
 import { CAMPI_CALCOLO } from './domini';
 import { CreateVeicoloDto } from './dto/create-veicolo.dto';
 import { UpdateVeicoloDto } from './dto/update-veicolo.dto';
+import { paginazioneSicura } from '../common/paginazione';
 
 // Tipi per lo storico veicolo (corrispondono all'enum nel schema.prisma)
 type TipoModificaVeicolo = 'CAMBIO_TARGA' | 'CAMBIO_PROPRIETARIO' | 'CAMBIO_TARGA_E_PROPRIETARIO';
@@ -95,6 +96,7 @@ export class VeicoliService {
     search?: string,
     attivo: boolean = true,
   ) {
+    ({ page, pageSize } = paginazioneSicura(page, pageSize, 50));
     const skip = (page - 1) * pageSize;
 
     const where: any = {

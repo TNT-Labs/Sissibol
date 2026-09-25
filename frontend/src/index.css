@@ -7,3 +7,13 @@
     @apply bg-gray-50 text-gray-900;
   }
 }
+
+/*
+ * Gli overlay a tutto schermo (modali) sono spesso figli di contenitori con
+ * space-y-*, che danno margin-top ai figli: l'overlay scendeva di 24px e
+ * lasciava una striscia non oscurata in cima alla pagina. Un elemento fisso
+ * che copre lo schermo non deve mai avere margini.
+ */
+.fixed.inset-0 {
+  margin: 0 !important;
+}

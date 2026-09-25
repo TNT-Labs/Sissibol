@@ -10,6 +10,7 @@ import {
   Req,
   UseGuards,
   ParseIntPipe,
+  BadRequestException,
 } from '@nestjs/common';
 import { ScadenzeService } from './scadenze.service';
 import { CreateScadenzaDto } from './dto/create-scadenza.dto';
@@ -34,6 +35,11 @@ export class ScadenzeController {
     return this.scadenzeService.create(createScadenzaDto);
   }
 
+  /**
+   * Scadenze di un mese (scadenziario). Senza mese e anno la risposta sarebbe
+   * l'intero archivio (oltre 120.000 scadenze con veicolo e cliente): per
+   * elenchi più ampi ci sono /scadenze/paginated e i report.
+   */
   @Get()
   findAll(
     @Query('stato') stato?: StatoScadenza,
@@ -41,12 +47,21 @@ export class ScadenzeController {
     @Query('meseScadenza') meseScadenza?: string,
     @Query('annoScadenza') annoScadenza?: string,
   ) {
-    return this.scadenzeService.findAll(
-      stato,
-      idCliente ? parseInt(idCliente, 10) : undefined,
-      meseScadenza ? parseInt(meseScadenza, 10) : undefined,
-      annoScadenza ? parseInt(annoScadenza, 10) : undefined,
-    );
+    const mese = Number(meseScadenza);
+    const anno = Number(annoScadenza);
+    if (!Number.isInteger(mese) || mese < 1 || mese > 12 || !Number.isInteger(anno) || anno < 1900 || anno > 2200) {
+      throw new BadRequestException('Indicare meseScadenza (1-12) e annoScadenza');
+    }
+    return this.scadenzeService.findAll(stato, idCliente ? parseInt(idCliente, 10) : undefined, mese, anno);
+  }
+
+  /**
+   * Scadenze non pagate per targa o cliente, per registrare un pagamento.
+   * GET /scadenze/cerca?q=rossi AB123&limite=20
+   */
+  @Get('cerca')
+  cerca(@Query('q') q?: string, @Query('limite') limite?: string) {
+    return this.scadenzeService.cercaDaPagare(q, limite ? Number(limite) : undefined);
   }
 
   /**
