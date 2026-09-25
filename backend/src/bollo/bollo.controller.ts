@@ -7,6 +7,7 @@ import {
   Query,
   ParseIntPipe,
   UseGuards,
+  Req,
 } from '@nestjs/common';
 import { BolloService } from './bollo.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -71,9 +72,16 @@ export class BolloController {
    * POST /bollo/aggiorna-scadenze/:idVeicolo
    */
   @Post('aggiorna-scadenze/:idVeicolo')
-  async aggiornaScadenze(@Param('idVeicolo', ParseIntPipe) idVeicolo: number) {
-    const aggiornate = await this.bolloService.aggiornaImportiScadenze(idVeicolo);
-    return { message: `Aggiornate ${aggiornate} scadenze`, aggiornate };
+  async aggiornaScadenze(
+    @Req() req: { user?: { email?: string } },
+    @Param('idVeicolo', ParseIntPipe) idVeicolo: number,
+  ) {
+    const esito = await this.bolloService.aggiornaImportiScadenze(idVeicolo, req.user?.email);
+    const message =
+      esito.nonCalcolabili > 0
+        ? `Aggiornate ${esito.aggiornate} scadenze; ${esito.nonCalcolabili} lasciate invariate perché il bollo non è calcolabile`
+        : `Aggiornate ${esito.aggiornate} scadenze`;
+    return { message, ...esito };
   }
 
   // =====================================================

@@ -210,12 +210,38 @@ export interface EsenzioneApplicata {
   percentualeRiduzione: number | null;
 }
 
+/**
+ * Esito del motore di calcolo:
+ * - CALCOLATO: importo determinato dal tariffario;
+ * - ESENTE: nulla da pagare (importo 0 legittimo);
+ * - NON_CALCOLABILE: mancano dati o tariffe, importo null. Mai zero.
+ */
+export type EsitoCalcolo = 'CALCOLATO' | 'ESENTE' | 'NON_CALCOLABILE';
+
+export interface MotivoNonCalcolabile {
+  codice: string;
+  /** Campo del veicolo da completare, quando il motivo riguarda un dato */
+  campo?: string;
+  messaggio: string;
+}
+
 export interface CalcoloBolloResult {
-  importoBase: number;
+  esito: EsitoCalcolo;
+  /** Importo dovuto; 0 se esente, null se non calcolabile */
+  importoBase: number | null;
+  /** Importo prima delle riduzioni parziali */
+  importoLordo: number | null;
   importoRidotto: number | null;
   scontoRid: number;
   tariffeApplicate: TariffaApplicata[];
   esenzioni: EsenzioneApplicata[];
+  /** Perché il calcolo non è stato possibile */
+  motivi: MotivoNonCalcolabile[];
+  /** Benefici (esenzioni, riduzioni) non valutati per dati mancanti */
+  assunzioni: string[];
   note: string[];
   dettaglioCalcolo: string;
+  versioneMotore: string;
+  idConfigurazione: number | null;
+  regioneConfigurazione: string | null;
 }

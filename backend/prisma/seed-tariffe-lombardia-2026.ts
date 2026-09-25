@@ -24,6 +24,10 @@ async function seedTariffeLombardia2026() {
     },
     create: {
       annoValidita: 2026,
+      // Validità sull'anno solare: obbligatoria dalla migrazione
+      // 20260922000002_validita_tariffe.
+      validoDa: new Date(Date.UTC(2026, 0, 1)),
+      validoA: new Date(Date.UTC(2026, 11, 31)),
       regione: 'Lombardia',
       scontoRid: 15,
       attivo: true,

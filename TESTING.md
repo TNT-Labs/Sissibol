@@ -75,14 +75,20 @@ verifica.
 
 ```bash
 cd backend
-npx ts-node test/tools/generate-golden.ts   # oppure: npm run golden:genera
-git diff test/golden/fixtures/bollo.golden.json
+git show HEAD:backend/test/golden/fixtures/bollo.golden.json > /tmp/golden-prima.json
+npm run golden:genera
+npm run golden:confronta -- /tmp/golden-prima.json test/golden/fixtures/bollo.golden.json
 ```
 
-**Il diff va letto, non solo committato.** È lì che si vede quali veicoli sono
-cambiati, di quanto, e se il cambiamento è quello che si voleva. Il blocco
-`riepilogo` in testa al fixture dà il colpo d'occhio: quanti veicoli passano da
-importo zero a importo calcolato, quanti entrano o escono dagli errori.
+**Il confronto va letto, non solo committato.** `confronta-golden.ts`
+classifica ogni voce cambiata (invariata, da zero a non calcolabile, importo
+cambiato...) ed elenca quelle che spostano un importo o un esito. Esce con
+errore se un importo calcolato è cambiato: quelle voci vanno giustificate una
+per una. Il blocco `riepilogo` in testa al fixture dà il colpo d'occhio su
+calcolati, esenti e non calcolabili.
+
+La riscrittura del motore (Fase 2) è passata da qui: il confronto è riportato
+in `MOTORE-CALCOLO.md`.
 
 ### Rigenerare corpus e tariffario
 
@@ -170,11 +176,13 @@ Le cause, quantificate dal golden master:
 L'import da Access non valorizza `classeAmbientale`, `alimentazione`,
 `cilindrata`, `portataKg` e `pesoComplessivoKg`, e per 2.268 veicoli nemmeno
 `tipoVeicolo` (il codice `Tipo` vale 0, che non esiste nella tabella di
-lookup). Il motore, privo di questi dati, restituisce 0 con una nota anziché
-segnalare che il calcolo non è possibile.
+lookup). Il motore 1.x, privo di questi dati, restituiva 0 con una nota
+anziché segnalare che il calcolo non era possibile; dal motore 2 questi
+veicoli risultano `NON_CALCOLABILE`, con i motivi.
 
-**Questo numero è la metrica della Fase 2.** Il rifacimento del motore e la
-bonifica del dominio dovranno spostarlo, e questo strumento serve a
+**Questo numero è la metrica della bonifica dei dati.** La riscrittura del
+motore l'ha reso onesto (da "0 €" a "non calcolabile"), non l'ha spostato: può
+spostarlo solo il completamento dei dati veicolo, e questo strumento serve a
 verificarne i progressi in modo oggettivo.
 
 ---
@@ -183,6 +191,10 @@ verificarne i progressi in modo oggettivo.
 
 `test/tools/completezza-dati.ts` elenca, veicolo per veicolo, quali campi
 mancano al calcolo e su quale riquadro della carta di circolazione trovarli.
+Non ha un elenco proprio dei campi richiesti: esegue il motore di calcolo su
+ogni veicolo e ne raccoglie i motivi, quindi resta allineato alle regole per
+costruzione. Separa i dati indispensabili, quelli consigliati (che servono a
+valutare esenzioni e riduzioni) e i problemi del tariffario.
 
 ```bash
 cd backend
@@ -231,7 +243,8 @@ rendere visibile la correzione quando arriverà.
 
 I punti annotati nei commenti dei test, da affrontare nelle fasi successive:
 
-- il motore restituisce `0` invece di dichiarare il calcolo impossibile;
+- ~~il motore restituisce `0` invece di dichiarare il calcolo impossibile~~:
+  risolto dal motore 2 (`MOTORE-CALCOLO.md`);
 - `updateScaduteAutomaticamente` aggiorna anche le scadenze di clienti
   disattivati, mentre `findAll` le esclude: i due percorsi sono incoerenti;
 - un pagamento su veicolo di regione non configurata viene registrato **senza

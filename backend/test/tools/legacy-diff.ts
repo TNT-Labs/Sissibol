@@ -14,6 +14,7 @@
 
 import { PrismaClient } from '@prisma/client';
 import { BolloService } from '../../src/bollo/bollo.service';
+import { AuditService } from '../../src/audit/audit.service';
 
 const prisma = new PrismaClient();
 
@@ -25,12 +26,14 @@ interface Riga {
   targa: string;
   tipoVeicolo: string | null;
   legacy: number;
+  /** null se non calcolabile o in errore */
   calcolato: number | null;
+  esito: 'CALCOLATO' | 'ESENTE' | 'NON_CALCOLABILE' | 'ERRORE';
   errore?: string;
 }
 
 async function main() {
-  const bollo = new BolloService(prisma as never);
+  const bollo = new BolloService(prisma as never, new AuditService(prisma as never));
 
   // Per ogni veicolo, l'importo più recente presente in archivio.
   const scadenze = await prisma.scadenza.findMany({
@@ -72,6 +75,7 @@ async function main() {
         tipoVeicolo: s.veicolo.tipoVeicolo,
         legacy,
         calcolato: r.importoBase,
+        esito: r.esito,
       });
     } catch (error) {
       righe.push({
@@ -79,6 +83,7 @@ async function main() {
         tipoVeicolo: s.veicolo.tipoVeicolo,
         legacy,
         calcolato: null,
+        esito: 'ERRORE',
         errore: error instanceof Error ? error.message : String(error),
       });
     }
@@ -91,21 +96,23 @@ function stampaRapporto(righe: Riga[]) {
   const coincidenti = righe.filter(
     (r) => r.calcolato !== null && Math.abs(r.calcolato - r.legacy) <= TOLLERANZA_EUR,
   );
-  const aZero = righe.filter((r) => r.calcolato === 0);
+  const esenti = righe.filter((r) => r.esito === 'ESENTE');
+  const nonCalcolabili = righe.filter((r) => r.esito === 'NON_CALCOLABILE');
   const diversi = righe.filter(
     (r) =>
+      r.esito === 'CALCOLATO' &&
       r.calcolato !== null &&
-      r.calcolato !== 0 &&
       Math.abs(r.calcolato - r.legacy) > TOLLERANZA_EUR,
   );
-  const inErrore = righe.filter((r) => r.calcolato === null);
+  const inErrore = righe.filter((r) => r.esito === 'ERRORE');
 
   const pct = (n: number) => `${((n / righe.length) * 100).toFixed(1)}%`;
 
   console.log('=== RIEPILOGO ===');
   console.log(`  veicoli confrontati:        ${righe.length}`);
   console.log(`  importo coincidente:        ${coincidenti.length} (${pct(coincidenti.length)})`);
-  console.log(`  calcolato 0 (non calcolab.): ${aZero.length} (${pct(aZero.length)})`);
+  console.log(`  esente:                     ${esenti.length} (${pct(esenti.length)})`);
+  console.log(`  non calcolabile:            ${nonCalcolabili.length} (${pct(nonCalcolabili.length)})`);
   console.log(`  importo diverso:            ${diversi.length} (${pct(diversi.length)})`);
   console.log(`  calcolo in errore:          ${inErrore.length} (${pct(inErrore.length)})`);
 
@@ -119,19 +126,19 @@ function stampaRapporto(righe: Riga[]) {
 
   // Ripartizione per tipo veicolo: dice da dove conviene iniziare a correggere.
   console.log('\n=== PER TIPO VEICOLO ===');
-  const perTipo = new Map<string, { n: number; ok: number; zero: number; legacy: number }>();
+  const perTipo = new Map<string, { n: number; ok: number; nc: number; legacy: number }>();
   for (const r of righe) {
     const k = r.tipoVeicolo ?? '(non specificato)';
-    const acc = perTipo.get(k) ?? { n: 0, ok: 0, zero: 0, legacy: 0 };
+    const acc = perTipo.get(k) ?? { n: 0, ok: 0, nc: 0, legacy: 0 };
     acc.n++;
     acc.legacy += r.legacy;
     if (r.calcolato !== null && Math.abs(r.calcolato - r.legacy) <= TOLLERANZA_EUR) acc.ok++;
-    if (r.calcolato === 0) acc.zero++;
+    if (r.esito === 'NON_CALCOLABILE') acc.nc++;
     perTipo.set(k, acc);
   }
   for (const [tipo, a] of [...perTipo.entries()].sort((x, y) => y[1].legacy - x[1].legacy)) {
     console.log(
-      `  ${tipo.padEnd(24)} veicoli=${String(a.n).padStart(5)}  coincidenti=${String(a.ok).padStart(5)}  a zero=${String(a.zero).padStart(5)}  € archivio=${a.legacy.toFixed(2).padStart(12)}`,
+      `  ${tipo.padEnd(24)} veicoli=${String(a.n).padStart(5)}  coincidenti=${String(a.ok).padStart(5)}  non calcolabili=${String(a.nc).padStart(5)}  € archivio=${a.legacy.toFixed(2).padStart(12)}`,
     );
   }
 

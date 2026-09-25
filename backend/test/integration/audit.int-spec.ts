@@ -34,8 +34,8 @@ describe('Registro delle modifiche (integrazione)', () => {
 
   beforeAll(() => {
     prisma = getPrisma();
-    const bollo = new BolloService(prisma as never);
     audit = new AuditService(prisma as never);
+    const bollo = new BolloService(prisma as never, audit);
     pagamenti = new PagamentiService(prisma as never, bollo, audit);
     scadenze = new ScadenzeService(prisma as never, bollo, audit);
   });
@@ -262,7 +262,7 @@ describe('Registro delle modifiche (integrazione)', () => {
           create: () => Promise.reject(new Error('registro non disponibile')),
         },
       } as never);
-      const bollo = new BolloService(prisma as never);
+      const bollo = new BolloService(prisma as never, auditRotto);
       const servizio = new PagamentiService(prisma as never, bollo, auditRotto);
 
       const pagamento = await servizio.create(

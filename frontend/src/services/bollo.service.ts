@@ -36,7 +36,16 @@ export const bolloService = {
   /**
    * Aggiorna gli importi di tutte le scadenze future di un veicolo
    */
-  async aggiornaScadenze(idVeicolo: number): Promise<{ message: string; aggiornate: number }> {
+  /**
+   * Ricalcola gli importi delle scadenze future non pagate. Quelle per cui il
+   * bollo non è calcolabile restano invariate e sono contate a parte.
+   */
+  async aggiornaScadenze(idVeicolo: number): Promise<{
+    message: string;
+    aggiornate: number;
+    nonCalcolabili: number;
+    motivi: string[];
+  }> {
     const response = await api.post(`/bollo/aggiorna-scadenze/${idVeicolo}`);
     return response.data;
   },
