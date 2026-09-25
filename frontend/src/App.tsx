@@ -13,6 +13,7 @@ const ClientiPage = lazy(() => import('./pages/clienti/ClientiPage').then(m => (
 const VeicoliPage = lazy(() => import('./pages/veicoli/VeicoliPage').then(m => ({ default: m.VeicoliPage })));
 const ScadenzePage = lazy(() => import('./pages/scadenze/ScadenzePage').then(m => ({ default: m.ScadenzePage })));
 const PagamentiPage = lazy(() => import('./pages/pagamenti/PagamentiPage').then(m => ({ default: m.PagamentiPage })));
+const AvvisiPage = lazy(() => import('./pages/avvisi/AvvisiPage').then(m => ({ default: m.AvvisiPage })));
 const ReportPage = lazy(() => import('./pages/report/ReportPage').then(m => ({ default: m.ReportPage })));
 const TariffePage = lazy(() => import('./pages/tariffe/TariffePage').then(m => ({ default: m.TariffePage })));
 const UtentiPage = lazy(() => import('./pages/utenti/UtentiPage').then(m => ({ default: m.UtentiPage })));
@@ -116,6 +117,16 @@ const AppRoutes: React.FC = () => {
             <ProtectedRoute>
               <Layout>
                 <PagamentiPage />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/avvisi"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <AvvisiPage />
               </Layout>
             </ProtectedRoute>
           }

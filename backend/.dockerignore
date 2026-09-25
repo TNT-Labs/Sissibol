@@ -6,6 +6,9 @@ yarn-error.log
 # Build output
 dist
 build
+# Stato della build incrementale: copiato nell'immagine farebbe credere a tsc
+# che il codice sia già compilato, lasciando dist incompleta.
+*.tsbuildinfo
 
 # Environment
 .env

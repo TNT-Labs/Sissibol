@@ -15,6 +15,7 @@ import {
   X,
   UserCog,
   KeyRound,
+  Mail,
 } from 'lucide-react';
 import { ChangePasswordModal } from '../ChangePasswordModal';
 
@@ -35,6 +36,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     { name: 'Clienti', href: '/clienti', icon: Users },
     { name: 'Veicoli', href: '/veicoli', icon: Car },
     { name: 'Scadenziario', href: '/scadenze', icon: Calendar },
+    { name: 'Avvisi', href: '/avvisi', icon: Mail },
     { name: 'Pagamenti', href: '/pagamenti', icon: CreditCard },
     { name: 'Report', href: '/report', icon: FileText },
     { name: 'Tariffe Bollo', href: '/tariffe', icon: Settings },

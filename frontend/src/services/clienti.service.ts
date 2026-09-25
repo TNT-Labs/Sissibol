@@ -11,6 +11,9 @@ export interface PaginatedClienti {
   };
 }
 
+/** Dati inviabili: null svuota un campo in modifica. */
+export type DatiCliente = { [K in keyof Cliente]?: Cliente[K] | null };
+
 export const clientiService = {
   async getAll(search?: string): Promise<Cliente[]> {
     const response = await api.get<Cliente[]>('/clienti', {
@@ -45,7 +48,7 @@ export const clientiService = {
     return response.data;
   },
 
-  async update(id: number, data: Partial<Cliente>): Promise<Cliente> {
+  async update(id: number, data: DatiCliente): Promise<Cliente> {
     const response = await api.patch<Cliente>(`/clienti/${id}`, data);
     return response.data;
   },

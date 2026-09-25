@@ -718,6 +718,7 @@ export class ScadenzeService implements OnModuleInit {
                 email: true,
                 telefono: true,
                 attivo: true,
+                avvisiEmail: true,
               },
             },
           },

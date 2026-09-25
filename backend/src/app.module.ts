@@ -13,6 +13,7 @@ import { BolloModule } from './bollo/bollo.module';
 import { UtentiModule } from './utenti/utenti.module';
 import { AvvisiModule } from './avvisi/avvisi.module';
 import { AuditModule } from './audit/audit.module';
+import { MailModule } from './mail/mail.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { AuditModule } from './audit/audit.module';
     UtentiModule,
     AvvisiModule,
     AuditModule,
+    MailModule,
   ],
   providers: [
     // Applica rate limiting globalmente

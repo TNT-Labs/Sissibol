@@ -36,6 +36,7 @@ backend/test/
 │   ├── pagamenti.int-spec.ts
 │   ├── modello-dati.int-spec.ts    vincoli applicati dal database
 │   ├── avvisi.int-spec.ts
+│   ├── invio-avvisi.int-spec.ts    invio: doppi invii, ritentativi, recuperi
 │   └── audit.int-spec.ts
 └── tools/                          generatori dei fixture e diagnostica
 ```

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 import { ToastContainer } from '../components/common/Toast';
 import type { ToastMessage, ToastType } from '../components/common/Toast';
 
@@ -61,8 +61,16 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
   }, [warning]);
 
+  // Valore stabile: le funzioni sono già memoizzate, e un oggetto nuovo a ogni
+  // toast farebbe rieseguire gli effetti dei componenti che dipendono da
+  // useToast() (un caricamento fallito ricaricherebbe all'infinito).
+  const value = useMemo(
+    () => ({ showToast, success, error, warning, info }),
+    [showToast, success, error, warning, info],
+  );
+
   return (
-    <ToastContext.Provider value={{ showToast, success, error, warning, info }}>
+    <ToastContext.Provider value={value}>
       {children}
       <ToastContainer toasts={toasts} onClose={removeToast} />
     </ToastContext.Provider>

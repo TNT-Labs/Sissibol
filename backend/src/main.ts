@@ -3,6 +3,7 @@ import { ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
 import * as cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
+import { leggiOriginiConsentite, origineAmmessa, RichiestaCors } from './common/cors';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -23,27 +24,23 @@ async function bootstrap() {
     crossOriginEmbedderPolicy: false, // Necessario per alcune risorse esterne
   }));
 
-  // Enable CORS for frontend
-  // BUG FIX: origin: true permetteva qualsiasi origine (vulnerabilità CSRF)
-  // Ora usa whitelist configurabile via environment variable
-  const allowedOrigins = process.env.CORS_ORIGINS
-    ? process.env.CORS_ORIGINS.split(',').map(o => o.trim())
-    : ['http://localhost:5173', 'http://localhost:3001']; // Default per sviluppo
+  // CORS: ammesse le origini di CORS_ORIGINS e sempre la stessa origine a cui
+  // è indirizzata la richiesta (frontend servito da nginx). Vedi common/cors.ts.
+  // Le altre origini sono rifiutate: non si torna a `origin: true`, che
+  // permetteva qualsiasi origine (vulnerabilità CSRF).
+  const allowedOrigins = leggiOriginiConsentite(process.env.CORS_ORIGINS);
 
-  app.enableCors({
-    origin: (origin, callback) => {
-      // Permetti richieste senza origin (es. Postman, curl, mobile apps)
-      if (!origin) {
-        return callback(null, true);
-      }
-      if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
-        return callback(null, true);
-      }
-      return callback(new Error(`Origin ${origin} non consentito da CORS`), false);
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+  app.enableCors((req: RichiestaCors, callback) => {
+    const origin = req.headers.origin as string | undefined;
+    const opzioni = {
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization'],
+    };
+    if (origineAmmessa(origin, req, allowedOrigins)) {
+      return callback(null, { ...opzioni, origin: true });
+    }
+    return callback(new Error(`Origin ${origin} non consentito da CORS`), { origin: false });
   });
 
   // Enable validation
