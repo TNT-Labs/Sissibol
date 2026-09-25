@@ -177,6 +177,30 @@ function mapGrandezzaFisica(valore) {
 }
 
 /**
+ * Importo con cui l'archivio Access segnava una scadenza di cui non
+ * conosceva il bollo. Nessun importo reale dell'archivio è compreso fra 1 e
+ * 20,98 euro.
+ */
+const IMPORTO_SEGNAPOSTO_ARCHIVIO = 1;
+
+/**
+ * Importo previsto di una scadenza dell'archivio.
+ *
+ * Sulle scadenze non pagate il segnaposto diventa null (importo mancante):
+ * conservarlo come 1 euro lo faceva sembrare un importo valido, e il
+ * pagamento multiplo avrebbe registrato pagamenti da 1 euro. Sulle scadenze
+ * pagate resta com'è, perché accompagna un pagamento effettivamente
+ * registrato: è un fatto storico.
+ *
+ * Stessa regola della migrazione 20260926000000_importi_segnaposto_archivio.
+ */
+function importoPrevistoDaArchivio(importo, pagata) {
+  if (importo === null || importo === undefined) return null;
+  if (!pagata && importo === IMPORTO_SEGNAPOSTO_ARCHIVIO) return null;
+  return importo;
+}
+
+/**
  * Legge dalla riga del CSV mezzi il valore di periodicità, tollerando le
  * varianti di intestazione presenti negli export ("Periodicità" con accento).
  */
@@ -202,5 +226,7 @@ module.exports = {
   mapTipoSospensione,
   mapNumeroAssi,
   mapGrandezzaFisica,
+  IMPORTO_SEGNAPOSTO_ARCHIVIO,
+  importoPrevistoDaArchivio,
   readPeriodicitaRaw,
 };

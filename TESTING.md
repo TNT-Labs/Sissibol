@@ -154,16 +154,22 @@ DATABASE_URL=postgresql://... npx ts-node test/tools/legacy-diff.ts 2026
 
 ### Misura di partenza (settembre 2026)
 
-Su 2.436 veicoli con importo in archivio, tariffario Lombardia 2026:
+Lo strumento confronta, per ogni veicolo, l'importo reale più recente
+dell'archivio, ignorando il segnaposto di 1 € con cui l'archivio segnava un
+bollo non noto. Solo **518 veicoli** hanno un importo reale; per gli altri
+1.918 l'archivio non ne ha mai registrato uno. Tariffario Lombardia 2026:
 
 ```
-  importo coincidente:          0 (0.0%)
-  calcolato 0 (non calcolabile): 2426 (99.6%)
-  calcolo in errore:            10 (0.4%)
+  veicoli confrontati:     518
+  importo coincidente:       0 (0.0%)
+  non calcolabile:         518 (100.0%)
 
-  totale a archivio:  € 205.276,61
-  totale calcolato:   €      0,00
+  totale a archivio:  € 203.611,83
+  totale calcolato:   €       0,00
 ```
+
+La prima misura (2.436 veicoli, 205.276,61 €) contava anche i segnaposto
+come importi.
 
 Le cause, quantificate dal golden master:
 

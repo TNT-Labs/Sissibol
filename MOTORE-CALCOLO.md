@@ -240,22 +240,32 @@ branch di lavoro. Corretti entrambi i seed; il nuovo test di integrazione
 verifica anche che il tariffario creato coincida con quello su cui gira il
 golden master.
 
-### 98.084 scadenze con importo segnaposto di 1 €
+### 98.087 scadenze con importo segnaposto di 1 € — risolto
 
-Nessun importo reale dell'archivio è compreso fra 1 € e 20,98 €, ma 98.084
-scadenze hanno importo esattamente 1 €: è un segnaposto. Di queste:
+Nessun importo reale dell'archivio è compreso fra 1 € e 20,98 €, ma 98.087
+scadenze avevano importo esattamente 1 €: è il segnaposto con cui l'archivio
+Access segnava un bollo non noto. Sembrava un importo valido, e il pagamento
+multiplo avrebbe registrato pagamenti da 1 €.
 
-| Stato | Scadenze a 1 € |
-|---|---|
-| da pagare (tutte dal 2026 in poi) | 61.802 |
-| scadute | 25.409 |
-| pagate, con un pagamento registrato di 1 € | 10.873 |
+| Stato | Scadenze a 1 € | Trattamento |
+|---|---|---|
+| da pagare (tutte dal 2026 in poi) | 61.805 | importo reso mancante |
+| scadute | 25.409 | importo reso mancante |
+| pagate, con un pagamento registrato di 1 € | 10.873 | invariate: fatti storici |
 
-Il pagamento multiplo registrerebbe pagamenti da 1 € sulle scadenze da pagare.
-**Non è stato corretto qui** perché tocca dati storici e pagamenti già
-registrati: va deciso con lo studio cosa significhino quegli importi. La
-correzione naturale, per le scadenze non pagate, è trattarli come importo
-mancante (`NULL`), come già fatto per gli zeri della potenza.
+Deciso con lo studio. La migrazione `20260926000000_importi_segnaposto_archivio`
+rende mancante (`NULL`) il segnaposto sulle scadenze non pagate e prive di
+pagamenti, e registra ciascuna delle 87.214 modifiche nel registro con il
+valore precedente: è tracciabile e reversibile (un test lo dimostra). Verificata
+sul database ricostruito dall'archivio reale: 87.214 scadenze aggiornate, 87.214
+voci di registro, pagate e pagamenti intatti. L'import applica la stessa regola
+(`importoPrevistoDaArchivio`), quindi una nuova importazione arriva allo stesso
+stato senza passare dalla migrazione.
+
+Effetto collaterale utile: tolti i segnaposto, **solo 518 dei 2.436 veicoli
+hanno un importo reale da qualche parte nell'archivio**. Per gli altri 1.918
+l'archivio non ha mai registrato un bollo vero, e non può fare da riferimento
+per verificare il motore.
 
 ### Pagina non utilizzabile da smartphone
 
@@ -289,11 +299,19 @@ questo lavoro lo ha fatto.**
 
 ---
 
-## Punti aperti, da confermare con lo studio
+## Decisioni dello studio e punti aperti
 
-- **Cumulo delle riduzioni.** Applicata la sola più vantaggiosa, coerente con
-  l'intento del codice precedente. Se la normativa ne prevedesse il cumulo,
-  va cambiata `POLITICA_CUMULO`.
+Confermati:
+
+- **Cumulo delle riduzioni**: si applica la sola più vantaggiosa
+  (`POLITICA_CUMULO`).
+- **Tariffario Lombardia 2026**: le lacune elencate sopra vengono completate
+  dallo studio, dalla pagina Tariffe, con il tariffario ufficiale.
+- **Importi segnaposto di 1 €**: resi mancanti sulle scadenze non pagate,
+  conservati su quelle pagate.
+
+Ancora aperti:
+
 - **Data di riferimento per l'anzianità.** Oggi è il giorno del calcolo, come
   prima; l'esenzione "primi 5 anni" andrebbe forse valutata rispetto al periodo
   d'imposta. Essendo un parametro del motore, il cambio è di una riga
@@ -301,7 +319,6 @@ questo lavoro lo ha fatto.**
 - **Veicoli ultratrentennali iscritti ai registri storici.** Il tariffario ha
   una tassa fissa per loro, ma il veicolo non ha un campo che dica se è
   iscritto.
-
 ---
 
 ## Versionamento
