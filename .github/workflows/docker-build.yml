@@ -154,6 +154,14 @@ jobs:
         done
         docker compose ps
         curl -fsS -o /dev/null http://localhost/ && echo "Frontend pronto"
+        # Il percorso del browser: login attraverso nginx (/api) con Origin,
+        # che il browser invia anche dalla stessa origine. Un rifiuto CORS
+        # risponde 500; credenziali errate rispondono 401.
+        code=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost/api/auth/login \
+          -H "Origin: http://localhost" -H "Content-Type: application/json" \
+          -d '{"email":"verifica@example.com","password":"sbagliata"}')
+        echo "Login via nginx: HTTP $code"
+        [ "$code" = "401" ] || exit 1
 
     - name: Show logs on failure
       if: failure()

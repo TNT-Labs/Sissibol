@@ -15,7 +15,9 @@ export const Button: React.FC<ButtonProps> = ({
   disabled,
   ...props
 }) => {
-  const baseClasses = 'font-medium rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2';
+  // inline-flex: le icone lucide sono <svg> display:block (preflight di
+  // Tailwind) e in un pulsante normale andrebbero a capo sopra il testo.
+  const baseClasses = 'inline-flex items-center justify-center font-medium rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2';
 
   const variantClasses = {
     primary: 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500 disabled:bg-blue-300',
