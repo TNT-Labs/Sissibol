@@ -60,36 +60,37 @@ function stampaAnalisi(corpus: CorpusFixture, risultati: GoldenEntry[]) {
   const annuali = risultati.filter((r) => r.periodicita === 'ANNUALE');
   const reali = annuali.filter((r) => occorrenzePerTarga.has(r.targa));
 
-  let veicoliZero = 0;
-  let veicoliPositivi = 0;
-  let veicoliErrore = 0;
-  const motiviZero = new Map<string, number>();
+  const conteggio = { calcolati: 0, esenti: 0, nonCalcolabili: 0, errori: 0 };
+  const motivi = new Map<string, number>();
 
   for (const r of reali) {
     const peso = occorrenzePerTarga.get(r.targa) ?? 1;
     if (r.esito === 'ERRORE') {
-      veicoliErrore += peso;
+      conteggio.errori += peso;
       continue;
     }
-    if ((r.importoBase ?? 0) === 0) {
-      veicoliZero += peso;
-      const motivo = (r.note ?? [])[0] ?? 'nessuna nota';
-      motiviZero.set(motivo, (motiviZero.get(motivo) ?? 0) + peso);
-    } else {
-      veicoliPositivi += peso;
+    if (r.esitoCalcolo === 'CALCOLATO') conteggio.calcolati += peso;
+    if (r.esitoCalcolo === 'ESENTE') conteggio.esenti += peso;
+    if (r.esitoCalcolo === 'NON_CALCOLABILE') {
+      conteggio.nonCalcolabili += peso;
+      for (const m of r.motivi ?? []) {
+        const chiave = m.campo ? `${m.codice} (${m.campo})` : m.codice;
+        motivi.set(chiave, (motivi.get(chiave) ?? 0) + peso);
+      }
     }
   }
 
-  const totale = veicoliZero + veicoliPositivi + veicoliErrore;
-  console.log('\n--- Stato attuale del motore sui veicoli reali (periodicità ANNUALE) ---');
-  console.log(`  veicoli totali:            ${totale}`);
-  console.log(`  con importo calcolato > 0: ${veicoliPositivi}`);
-  console.log(`  con importo 0:             ${veicoliZero}`);
-  console.log(`  in errore:                 ${veicoliErrore}`);
-  if (motiviZero.size > 0) {
-    console.log('\n  Motivi dell\'importo 0:');
-    for (const [motivo, n] of [...motiviZero.entries()].sort((a, b) => b[1] - a[1])) {
-      console.log(`    ${String(n).padStart(5)}x  ${motivo.slice(0, 110)}`);
+  const totale = conteggio.calcolati + conteggio.esenti + conteggio.nonCalcolabili + conteggio.errori;
+  console.log('\n--- Stato del motore sui veicoli reali (periodicità ANNUALE) ---');
+  console.log(`  veicoli totali:     ${totale}`);
+  console.log(`  calcolati:          ${conteggio.calcolati}`);
+  console.log(`  esenti:             ${conteggio.esenti}`);
+  console.log(`  non calcolabili:    ${conteggio.nonCalcolabili}`);
+  console.log(`  in errore:          ${conteggio.errori}`);
+  if (motivi.size > 0) {
+    console.log('\n  Motivi di non calcolabilità (un veicolo può averne più di uno):');
+    for (const [motivo, n] of [...motivi.entries()].sort((a, b) => b[1] - a[1])) {
+      console.log(`    ${String(n).padStart(5)}x  ${motivo}`);
     }
   }
 }

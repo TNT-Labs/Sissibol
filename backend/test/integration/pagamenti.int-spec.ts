@@ -28,8 +28,8 @@ describe('PagamentiService (integrazione)', () => {
 
   beforeAll(() => {
     prisma = getPrisma();
-    const bollo = new BolloService(prisma as never);
     const audit = new AuditService(prisma as never);
+    const bollo = new BolloService(prisma as never, audit);
     service = new PagamentiService(prisma as never, bollo, audit);
   });
 

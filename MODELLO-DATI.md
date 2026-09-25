@@ -203,7 +203,8 @@ bonifica dei dati vanno pianificate insieme.
 
 ### Altri punti annotati nei test
 
-- il motore restituisce `0` invece di dichiarare il calcolo impossibile;
+- ~~il motore restituisce `0` invece di dichiarare il calcolo impossibile~~:
+  risolto dal motore 2, vedi `MOTORE-CALCOLO.md`;
 - un pagamento su veicolo di regione non configurata viene registrato **senza
   snapshot**, quindi senza tracciabilità dell'importo (ora almeno annotato nel
   registro delle modifiche);

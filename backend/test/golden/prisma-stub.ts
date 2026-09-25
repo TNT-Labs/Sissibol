@@ -1,11 +1,10 @@
 /**
- * Stub di PrismaService che serve al motore di calcolo i dati dei fixture.
+ * Stub di PrismaService che serve a BolloService i dati dei fixture.
  *
- * Riproduce esattamente le tre letture che `BolloService.calcolaBollo` esegue:
- *   1. `veicolo.findUnique({ where: { id }, include: { cliente: true } })`
- *   2. `configurazioneBollo.findFirst({ where: { annoValidita, regione, attivo } })`
- *      con il fallback alla regione 'DEFAULT'
- *   3. `$queryRaw` sulle esenzioni, ordinate come nella query del servizio
+ * Riproduce le due letture che `BolloService.calcolaBollo` esegue:
+ *   1. `veicolo.findUnique({ where: { id } })`
+ *   2. `configurazioneBollo.findFirst({ where: { annoValidita, regione, attivo },
+ *      include: { tariffe, esenzioni } })`, con il ripiego su 'DEFAULT'
  *
  * Usare lo stub al posto del database rende il golden master eseguibile in CI
  * in pochi secondi e senza dipendenze esterne.
@@ -14,7 +13,6 @@
 import { Decimal } from '@prisma/client/runtime/library';
 import type {
   ConfigurazioneFixture,
-  EsenzioneFixture,
   TariffarioFixture,
   VeicoloFixture,
 } from './tariffario.types';
@@ -43,33 +41,31 @@ function hydrateConfigurazione(c: ConfigurazioneFixture): Record<string, unknown
     scontoRid: new Decimal(c.scontoRid),
     attivo: c.attivo,
     note: c.note,
-    tariffe: c.tariffe.map((t) => ({
-      ...t,
-      sogliaMin: toDecimal(t.sogliaMin),
-      sogliaMax: toDecimal(t.sogliaMax),
-      importoUnitario: new Decimal(t.importoUnitario),
-      importoFisso: toDecimal(t.importoFisso),
-    })),
+    tariffe: [...c.tariffe]
+      .sort((a, b) => a.id - b.id)
+      .map((t) => ({
+        ...t,
+        sogliaMin: toDecimal(t.sogliaMin),
+        sogliaMax: toDecimal(t.sogliaMax),
+        importoUnitario: new Decimal(t.importoUnitario),
+        importoFisso: toDecimal(t.importoFisso),
+      })),
+    // Forma del modello Prisma (camelCase), ordinata per id come nella
+    // query del servizio.
+    esenzioni: [...c.esenzioni]
+      .sort((a, b) => a.id - b.id)
+      .map((e) => ({
+        id: e.id,
+        idConfigurazione: e.id_configurazione,
+        tipoEsenzione: e.tipo_esenzione,
+        percentualeRiduzione: toDecimal(e.percentuale_riduzione),
+        tipoVeicolo: e.tipo_veicolo,
+        alimentazione: e.alimentazione,
+        anniDaImmatricolazione: e.anni_da_immatricolazione,
+        descrizione: e.descrizione,
+        note: e.note,
+      })),
   };
-}
-
-/**
- * Riproduce l'ORDER BY della query esenzioni in `BolloService`:
- *   TOTALE prima di PARZIALE, poi percentuale di riduzione decrescente
- *   (con COALESCE a 100 per le totali).
- */
-function ordinaEsenzioni(esenzioni: EsenzioneFixture[]): EsenzioneFixture[] {
-  return [...esenzioni].sort((a, b) => {
-    const pesoA = a.tipo_esenzione === 'TOTALE' ? 0 : 1;
-    const pesoB = b.tipo_esenzione === 'TOTALE' ? 0 : 1;
-    if (pesoA !== pesoB) return pesoA - pesoB;
-
-    const percA = a.percentuale_riduzione === null ? 100 : Number(a.percentuale_riduzione);
-    const percB = b.percentuale_riduzione === null ? 100 : Number(b.percentuale_riduzione);
-    if (percA !== percB) return percB - percA;
-
-    return a.id - b.id;
-  });
 }
 
 export function createPrismaStub(
@@ -100,23 +96,6 @@ export function createPrismaStub(
         );
         return match ? hydrateConfigurazione(match) : null;
       },
-    },
-
-    /**
-     * Il servizio invoca `$queryRaw` come template tag: il primo argomento è
-     * l'array dei frammenti di testo, i successivi i valori interpolati.
-     * L'unica query raw del motore filtra per id configurazione.
-     */
-    $queryRaw: async (
-      _strings: TemplateStringsArray,
-      ...values: unknown[]
-    ): Promise<EsenzioneFixture[]> => {
-      const idConfigurazione = Number(values[0]);
-      const config = tariffario.configurazioni.find(
-        (c) => c.id === idConfigurazione,
-      );
-      if (!config) return [];
-      return ordinaEsenzioni(config.esenzioni);
     },
   };
 }

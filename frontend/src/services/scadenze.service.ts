@@ -145,12 +145,15 @@ export const scadenzeService = {
     veicoliProcessati: number;
     scadenzeCreate: number;
     scadenzeSaltate: number;
+    /** Scadenze create senza importo perché il bollo non è calcolabile */
+    scadenzeSenzaImporto: number;
     errori: string[];
   }> {
     const response = await api.post<{
       veicoliProcessati: number;
       scadenzeCreate: number;
       scadenzeSaltate: number;
+      scadenzeSenzaImporto: number;
       errori: string[];
     }>('/scadenze/genera-future', { annoTarget });
     return response.data;

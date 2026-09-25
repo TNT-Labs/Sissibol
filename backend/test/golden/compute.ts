@@ -8,6 +8,8 @@
  */
 
 import { BolloService } from '../../src/bollo/bollo.service';
+import { AuditService } from '../../src/audit/audit.service';
+import { VERSIONE_MOTORE } from '../../src/bollo/motore';
 import { withFrozenTime } from '../helpers/frozen-time';
 import { createPrismaStub } from './prisma-stub';
 import type {
@@ -50,24 +52,29 @@ async function calcolaVoce(
       ANNO_CALCOLO,
       periodicita,
     );
+    const arrotondaOpt = (n: number | null) => (n === null ? null : arrotonda(n));
     return {
       ...base,
       esito: 'OK',
-      importoBase: arrotonda(r.importoBase),
-      importoRidotto: r.importoRidotto === null ? null : arrotonda(r.importoRidotto),
+      esitoCalcolo: r.esito,
+      importoBase: arrotondaOpt(r.importoBase),
+      importoLordo: arrotondaOpt(r.importoLordo),
+      importoRidotto: arrotondaOpt(r.importoRidotto),
       scontoRid: r.scontoRid,
       esenzioni: r.esenzioni,
       tariffeApplicate: r.tariffeApplicate.map((t) => ({
         ...t,
         importo: arrotonda(t.importo),
       })),
+      motivi: r.motivi,
+      assunzioni: r.assunzioni,
       note: r.note,
       dettaglioCalcolo: r.dettaglioCalcolo,
     };
   } catch (error) {
-    // Un'eccezione è un esito legittimo da fissare: oggi i veicoli di regioni
-    // senza tariffario configurato falliscono, e il golden master lo registra
-    // così che una modifica futura non lo cambi in silenzio.
+    // Un'eccezione è un esito da fissare anch'essa: dal motore 2 il servizio
+    // solleva solo per un veicolo inesistente, ogni altra impossibilità è un
+    // esito NON_CALCOLABILE. Se un'eccezione ricomparisse, il golden lo vede.
     return {
       ...base,
       esito: 'ERRORE',
@@ -83,7 +90,9 @@ export async function computeGolden(
 ): Promise<GoldenFixture> {
   const veicoli = [...corpus.reali, ...corpus.sintetici];
   const prisma = createPrismaStub(tariffario, veicoli);
-  const service = new BolloService(prisma as never);
+  // Il calcolo non scrive nel registro delle modifiche: basta un segnaposto.
+  const audit = { registra: async () => undefined } as unknown as AuditService;
+  const service = new BolloService(prisma as never, audit);
 
   const risultati = await withFrozenTime(dataRiferimento, async () => {
     const out: GoldenEntry[] = [];
@@ -98,6 +107,7 @@ export async function computeGolden(
   return {
     generatoIl: new Date().toISOString(),
     dataRiferimento,
+    versioneMotore: VERSIONE_MOTORE,
     riepilogo: costruisciRiepilogo(risultati),
     risultati,
   };
@@ -105,7 +115,7 @@ export async function computeGolden(
 
 /**
  * Conteggi aggregati: rendono immediatamente leggibile, nel diff di una PR,
- * se un refactor ha spostato veicoli fra le categorie di esito.
+ * se una modifica ha spostato veicoli fra calcolati, esenti e non calcolabili.
  */
 export function costruisciRiepilogo(
   risultati: GoldenEntry[],
@@ -114,10 +124,11 @@ export function costruisciRiepilogo(
     totale: risultati.length,
     esitoOk: 0,
     esitoErrore: 0,
-    importoZero: 0,
-    importoPositivo: 0,
+    calcolati: 0,
+    esenti: 0,
+    nonCalcolabili: 0,
     conEsenzioni: 0,
-    conNote: 0,
+    conAssunzioni: 0,
   };
 
   for (const r of risultati) {
@@ -126,10 +137,11 @@ export function costruisciRiepilogo(
       continue;
     }
     riepilogo.esitoOk++;
-    if ((r.importoBase ?? 0) === 0) riepilogo.importoZero++;
-    else riepilogo.importoPositivo++;
+    if (r.esitoCalcolo === 'CALCOLATO') riepilogo.calcolati++;
+    if (r.esitoCalcolo === 'ESENTE') riepilogo.esenti++;
+    if (r.esitoCalcolo === 'NON_CALCOLABILE') riepilogo.nonCalcolabili++;
     if ((r.esenzioni ?? []).length > 0) riepilogo.conEsenzioni++;
-    if ((r.note ?? []).length > 0) riepilogo.conNote++;
+    if ((r.assunzioni ?? []).length > 0) riepilogo.conAssunzioni++;
   }
 
   return riepilogo;

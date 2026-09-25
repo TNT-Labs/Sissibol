@@ -57,10 +57,12 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
               >
                 {sidebarOpen ? <X size={24} /> : <Menu size={24} />}
               </button>
-              <h1 className="ml-4 text-2xl font-bold text-blue-600">Sissibol</h1>
+              <h1 className="ml-2 sm:ml-4 text-2xl font-bold text-blue-600">Sissibol</h1>
             </div>
-            <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-600">{user?.email}</span>
+            {/* Su schermi stretti l'email è nascosta e i pulsanti restano solo
+                icona: altrimenti "Esci" finiva fuori dallo schermo. */}
+            <div className="flex items-center space-x-1 sm:space-x-4 min-w-0">
+              <span className="hidden sm:inline truncate max-w-[16rem] text-sm text-gray-600">{user?.email}</span>
               <button
                 onClick={() => setShowChangePassword(true)}
                 className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md"
@@ -71,10 +73,12 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
               </button>
               <button
                 onClick={logout}
-                className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md"
+                className="flex items-center space-x-2 px-3 sm:px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md"
+                title="Esci"
+                aria-label="Esci"
               >
                 <LogOut size={18} />
-                <span>Esci</span>
+                <span className="hidden sm:inline">Esci</span>
               </button>
             </div>
           </div>
@@ -110,8 +114,11 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
           </nav>
         </aside>
 
-        {/* Main Content */}
-        <main className="flex-1 lg:ml-0">
+        {/* Main Content.
+            min-w-0 è indispensabile: senza, un elemento flex non si
+            restringe sotto la larghezza del contenuto e ogni tabella larga
+            allarga l'intera pagina oltre lo schermo. */}
+        <main className="flex-1 min-w-0 lg:ml-0">
           <div className="py-6 px-4 sm:px-6 lg:px-8">
             {children}
           </div>

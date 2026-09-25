@@ -54,44 +54,23 @@ export class PagamentiService {
       throw new NotFoundException(`Scadenza con ID ${createPagamentoDto.idScadenza} non trovata`);
     }
 
-    // Calcola il bollo per ottenere lo snapshot delle tariffe
-    let calcoloBollo;
-    let configurazioneId = 0;
+    // Calcolo del bollo da congelare nello snapshot. Il tariffario usato
+    // (compreso l'eventuale ripiego su DEFAULT) arriva dal calcolo stesso:
+    // la versione precedente lo rileggeva a parte e registrava la regione
+    // del veicolo anche quando era stato applicato il tariffario DEFAULT.
+    const calcolo = await this.bolloService.calcolaBollo(
+      scadenza.idVeicolo,
+      scadenza.annoScadenza,
+      scadenza.periodicita as 'ANNUALE' | 'QUADRIMESTRALE',
+    );
 
-    try {
-      calcoloBollo = await this.bolloService.calcolaBollo(
-        scadenza.idVeicolo,
-        scadenza.annoScadenza,
-        scadenza.periodicita as 'ANNUALE' | 'QUADRIMESTRALE',
-      );
-
-      // Recupera l'ID configurazione usata
-      const configurazione = await this.prisma.configurazioneBollo.findFirst({
-        where: {
-          annoValidita: scadenza.annoScadenza,
-          regione: scadenza.veicolo.regione || 'Lombardia',
-          attivo: true,
-        },
-      });
-
-      if (!configurazione) {
-        // Prova con DEFAULT
-        const configDefault = await this.prisma.configurazioneBollo.findFirst({
-          where: {
-            annoValidita: scadenza.annoScadenza,
-            regione: 'DEFAULT',
-            attivo: true,
-          },
-        });
-        configurazioneId = configDefault?.id || 0;
-      } else {
-        configurazioneId = configurazione.id;
-      }
-    } catch (error) {
-      // Se il calcolo fallisce, crea comunque il pagamento senza snapshot
-      console.warn(`Impossibile calcolare snapshot bollo: ${error.message}`);
-      calcoloBollo = null;
-    }
+    // Uno snapshot documenta un importo determinato dal tariffario: se il
+    // calcolo non è possibile non c'è nulla da congelare. Il pagamento viene
+    // comunque registrato (è un fatto avvenuto) e il registro delle modifiche
+    // lo annota. La versione precedente in questo caso salvava uno snapshot
+    // con importo zero, cioè una prova falsa.
+    const calcoloBollo =
+      calcolo.esito !== 'NON_CALCOLABILE' && calcolo.idConfigurazione !== null ? calcolo : null;
 
     // Crea il pagamento e lo snapshot in una transazione atomica
     const result = await this.prisma.$transaction(async (tx) => {
@@ -145,10 +124,12 @@ export class PagamentiService {
             importoRidotto: calcoloBollo.importoRidotto,
             scontoRidApplicato: calcoloBollo.scontoRid,
             dettaglioCalcolo: calcoloBollo.dettaglioCalcolo || '',
-            // Riferimento configurazione per audit
-            idConfigurazione: configurazioneId,
+            versioneMotore: calcoloBollo.versioneMotore,
+            assunzioni: calcoloBollo.assunzioni,
+            // Riferimento al tariffario effettivamente applicato
+            idConfigurazione: calcoloBollo.idConfigurazione,
             annoConfigurazione: scadenza.annoScadenza,
-            regioneConfigurazione: scadenza.veicolo.regione || 'DEFAULT',
+            regioneConfigurazione: calcoloBollo.regioneConfigurazione,
           },
         });
       }
@@ -170,7 +151,9 @@ export class PagamentiService {
       datiDopo: istantaneaPagamento(result),
       note: calcoloBollo
         ? undefined
-        : 'Registrato senza snapshot: calcolo del bollo non disponibile',
+        : `Registrato senza snapshot: bollo non calcolabile (${calcolo.motivi
+            .map((m) => m.messaggio)
+            .join(' ')})`,
     });
 
     return result;

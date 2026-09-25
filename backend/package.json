@@ -24,7 +24,8 @@
     "golden:corpus": "ts-node test/tools/build-corpus.ts",
     "golden:tariffario": "ts-node test/tools/dump-tariffario.ts",
     "dati:completezza": "ts-node test/tools/completezza-dati.ts",
-    "dati:confronto-archivio": "ts-node test/tools/legacy-diff.ts"
+    "dati:confronto-archivio": "ts-node test/tools/legacy-diff.ts",
+    "golden:confronta": "ts-node test/tools/confronta-golden.ts"
   },
   "prisma": {
     "seed": "node prisma/seed.js"
@@ -52,6 +53,7 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.3",
     "cookie-parser": "^1.4.7",
+    "decimal.js": "^10.6.0",
     "helmet": "^8.1.0",
     "nodemailer": "^9.0.3",
     "passport": "^0.7.0",

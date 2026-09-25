@@ -326,6 +326,12 @@ model SnapshotCalcoloBollo {
   scontoRidApplicato Decimal  @map("sconto_rid_applicato") @db.Decimal(5, 2)
   dettaglioCalcolo   String   @map("dettaglio_calcolo") @db.Text
 
+  /// Versione del motore di calcolo che ha prodotto lo snapshot.
+  /// NULL per gli snapshot del motore 1.x, precedente alla riscrittura.
+  versioneMotore String? @map("versione_motore")
+  /// Benefici non valutati per dati mancanti al momento del calcolo
+  assunzioni     Json?
+
   // Riferimento configurazione (per audit)
   idConfigurazione      Int    @map("id_configurazione")
   annoConfigurazione    Int    @map("anno_configurazione")

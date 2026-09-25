@@ -279,19 +279,16 @@ export class ScadenzeService implements OnModuleInit {
 
     let importoPrevisto = createScadenzaDto.importoPrevisto;
 
-    // Se l'importo non è specificato, calcolalo automaticamente
+    // Se l'importo non è specificato, calcolalo dal tariffario. Quando il
+    // calcolo non è possibile l'importo resta null: mai zero, che sarebbe
+    // indistinguibile da un veicolo esente.
     if (importoPrevisto === undefined || importoPrevisto === null) {
-      try {
-        const calcolo = await this.bolloService.calcolaBollo(
-          createScadenzaDto.idVeicolo,
-          createScadenzaDto.annoScadenza,
-          periodicita,
-        );
-        importoPrevisto = calcolo.importoBase;
-      } catch (error) {
-        // Se il calcolo fallisce, lascia l'importo nullo
-        console.warn(`Impossibile calcolare il bollo per veicolo ${createScadenzaDto.idVeicolo}:`, error.message);
-      }
+      const calcolo = await this.bolloService.calcolaBollo(
+        createScadenzaDto.idVeicolo,
+        createScadenzaDto.annoScadenza,
+        periodicita,
+      );
+      importoPrevisto = calcolo.importoBase;
     }
 
     return this.prisma.scadenza.create({
@@ -322,35 +319,39 @@ export class ScadenzeService implements OnModuleInit {
   async ricalcolaImporto(id: number, utente?: string) {
     const scadenza = await this.findOne(id);
 
-    try {
-      const calcolo = await this.bolloService.calcolaBollo(
-        scadenza.idVeicolo,
-        scadenza.annoScadenza,
-        scadenza.periodicita as 'ANNUALE' | 'QUADRIMESTRALE',
+    const calcolo = await this.bolloService.calcolaBollo(
+      scadenza.idVeicolo,
+      scadenza.annoScadenza,
+      scadenza.periodicita as 'ANNUALE' | 'QUADRIMESTRALE',
+    );
+
+    // Un calcolo impossibile non deve cancellare l'importo esistente: il
+    // motore precedente lo sovrascriveva con zero.
+    if (calcolo.esito === 'NON_CALCOLABILE') {
+      throw new BadRequestException(
+        `Impossibile ricalcolare il bollo: ${calcolo.motivi.map((m) => m.messaggio).join(' ')}`,
       );
-
-      const aggiornata = await this.prisma.scadenza.update({
-        where: { id },
-        data: { importoPrevisto: calcolo.importoBase },
-        include: {
-          veicolo: { include: { cliente: true } },
-        },
-      });
-
-      await this.audit.registra({
-        entita: 'scadenza',
-        idEntita: id,
-        azione: 'MODIFICA',
-        utente,
-        datiPrima: { importoPrevisto: scadenza.importoPrevisto },
-        datiDopo: { importoPrevisto: aggiornata.importoPrevisto },
-        note: `Ricalcolo dal tariffario: ${calcolo.dettaglioCalcolo || 'nessun dettaglio'}`,
-      });
-
-      return aggiornata;
-    } catch (error) {
-      throw new BadRequestException(`Impossibile ricalcolare il bollo: ${error.message}`);
     }
+
+    const aggiornata = await this.prisma.scadenza.update({
+      where: { id },
+      data: { importoPrevisto: calcolo.importoBase },
+      include: {
+        veicolo: { include: { cliente: true } },
+      },
+    });
+
+    await this.audit.registra({
+      entita: 'scadenza',
+      idEntita: id,
+      azione: 'MODIFICA',
+      utente,
+      datiPrima: { importoPrevisto: scadenza.importoPrevisto },
+      datiDopo: { importoPrevisto: aggiornata.importoPrevisto },
+      note: `Ricalcolo dal tariffario (motore ${calcolo.versioneMotore}): ${calcolo.dettaglioCalcolo || 'nessun dettaglio'}`,
+    });
+
+    return aggiornata;
   }
 
   async findAll(
@@ -757,6 +758,8 @@ export class ScadenzeService implements OnModuleInit {
     veicoliProcessati: number;
     scadenzeCreate: number;
     scadenzeSaltate: number;
+    /** Scadenze create senza importo perché il bollo non è calcolabile */
+    scadenzeSenzaImporto: number;
     errori: string[];
   }> {
     const oggi = this.getOggiNormalizzato();
@@ -777,11 +780,12 @@ export class ScadenzeService implements OnModuleInit {
       veicoliProcessati: 0,
       scadenzeCreate: 0,
       scadenzeSaltate: 0,
+      scadenzeSenzaImporto: 0,
       errori: [] as string[],
     };
 
-    // Cache configurazioni tariffe: evita di ricaricarle per ogni veicolo
-    const configCache = new Map<string, any>();
+    // Cache dei tariffari: evita di ricaricarli per ogni veicolo
+    const configCache = new Map();
 
     // Recupera solo i veicoli di clienti attivi con le loro scadenze esistenti
     const veicoli = await this.prisma.veicolo.findMany({
@@ -884,17 +888,18 @@ export class ScadenzeService implements OnModuleInit {
 
         // Calcola importo una sola volta per veicolo (ottimizzazione)
         // L'importo è lo stesso per tutte le scadenze dello stesso veicolo/periodicità
-        let importoPrevisto: number | undefined;
-        try {
-          const calcolo = await this.bolloService.calcolaBollo(
-            veicolo.id,
-            annoCorrente,
-            periodicita,
-            configCache,
-          );
-          importoPrevisto = calcolo.importoBase;
-        } catch (error) {
-          console.warn(`Impossibile calcolare bollo per veicolo ${veicolo.targa}:`, error.message);
+        // Se il bollo non è calcolabile le scadenze nascono senza importo
+        // (null, mai zero) e vengono contate, così l'operatore sa quante
+        // restano da completare.
+        const calcolo = await this.bolloService.calcolaBollo(
+          veicolo.id,
+          annoCorrente,
+          periodicita,
+          configCache,
+        );
+        const importoPrevisto = calcolo.importoBase;
+        if (calcolo.esito === 'NON_CALCOLABILE') {
+          risultato.scadenzeSenzaImporto += scadenzeNuove.length;
         }
 
         // Prepara batch di scadenze da creare

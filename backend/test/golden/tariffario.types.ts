@@ -91,11 +91,17 @@ export interface GoldenEntry {
   regione: string | null;
   anno: number;
   periodicita: 'ANNUALE' | 'QUADRIMESTRALE';
-  /** 'OK' se il calcolo è andato a buon fine, 'ERRORE' se ha sollevato eccezione. */
+  /** 'OK' se il servizio ha risposto, 'ERRORE' se ha sollevato eccezione. */
   esito: 'OK' | 'ERRORE';
   errore?: string;
-  importoBase?: number;
+  /** Esito del motore: CALCOLATO, ESENTE o NON_CALCOLABILE */
+  esitoCalcolo?: string;
+  /** null quando il bollo non è calcolabile */
+  importoBase?: number | null;
+  importoLordo?: number | null;
   importoRidotto?: number | null;
+  motivi?: Array<{ codice: string; campo?: string; messaggio: string }>;
+  assunzioni?: string[];
   scontoRid?: number;
   esenzioni?: Array<{
     tipo: string;
@@ -115,6 +121,8 @@ export interface GoldenEntry {
 export interface GoldenFixture {
   generatoIl: string;
   dataRiferimento: string;
+  /** Versione del motore che ha prodotto il fixture */
+  versioneMotore?: string;
   /** Riepilogo leggibile: quanti veicoli finiscono in ciascun esito. */
   riepilogo: Record<string, number>;
   risultati: GoldenEntry[];

@@ -1,214 +1,194 @@
-import { BolloService } from './bollo.service';
+import { NotFoundException } from '@nestjs/common';
 import { Decimal } from '@prisma/client/runtime/library';
+import { BolloService } from './bollo.service';
 
 /**
- * Unit test sul calcolo bollo con PrismaService mockato.
- * Copre il tariffario a scaglioni per KW e la logica delle esenzioni
- * (totali, parziali, elettrico entro/oltre 5 anni, veicoli storici).
+ * Test dell'adattatore fra database e motore di calcolo.
+ *
+ * Le regole di calcolo sono verificate in `motore/motore.spec.ts` e dal
+ * golden master; qui si verifica ciò che resta al servizio: selezione del
+ * tariffario, conversione dei dati e protezione degli importi esistenti.
  */
 
-// Tariffe autovettura Euro 4-5-6 (valori Lombardia 2026)
-const tariffeAutovettura = [
-  {
-    tipoVeicolo: 'Autovettura',
-    categoriaEuro: 'Euro 4-5-6',
-    unitaMisura: 'KW',
-    sogliaMin: new Decimal(0),
-    sogliaMax: new Decimal(100),
-    importoUnitario: new Decimal(2.58),
-    importoFisso: null,
-    periodicita: 'ANNUALE',
-    descrizione: null,
-  },
-  {
-    tipoVeicolo: 'Autovettura',
-    categoriaEuro: 'Euro 4-5-6',
-    unitaMisura: 'KW',
-    sogliaMin: new Decimal(100),
-    sogliaMax: null,
-    importoUnitario: new Decimal(3.87),
-    importoFisso: null,
-    periodicita: 'ANNUALE',
-    descrizione: null,
-  },
-];
-
-interface MockSetup {
-  veicolo: Record<string, unknown>;
-  esenzioni?: Record<string, unknown>[];
-  scontoRid?: number;
-}
-
-function createService({ veicolo, esenzioni = [], scontoRid = 15 }: MockSetup): BolloService {
-  const prismaMock = {
-    veicolo: {
-      findUnique: jest.fn().mockResolvedValue(veicolo),
+const CONFIG_LOMBARDIA = {
+  id: 7,
+  annoValidita: 2026,
+  regione: 'Lombardia',
+  scontoRid: new Decimal(15),
+  attivo: true,
+  tariffe: [
+    {
+      id: 1,
+      tipoVeicolo: 'Autovettura',
+      categoriaEuro: 'Euro 4-5-6',
+      unitaMisura: 'KW',
+      sogliaMin: new Decimal(0),
+      sogliaMax: null,
+      importoUnitario: new Decimal('2.58'),
+      importoFisso: null,
+      tipoSospensione: null,
+      periodicita: 'ANNUALE',
+      descrizione: 'Autovetture Euro 4-5-6',
     },
-    configurazioneBollo: {
-      findFirst: jest.fn().mockResolvedValue({
-        id: 1,
-        annoValidita: 2026,
-        regione: 'Lombardia',
-        scontoRid: new Decimal(scontoRid),
-        attivo: true,
-        tariffe: tariffeAutovettura,
-      }),
-    },
-    $queryRaw: jest.fn().mockResolvedValue(esenzioni),
-  };
-  return new BolloService(prismaMock as any);
-}
+  ],
+  esenzioni: [],
+};
 
-const veicoloBase = {
+const VEICOLO = {
   id: 1,
   targa: 'AB123CD',
   tipoVeicolo: 'Autovettura',
   classeAmbientale: 'Euro 6',
-  potenzaKw: new Decimal(85),
-  alimentazione: 'Benzina',
   regione: 'Lombardia',
-  dataImmatricolazione: null,
-  cliente: { id: 1 },
+  alimentazione: 'Benzina',
+  potenzaKw: new Decimal(85),
+  cilindrata: null,
+  portataKg: null,
+  pesoComplessivoKg: null,
+  numeroAssi: null,
+  tipoSospensione: null,
+  numeroPosti: null,
+  massaRimorchiabileKg: null,
+  dataImmatricolazione: new Date('2020-03-10T00:00:00Z'),
 };
 
-describe('BolloService - calcolo autovettura', () => {
-  it('calcola il bollo a scaglioni per KW (entro la prima fascia)', async () => {
-    const service = createService({ veicolo: veicoloBase });
-    const result = await service.calcolaBollo(1, 2026);
-    // 85 KW × 2.58 = 219.30
-    expect(result.importoBase).toBe(219.3);
-    // Sconto RID 15%: 219.30 × 0.85 = 186.41
-    expect(result.importoRidotto).toBe(186.41);
+function crea(opzioni: {
+  veicolo?: Record<string, unknown> | null;
+  configurazioni?: Array<Record<string, unknown> | null>;
+  scadenze?: Array<Record<string, unknown>>;
+}) {
+  const configurazioni = [...(opzioni.configurazioni ?? [CONFIG_LOMBARDIA])];
+  const prisma = {
+    veicolo: {
+      findUnique: jest.fn().mockResolvedValue(opzioni.veicolo === undefined ? VEICOLO : opzioni.veicolo),
+    },
+    configurazioneBollo: {
+      findFirst: jest.fn().mockImplementation(() => Promise.resolve(configurazioni.shift() ?? null)),
+    },
+    scadenza: {
+      findMany: jest.fn().mockResolvedValue(opzioni.scadenze ?? []),
+      update: jest.fn().mockResolvedValue({}),
+    },
+  };
+  const audit = { registra: jest.fn().mockResolvedValue(undefined) };
+  return { service: new BolloService(prisma as never, audit as never), prisma, audit };
+}
+
+describe('BolloService - selezione del tariffario', () => {
+  it('solleva un\'eccezione solo per un veicolo inesistente', async () => {
+    const { service } = crea({ veicolo: null });
+    await expect(service.calcolaBollo(99, 2026)).rejects.toThrow(NotFoundException);
   });
 
-  it('applica lo scaglione superiore oltre i 100 KW', async () => {
-    const service = createService({
-      veicolo: { ...veicoloBase, potenzaKw: new Decimal(120) },
-    });
-    const result = await service.calcolaBollo(1, 2026);
-    // 100 × 2.58 + 20 × 3.87 = 258 + 77.40 = 335.40
-    expect(result.importoBase).toBe(335.4);
+  it('senza regione non calcola e non assume la Lombardia', async () => {
+    const { service, prisma } = crea({ veicolo: { ...VEICOLO, regione: null } });
+
+    const r = await service.calcolaBollo(1, 2026);
+
+    expect(r.esito).toBe('NON_CALCOLABILE');
+    expect(r.motivi).toEqual([expect.objectContaining({ codice: 'DATO_MANCANTE', campo: 'regione' })]);
+    expect(prisma.configurazioneBollo.findFirst).not.toHaveBeenCalled();
   });
 
-  it('restituisce 0 con nota se manca la potenza', async () => {
-    const service = createService({
-      veicolo: { ...veicoloBase, potenzaKw: null },
+  it('senza tariffario per la regione né DEFAULT restituisce un esito, non un\'eccezione', async () => {
+    const { service, prisma } = crea({ configurazioni: [null, null] });
+
+    const r = await service.calcolaBollo(1, 2026);
+
+    expect(r.esito).toBe('NON_CALCOLABILE');
+    expect(r.motivi[0].codice).toBe('TARIFFARIO_ASSENTE');
+    // Ha tentato la regione del veicolo e poi il DEFAULT.
+    expect(prisma.configurazioneBollo.findFirst).toHaveBeenCalledTimes(2);
+    expect(prisma.configurazioneBollo.findFirst.mock.calls[1][0].where.regione).toBe('DEFAULT');
+  });
+
+  it('dichiara il tariffario DEFAULT quando è quello applicato', async () => {
+    const { service } = crea({
+      configurazioni: [null, { ...CONFIG_LOMBARDIA, id: 9, regione: 'DEFAULT' }],
     });
-    const result = await service.calcolaBollo(1, 2026);
-    expect(result.importoBase).toBe(0);
-    expect(result.note.join(' ')).toContain('Potenza KW non specificata');
+
+    const r = await service.calcolaBollo(1, 2026);
+
+    expect(r.esito).toBe('CALCOLATO');
+    expect(r.idConfigurazione).toBe(9);
+    expect(r.regioneConfigurazione).toBe('DEFAULT');
+  });
+
+  it('riusa il tariffario in cache nei calcoli ripetuti', async () => {
+    const { service, prisma } = crea({ configurazioni: [CONFIG_LOMBARDIA] });
+    const cache = new Map();
+
+    await service.calcolaBollo(1, 2026, 'ANNUALE', cache);
+    await service.calcolaBollo(1, 2026, 'ANNUALE', cache);
+
+    expect(prisma.configurazioneBollo.findFirst).toHaveBeenCalledTimes(1);
   });
 });
 
-describe('BolloService - esenzioni', () => {
-  const esenzioneElettricoTotale = {
-    id: 1,
-    id_configurazione: 1,
-    tipo_esenzione: 'TOTALE',
-    percentuale_riduzione: null,
-    tipo_veicolo: null,
-    alimentazione: 'Elettrico',
-    anni_da_immatricolazione: 5,
-    descrizione: 'Elettrico primi 5 anni',
-    note: null,
-  };
-  const esenzioneElettricoParziale = {
-    id: 2,
-    id_configurazione: 1,
-    tipo_esenzione: 'PARZIALE',
-    percentuale_riduzione: 75,
-    tipo_veicolo: null,
-    alimentazione: 'Elettrico',
-    anni_da_immatricolazione: null,
-    descrizione: 'Elettrico oltre 5 anni',
-    note: null,
-  };
-  const esenzioneGpl = {
-    id: 3,
-    id_configurazione: 1,
-    tipo_esenzione: 'PARZIALE',
-    percentuale_riduzione: 25,
-    tipo_veicolo: null,
-    alimentazione: 'GPL',
-    anni_da_immatricolazione: null,
-    descrizione: 'GPL riduzione 25%',
-    note: null,
-  };
-  const esenzioneStorico = {
-    id: 4,
-    id_configurazione: 1,
-    tipo_esenzione: 'PARZIALE',
-    percentuale_riduzione: 50,
-    tipo_veicolo: null,
-    alimentazione: null,
-    anni_da_immatricolazione: 30,
-    descrizione: 'Ultratrentennali riduzione 50%',
-    note: null,
-  };
+describe('BolloService - forma del risultato', () => {
+  it('converte il risultato del motore nei numeri attesi dall\'API', async () => {
+    const { service } = crea({});
 
-  function dataImmAnniFa(anni: number): Date {
-    const d = new Date();
-    d.setFullYear(d.getFullYear() - anni);
-    return d;
-  }
+    const r = await service.calcolaBollo(1, 2026);
 
-  it('elettrico entro 5 anni: esenzione totale, importo 0', async () => {
-    const service = createService({
-      veicolo: {
-        ...veicoloBase,
-        alimentazione: 'Elettrico',
-        dataImmatricolazione: dataImmAnniFa(2),
-      },
-      esenzioni: [esenzioneElettricoTotale, esenzioneElettricoParziale],
-    });
-    const result = await service.calcolaBollo(1, 2026);
-    expect(result.importoBase).toBe(0);
-    expect(result.esenzioni[0].tipo).toBe('TOTALE');
+    expect(r.esito).toBe('CALCOLATO');
+    expect(r.importoBase).toBe(219.3);
+    expect(r.importoRidotto).toBe(186.41);
+    expect(r.scontoRid).toBe(15);
+    expect(r.tariffeApplicate[0]).toEqual(
+      expect.objectContaining({ importo: 219.3, unitaMisura: 'KW', valore: 85 }),
+    );
+    expect(r.versioneMotore).toMatch(/^2\./);
   });
 
-  it('elettrico oltre 5 anni: NON esente, riduzione parziale 75%', async () => {
-    const service = createService({
-      veicolo: {
-        ...veicoloBase,
-        alimentazione: 'Elettrico',
-        dataImmatricolazione: dataImmAnniFa(11),
-      },
-      esenzioni: [esenzioneElettricoTotale, esenzioneElettricoParziale],
+  it('per un calcolo impossibile restituisce importo null, mai zero', async () => {
+    const { service } = crea({ veicolo: { ...VEICOLO, potenzaKw: null } });
+
+    const r = await service.calcolaBollo(1, 2026);
+
+    expect(r.importoBase).toBeNull();
+    expect(r.importoRidotto).toBeNull();
+    expect(r.dettaglioCalcolo).toContain('Calcolo non possibile');
+    expect(r.dettaglioCalcolo).toContain('potenza (KW)');
+  });
+});
+
+describe('BolloService - aggiornamento degli importi delle scadenze', () => {
+  const SCADENZA = {
+    id: 50,
+    annoScadenza: 2026,
+    periodicita: 'ANNUALE',
+    importoPrevisto: new Decimal('233.10'),
+  };
+
+  it('aggiorna l\'importo e lo registra nel registro delle modifiche', async () => {
+    const { service, prisma, audit } = crea({ scadenze: [SCADENZA] });
+
+    const esito = await service.aggiornaImportiScadenze(1, 'operatore@studio.it');
+
+    expect(esito).toEqual({ aggiornate: 1, nonCalcolabili: 0, motivi: [] });
+    expect(prisma.scadenza.update).toHaveBeenCalledWith({
+      where: { id: 50 },
+      data: { importoPrevisto: 219.3 },
     });
-    const result = await service.calcolaBollo(1, 2026);
-    // 219.30 × 0.25 = 54.83 (arrotondato)
-    expect(result.importoBase).toBeCloseTo(54.83, 2);
-    expect(result.esenzioni).toHaveLength(1);
-    expect(result.esenzioni[0].tipo).toBe('PARZIALE');
-    expect(result.esenzioni[0].percentualeRiduzione).toBe(75);
+    expect(audit.registra).toHaveBeenCalledWith(
+      expect.objectContaining({ entita: 'scadenza', idEntita: 50, utente: 'operatore@studio.it' }),
+    );
   });
 
-  it('GPL: riduzione parziale 25%', async () => {
-    const service = createService({
-      veicolo: { ...veicoloBase, alimentazione: 'GPL' },
-      esenzioni: [esenzioneGpl],
+  it('non sovrascrive l\'importo esistente se il bollo non è calcolabile', async () => {
+    // Il motore precedente scriveva zero, cancellando l'importo importato
+    // dall'archivio o inserito a mano.
+    const { service, prisma } = crea({
+      veicolo: { ...VEICOLO, potenzaKw: null },
+      scadenze: [SCADENZA],
     });
-    const result = await service.calcolaBollo(1, 2026);
-    // 219.30 × 0.75 = 164.48
-    expect(result.importoBase).toBeCloseTo(164.48, 2);
-  });
 
-  it('veicolo storico oltre 30 anni: riduzione 50%', async () => {
-    const service = createService({
-      veicolo: { ...veicoloBase, dataImmatricolazione: dataImmAnniFa(36) },
-      esenzioni: [esenzioneStorico],
-    });
-    const result = await service.calcolaBollo(1, 2026);
-    expect(result.importoBase).toBeCloseTo(219.3 * 0.5, 2);
-  });
+    const esito = await service.aggiornaImportiScadenze(1);
 
-  it('veicolo recente: nessuna esenzione storica', async () => {
-    const service = createService({
-      veicolo: { ...veicoloBase, dataImmatricolazione: dataImmAnniFa(5) },
-      esenzioni: [esenzioneStorico],
-    });
-    const result = await service.calcolaBollo(1, 2026);
-    expect(result.importoBase).toBe(219.3);
-    expect(result.esenzioni).toHaveLength(0);
+    expect(prisma.scadenza.update).not.toHaveBeenCalled();
+    expect(esito.aggiornate).toBe(0);
+    expect(esito.nonCalcolabili).toBe(1);
+    expect(esito.motivi).toEqual(['Dato mancante: potenza (KW).']);
   });
 });

@@ -5,6 +5,7 @@ import { pagamentiService } from '../../services/pagamenti.service';
 import { StatoScadenza, Periodicita, TipoCliente, getClienteDisplayName } from '../../types';
 import type { Scadenza, Cliente, Veicolo } from '../../types';
 import { getErrorMessage } from '../../utils/errors';
+import { haImporto, formattaImporto, IMPORTO_MANCANTE } from '../../utils/importi';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { SearchableSelect } from '../../components/common/SearchableSelect';
@@ -81,6 +82,7 @@ export const ScadenzePage: React.FC = () => {
     veicoliProcessati: number;
     scadenzeCreate: number;
     scadenzeSaltate: number;
+    scadenzeSenzaImporto: number;
     errori: string[];
   } | null>(null);
 
@@ -253,10 +255,14 @@ export const ScadenzePage: React.FC = () => {
   const handleRicalcolaBollo = async (id: number) => {
     try {
       await scadenzeService.ricalcolaImporto(id);
+      toast.success('Importo ricalcolato', 'L\'importo previsto è stato aggiornato dal tariffario.');
       loadScadenze();
     } catch (error) {
-      console.error('Errore nel ricalcolo del bollo:', error);
-      alert('Errore nel ricalcolo del bollo. Verifica che il veicolo abbia tutti i parametri necessari.');
+      // Il backend indica i dati mancanti; l'importo esistente resta invariato.
+      toast.error(
+        'Ricalcolo non possibile',
+        getErrorMessage(error, 'Verifica che il veicolo abbia tutti i dati necessari.'),
+      );
     }
   };
 
@@ -274,6 +280,7 @@ export const ScadenzePage: React.FC = () => {
         veicoliProcessati: 0,
         scadenzeCreate: 0,
         scadenzeSaltate: 0,
+        scadenzeSenzaImporto: 0,
         errori: [getErrorMessage(error, 'Errore sconosciuto')],
       });
     } finally {
@@ -367,12 +374,12 @@ export const ScadenzePage: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-wrap justify-between items-center gap-3">
         <h1 className="text-3xl font-bold text-gray-900 flex items-center">
           <CalendarIcon className="mr-3" size={32} />
           Scadenziario
         </h1>
-        <div className="flex space-x-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="secondary" onClick={() => setShowGeneraModal(true)}>
             <Wand2 size={20} className="mr-2" />
             Genera Scadenze
@@ -386,7 +393,7 @@ export const ScadenzePage: React.FC = () => {
 
       {/* Filtro Mese/Anno */}
       <div className="bg-white rounded-lg shadow p-4">
-        <div className="flex items-center space-x-4">
+        <div className="flex flex-wrap items-end gap-4">
           <div className="w-48">
             <SearchableSelect
               label="Mese"
@@ -405,8 +412,8 @@ export const ScadenzePage: React.FC = () => {
               placeholder="Seleziona anno..."
             />
           </div>
-          <div className="flex-1"></div>
-          <div className="text-sm text-gray-600 self-end pb-2">
+          <div className="hidden sm:block flex-1"></div>
+          <div className="text-sm text-gray-600 pb-2">
             <span className="font-semibold text-lg text-blue-600">{totaleVeicoli}</span> veicoli in scadenza
           </div>
         </div>
@@ -426,10 +433,10 @@ export const ScadenzePage: React.FC = () => {
                 <div key={cliente.id}>
                   {/* Riga cliente */}
                   <div
-                    className="px-6 py-4 flex items-center justify-between cursor-pointer hover:bg-gray-50"
+                    className="px-4 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-2 cursor-pointer hover:bg-gray-50"
                     onClick={() => toggleExpanded(cliente.id)}
                   >
-                    <div className="flex items-center space-x-3">
+                    <div className="flex items-center space-x-3 min-w-0">
                       {isExpanded ? (
                         <ChevronDown size={20} className="text-gray-400" />
                       ) : (
@@ -442,7 +449,7 @@ export const ScadenzePage: React.FC = () => {
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       {/* CTA Paga Tutti - solo se ci sono scadenze DA_PAGARE */}
                       {scadenzeCliente.some(s => s.stato === StatoScadenza.DA_PAGARE) && (
                         <button
@@ -450,14 +457,14 @@ export const ScadenzePage: React.FC = () => {
                             e.stopPropagation();
                             handleOpenPagaModal(cliente, scadenzeCliente);
                           }}
-                          className="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-medium bg-green-600 text-white hover:bg-green-700 transition-colors"
+                          className="inline-flex items-center whitespace-nowrap px-3 py-1.5 rounded-lg text-sm font-medium bg-green-600 text-white hover:bg-green-700 transition-colors"
                           title="Segna tutti come pagati"
                         >
                           <CreditCard size={16} className="mr-1.5" />
                           Paga Tutti
                         </button>
                       )}
-                      <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                      <span className="inline-flex items-center whitespace-nowrap px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
                         <Car size={16} className="mr-1" />
                         {veicoliCount} veicol{veicoliCount === 1 ? 'o' : 'i'}
                       </span>
@@ -466,7 +473,7 @@ export const ScadenzePage: React.FC = () => {
 
                   {/* Dettaglio veicoli espanso */}
                   {isExpanded && (
-                    <div className="bg-gray-50 px-6 py-4">
+                    <div className="bg-gray-50 px-4 sm:px-6 py-4 overflow-x-auto">
                       <table className="min-w-full">
                         <thead>
                           <tr className="text-xs text-gray-500 uppercase">
@@ -494,16 +501,25 @@ export const ScadenzePage: React.FC = () => {
                                   : '-'}
                               </td>
                               <td className="py-3">
-                                <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+                                <span className="whitespace-nowrap px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
                                   {scadenza.periodicita === 'QUADRIMESTRALE' ? '4 mesi' : 'Annuale'}
                                 </span>
                               </td>
-                              <td className="py-3 text-gray-500">
-                                {scadenza.importoPrevisto ? `€ ${scadenza.importoPrevisto}` : '-'}
+                              <td className="py-3 pr-3 text-gray-500 whitespace-nowrap">
+                                {haImporto(scadenza.importoPrevisto) ? (
+                                  formattaImporto(scadenza.importoPrevisto)
+                                ) : (
+                                  <span
+                                    className="whitespace-nowrap px-2 py-1 text-xs font-medium rounded-full bg-amber-100 text-amber-800"
+                                    title={IMPORTO_MANCANTE.spiegazione}
+                                  >
+                                    {IMPORTO_MANCANTE.etichetta}
+                                  </span>
+                                )}
                               </td>
                               <td className="py-3">
                                 <span
-                                  className={`px-2 py-1 text-xs font-medium rounded-full ${getStatoColor(
+                                  className={`whitespace-nowrap px-2 py-1 text-xs font-medium rounded-full ${getStatoColor(
                                     scadenza.stato
                                   )}`}
                                 >
@@ -690,7 +706,7 @@ export const ScadenzePage: React.FC = () => {
                     <h4 className={`font-semibold mb-3 ${generaResult.scadenzeCreate > 0 ? 'text-green-800' : 'text-gray-800'}`}>
                       Risultato Generazione
                     </h4>
-                    <div className="grid grid-cols-3 gap-4 text-center">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
                       <div>
                         <p className="text-2xl font-bold text-gray-900">{generaResult.veicoliProcessati}</p>
                         <p className="text-sm text-gray-600">Veicoli processati</p>
@@ -701,7 +717,15 @@ export const ScadenzePage: React.FC = () => {
                       </div>
                       <div>
                         <p className="text-2xl font-bold text-gray-500">{generaResult.scadenzeSaltate}</p>
-                        <p className="text-sm text-gray-600">Gia esistenti</p>
+                        <p className="text-sm text-gray-600">Già esistenti</p>
+                      </div>
+                      <div title={IMPORTO_MANCANTE.spiegazione}>
+                        <p
+                          className={`text-2xl font-bold ${generaResult.scadenzeSenzaImporto > 0 ? 'text-amber-600' : 'text-gray-500'}`}
+                        >
+                          {generaResult.scadenzeSenzaImporto}
+                        </p>
+                        <p className="text-sm text-gray-600">Senza importo</p>
                       </div>
                     </div>
                   </div>
@@ -787,20 +811,38 @@ export const ScadenzePage: React.FC = () => {
                       <span className="font-medium">{scadenza.veicolo?.targa}</span>
                       <span className="text-gray-500 ml-2">{scadenza.veicolo?.tipoVeicolo}</span>
                     </div>
-                    <span className="font-medium text-green-700">
-                      {scadenza.importoPrevisto ? `€ ${Number(scadenza.importoPrevisto).toFixed(2)}` : '-'}
-                    </span>
+                    {haImporto(scadenza.importoPrevisto) ? (
+                      <span className="font-medium text-green-700">
+                        {formattaImporto(scadenza.importoPrevisto)}
+                      </span>
+                    ) : (
+                      <span
+                        className="text-xs font-medium text-amber-700"
+                        title={IMPORTO_MANCANTE.spiegazione}
+                      >
+                        Senza importo: esclusa
+                      </span>
+                    )}
                   </div>
                 ))}
               </div>
               <div className="mt-2 flex justify-between items-center px-3 py-2 bg-gray-100 rounded-lg">
                 <span className="font-medium text-gray-900">Totale</span>
                 <span className="font-bold text-lg text-green-700">
-                  € {clientePagamento.scadenze
-                    .reduce((sum, s) => sum + (s.importoPrevisto ? Number(s.importoPrevisto) : 0), 0)
-                    .toFixed(2)}
+                  {formattaImporto(
+                    clientePagamento.scadenze
+                      .filter((s) => haImporto(s.importoPrevisto))
+                      .reduce((sum, s) => sum + Number(s.importoPrevisto), 0),
+                  )}
                 </span>
               </div>
+              {clientePagamento.scadenze.some((s) => !haImporto(s.importoPrevisto)) && (
+                <p className="mt-2 text-xs text-amber-700">
+                  {clientePagamento.scadenze.filter((s) => !haImporto(s.importoPrevisto)).length} scadenze
+                  senza importo non verranno pagate: completare i dati del veicolo o inserire l'importo,
+                  poi registrarle singolarmente.
+                </p>
+              )}
             </div>
 
             {/* Form Pagamento */}
