@@ -20,7 +20,8 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, basename, join, resolve } from 'path';
-import { createReadStream, existsSync } from 'fs';
+import { createReadStream, existsSync, rmSync } from 'fs';
+import { contenutoCoerente, leggiInizio } from './firma-file';
 import { PagamentiService } from './pagamenti.service';
 import { CreatePagamentoDto } from './dto/create-pagamento.dto';
 import { UpdatePagamentoDto } from './dto/update-pagamento.dto';
@@ -168,6 +169,14 @@ export class PagamentiController {
     @UploadedFile() file?: MulterFile,
   ) {
     if (file) {
+      // Il contenuto deve essere davvero del tipo indicato dall'estensione:
+      // altrimenti il file caricato viene eliminato subito.
+      if (!contenutoCoerente(leggiInizio(file.path), extname(file.filename))) {
+        rmSync(file.path, { force: true });
+        throw new BadRequestException(
+          'Il contenuto del file non corrisponde al suo tipo: sono ammessi solo PDF e immagini (JPG, PNG, GIF, WEBP, TIFF)',
+        );
+      }
       // Salva solo il filename, non il path completo (sicurezza)
       createPagamentoDto.ricevutaFile = file.filename;
     }

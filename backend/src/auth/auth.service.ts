@@ -15,7 +15,7 @@ import { randomUUID } from 'crypto';
 import { problemiPassword } from './politica-password';
 
 // Durata token
-const ACCESS_TOKEN_EXPIRY = '15m';  // Access token breve
+export const ACCESS_TOKEN_EXPIRY = '15m'; // Access token breve
 const REFRESH_TOKEN_EXPIRY_DAYS = 7;
 
 /** Errori di password consecutivi prima della sospensione dell'accesso. */

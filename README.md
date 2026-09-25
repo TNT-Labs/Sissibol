@@ -76,7 +76,7 @@ Progressive Web App per la gestione dello scadenziario bolli per autotrasporto.
 ## Stack Tecnologico
 
 ### Backend
-- **NestJS 10** - Framework Node.js
+- **NestJS 11 (Express 5)** - Framework Node.js
 - **ExcelJS / PDFKit** - Report generati dal server in streaming
 - **Prisma ORM 5** - Database ORM con migrations
 - **PostgreSQL 14+** - Database relazionale
@@ -89,7 +89,7 @@ Progressive Web App per la gestione dello scadenziario bolli per autotrasporto.
 - **TypeScript 5.9** - Type safety
 - **Vite 7** - Build tool veloce
 - **Tailwind CSS 3** - Utility-first styling
-- **React Router 6** - Routing SPA
+- **React Router 7** - Routing SPA
 - **Axios** - HTTP client
 - **date-fns** - Manipolazione date
 - **lucide-react** - Icone moderne
@@ -201,7 +201,6 @@ Il frontend sarà disponibile su `http://localhost:5173`
 ```env
 DATABASE_URL="postgresql://user:password@localhost:5432/sissibol?schema=public"
 JWT_SECRET="your-secret-key-change-in-production"
-JWT_EXPIRATION="24h"
 PORT=3000
 NODE_ENV="development"
 ```

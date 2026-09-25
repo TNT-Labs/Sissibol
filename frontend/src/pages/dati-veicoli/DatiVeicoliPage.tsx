@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { AlertTriangle, ClipboardCheck, Download, Pencil, X } from 'lucide-react';
 import { Button } from '../../components/common/Button';
 import { EmptyState } from '../../components/common/EmptyState';
