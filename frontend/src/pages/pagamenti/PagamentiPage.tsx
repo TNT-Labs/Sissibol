@@ -8,6 +8,7 @@ import { Input } from '../../components/common/Input';
 import { RicercaRemota } from '../../components/common/RicercaRemota';
 import type { SelectOption } from '../../components/common/SearchableSelect';
 import { getErrorMessage } from '../../utils/errors';
+import { formattaImporto } from '../../utils/importi';
 import { Plus, X, CreditCard, Upload, FileText, Trash2, Edit } from 'lucide-react';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -17,13 +18,10 @@ import { Pagination } from '../../components/common/Pagination';
 
 const PAGE_SIZE = 50;
 
-// Separatore delle migliaia sempre ("1.043,45 €"); 'always' non è ancora nei
-// tipi di TypeScript. I browser che non lo conoscono usano quello predefinito.
-const EURO = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', useGrouping: 'always' as unknown as boolean });
 
 /** Etichetta di una scadenza nella ricerca: targa, cliente, mese, stato, importo. */
 function etichettaScadenza(s: ScadenzaTrovata): string {
-  const importo = s.importoPrevisto !== null ? EURO.format(Number(s.importoPrevisto)) : 'importo da calcolare';
+  const importo = s.importoPrevisto !== null ? formattaImporto(Number(s.importoPrevisto)) : 'importo da calcolare';
   const stato = s.stato === 'SCADUTO' ? ' · scaduta' : '';
   return `${s.veicolo.targa} · ${getClienteDisplayName(s.veicolo.cliente)} · ${getMeseLabel(s.meseScadenza)} ${s.annoScadenza}${stato} · ${importo}`;
 }
@@ -259,7 +257,7 @@ export const PagamentiPage: React.FC = () => {
         <div className="bg-white rounded-lg shadow p-6">
           <div className="text-sm font-medium text-gray-600">Importo Totale</div>
           <div className="mt-2 text-3xl font-semibold text-gray-900">
-            {EURO.format(importoTotale)}
+            {formattaImporto(importoTotale)}
           </div>
         </div>
         <div className="bg-white rounded-lg shadow p-6">
@@ -318,7 +316,7 @@ export const PagamentiPage: React.FC = () => {
                     {pagamento.scadenza?.veicolo?.targa || '-'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {EURO.format(Number(pagamento.importoPagato))}
+                    {formattaImporto(Number(pagamento.importoPagato))}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {pagamento.metodoPagamento || '-'}

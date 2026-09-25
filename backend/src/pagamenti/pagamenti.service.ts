@@ -386,14 +386,18 @@ export class PagamentiService {
   }) {
     const { idCliente, meseScadenza, annoScadenza, dataPagamento, metodoPagamento } = params;
 
-    // Trova tutte le scadenze DA_PAGARE per il cliente nel mese/anno specificato
+    // Tutte le scadenze non ancora pagate del cliente nel mese: da pagare e
+    // scadute (un bollo pagato in ritardo è il caso più comune). Solo veicoli
+    // attivi, come nello scadenziario: prima venivano pagate anche scadenze
+    // di veicoli disattivati, che l'operatore non vedeva.
     const scadenzeDaPagare = await this.prisma.scadenza.findMany({
       where: {
         meseScadenza,
         annoScadenza,
-        stato: StatoScadenza.DA_PAGARE,
+        stato: { in: [StatoScadenza.DA_PAGARE, StatoScadenza.SCADUTO] },
         veicolo: {
           idCliente,
+          attivo: true,
         },
       },
       include: {

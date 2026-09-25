@@ -326,6 +326,28 @@ describe('PagamentiService (integrazione)', () => {
       ).toBe(2);
     });
 
+    it('paga anche le scadenze scadute del periodo, non quelle di veicoli disattivati', async () => {
+      const cliente = await creaCliente();
+      const v1 = await creaVeicolo(cliente.id, { targa: 'AA111AA' });
+      const v2 = await creaVeicolo(cliente.id, { targa: 'BB222BB' });
+      const dismesso = await creaVeicolo(cliente.id, { targa: 'CC333CC' });
+      await prisma.veicolo.update({ where: { id: dismesso.id }, data: { attivo: false } });
+      await creaScadenza(v1.id, { meseScadenza: 6, annoScadenza: 2026, stato: 'SCADUTO' });
+      await creaScadenza(v2.id, { meseScadenza: 6, annoScadenza: 2026 });
+      const nascosta = await creaScadenza(dismesso.id, { meseScadenza: 6, annoScadenza: 2026 });
+
+      const esito = await service.createMultiplo({
+        idCliente: cliente.id,
+        meseScadenza: 6,
+        annoScadenza: 2026,
+        dataPagamento: '2026-07-05',
+      });
+
+      expect(esito.pagamentiCreati).toBe(2);
+      expect(await prisma.scadenza.count({ where: { stato: 'PAGATO' } })).toBe(2);
+      expect((await prisma.scadenza.findUnique({ where: { id: nascosta.id } })).stato).toBe('DA_PAGARE');
+    });
+
     it('riporta zero pagamenti se non c\'è nulla da pagare', async () => {
       const cliente = await creaCliente();
 
