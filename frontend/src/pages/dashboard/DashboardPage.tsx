@@ -5,8 +5,11 @@ import type { Scadenza } from '../../types';
 import { getClienteDisplayName } from '../../types';
 import { Calendar, AlertCircle, CheckCircle, Clock } from 'lucide-react';
 import { getMeseLabel } from '../../constants/domini';
+import { useIsAdmin } from '../../context/AuthContext';
+import { StatoSistema } from '../../components/StatoSistema';
 
 export const DashboardPage: React.FC = () => {
+  const isAdmin = useIsAdmin();
   const [scadenzeImminenti, setScadenzeImminenti] = useState<Scadenza[]>([]);
   const [stats, setStats] = useState<ScadenzeStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -69,6 +72,8 @@ export const DashboardPage: React.FC = () => {
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
       </div>
+
+      {isAdmin && <StatoSistema />}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

@@ -115,40 +115,22 @@ if (-not (Test-Path $LetsencryptDir)) {
     New-Item -ItemType Directory -Path $LetsencryptDir -Force | Out-Null
 }
 
-# Create temporary directory for hooks
-$TempHooksDir = Join-Path $env:TEMP "certbot-hooks"
-if (Test-Path $TempHooksDir) {
-    Remove-Item -Recurse -Force $TempHooksDir
-}
-New-Item -ItemType Directory -Path $TempHooksDir -Force | Out-Null
-
-# Create auth hook script
-$AuthHook = @"
-#!/bin/sh
-ENCODED_TOKEN=`$(echo -n "`${CERTBOT_VALIDATION}" | sed 's/ /%20/g')
-curl -s "https://www.duckdns.org/update?domains=${env:DUCKDNS_SUBDOMAIN}&token=${env:DUCKDNS_TOKEN}&txt=`${ENCODED_TOKEN}"
-echo "Waiting 60 seconds for DNS propagation..."
-sleep 60
-"@
-$AuthHook | Out-File -FilePath (Join-Path $TempHooksDir "auth-hook.sh") -Encoding utf8 -NoNewline
-
-# Create cleanup hook script
-$CleanupHook = @"
-#!/bin/sh
-curl -s "https://www.duckdns.org/update?domains=${env:DUCKDNS_SUBDOMAIN}&token=${env:DUCKDNS_TOKEN}&txt=&clear=true"
-"@
-$CleanupHook | Out-File -FilePath (Join-Path $TempHooksDir "cleanup-hook.sh") -Encoding utf8 -NoNewline
+# Hook DuckDNS del repository (scripts/ssl/hooks), montati in /hooks: gli
+# stessi usati dal container certbot per i rinnovi automatici.
+$HooksDir = Join-Path $ProjectDir "scripts\ssl\hooks"
 
 # Convert Windows paths to Docker-compatible paths
 $LetsencryptMount = $LetsencryptDir -replace '\\', '/' -replace '^([A-Za-z]):', '/$1'
-$HooksMount = $TempHooksDir -replace '\\', '/' -replace '^([A-Za-z]):', '/$1'
+$HooksMount = $HooksDir -replace '\\', '/' -replace '^([A-Za-z]):', '/$1'
 
 # Run Certbot in Docker with DNS-01 challenge
 Write-Host "      Running Certbot (this may take a minute)..." -ForegroundColor Cyan
 
 docker run --rm `
     -v "${LetsencryptMount}:/etc/letsencrypt" `
-    -v "${HooksMount}:/hooks" `
+    -v "${HooksMount}:/hooks:ro" `
+    -e "DUCKDNS_TOKEN=$env:DUCKDNS_TOKEN" `
+    -e "DUCKDNS_SUBDOMAIN=$env:DUCKDNS_SUBDOMAIN" `
     certbot/certbot certonly `
     --manual `
     --preferred-challenges dns `
@@ -169,8 +151,6 @@ if (Test-Path $CertPath) {
     exit 1
 }
 
-# Cleanup temporary hooks
-Remove-Item -Recurse -Force $TempHooksDir -ErrorAction SilentlyContinue
 
 # =============================================================================
 # Step 4: Summary

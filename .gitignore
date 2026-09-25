@@ -1,5 +1,8 @@
 node_modules/
 
+# Backup del database e delle ricevute (dati dei clienti)
+backups/
+
 # Environment files (contain secrets)
 .env
 .env.local

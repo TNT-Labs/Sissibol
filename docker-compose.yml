@@ -1,3 +1,19 @@
+# =============================================================================
+# Docker Compose - installazione HTTP (rete locale)
+# =============================================================================
+# Per un'installazione raggiungibile da Internet usare docker-compose.https.yml.
+#
+# Prima dell'avvio: copiare .env.example in .env e impostare almeno JWT_SECRET.
+#   docker compose up -d --build
+# =============================================================================
+
+# Log a rotazione: senza limiti i log dei container riempiono il disco in mesi.
+x-log: &log
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   # PostgreSQL Database
   postgres:
@@ -5,34 +21,45 @@ services:
     container_name: sissibol-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: sissibol
-      POSTGRES_USER: sissibol_user
-      POSTGRES_PASSWORD: sissibol_password
+      POSTGRES_DB: ${POSTGRES_DB:-sissibol}
+      POSTGRES_USER: ${POSTGRES_USER:-sissibol_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sissibol_password}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      # Solo dal computer che ospita l'applicazione (strumenti di amministrazione),
+      # mai dalla rete.
+      - "127.0.0.1:5432:5432"
     networks:
       - sissibol-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U sissibol_user -d sissibol"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sissibol_user} -d ${POSTGRES_DB:-sissibol}"]
       interval: 10s
       timeout: 5s
       retries: 5
+    logging: *log
 
   # Backend API (NestJS)
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      # Contesto: la radice del monorepo, per le build dal package-lock.json.
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: sissibol-backend
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://sissibol_user:sissibol_password@postgres:5432/sissibol?schema=public
-      JWT_SECRET: your-production-secret-key-change-me
-      JWT_EXPIRATION: 24h
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sissibol_user}:${POSTGRES_PASSWORD:-sissibol_password}@postgres:5432/${POSTGRES_DB:-sissibol}?schema=public
+      # Obbligatoria: con un valore noto chiunque potrebbe firmare token validi.
+      # Generarla con: openssl rand -base64 48
+      JWT_SECRET: ${JWT_SECRET:?Impostare JWT_SECRET nel file .env (openssl rand -base64 48)}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-24h}
       PORT: 3000
       NODE_ENV: production
+      # Password del primo amministratore; se assente se ne genera una casuale,
+      # mostrata una sola volta nei log del backend.
+      ADMIN_PASSWORD_INIZIALE: ${ADMIN_PASSWORD_INIZIALE:-}
+      # Stato dei backup, mostrato agli amministratori nella dashboard
+      BACKUP_STATO_FILE: /backups/stato.json
       # Origini esterne ammesse dal CORS (la stessa origine lo è sempre)
       CORS_ORIGINS: ${CORS_ORIGINS:-}
       APP_FUSO_ORARIO: ${APP_FUSO_ORARIO:-Europe/Rome}
@@ -54,21 +81,25 @@ services:
       AVVISI_FIRMA: ${AVVISI_FIRMA:-}
       AVVISI_RISPONDI_A: ${AVVISI_RISPONDI_A:-}
     ports:
-      - "3000:3000"
+      # API raggiungibile direttamente solo da questo computer; dalla rete
+      # passa dal frontend (/api).
+      - "127.0.0.1:3000:3000"
     volumes:
-      - ./backend/uploads:/app/uploads
+      - ./backend/uploads:/app/backend/uploads
       - ./import/csv:/app/import/csv
+      - ./backups:/backups:ro
     depends_on:
       postgres:
         condition: service_healthy
     networks:
       - sissibol-network
+    logging: *log
 
   # Frontend (React + Vite)
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: frontend/Dockerfile
       args:
         VITE_API_URL: /api
     container_name: sissibol-frontend
@@ -76,9 +107,37 @@ services:
     ports:
       - "80:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - sissibol-network
+    logging: *log
+
+  # Backup giornaliero del database e delle ricevute (vedi BACKUP.md)
+  backup:
+    image: postgres:15-alpine
+    container_name: sissibol-backup
+    restart: unless-stopped
+    entrypoint: ["sh", "/script/backup.sh", "ciclo"]
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER:-sissibol_user}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-sissibol_password}
+      PGDATABASE: ${POSTGRES_DB:-sissibol}
+      TZ: ${APP_FUSO_ORARIO:-Europe/Rome}
+      BACKUP_ORA: ${BACKUP_ORA:-02:30}
+      BACKUP_GIORNI: ${BACKUP_GIORNI:-14}
+      BACKUP_MESI: ${BACKUP_MESI:-12}
+    volumes:
+      - ./backups:/backups
+      - ./backend/uploads:/uploads:ro
+      - ./scripts/backup:/script:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - sissibol-network
+    logging: *log
 
 volumes:
   postgres_data:

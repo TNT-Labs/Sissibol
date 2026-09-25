@@ -49,43 +49,19 @@ fi
 echo -e "${GREEN}[+] Renewing certificate for: ${DOMAIN}${NC}"
 echo ""
 
-# Create temporary hooks directory
-CERTBOT_HOOKS_DIR="/tmp/certbot-hooks-renew"
-mkdir -p "$CERTBOT_HOOKS_DIR"
-
-# Create authentication hook
-cat > "$CERTBOT_HOOKS_DIR/auth-hook.sh" << 'AUTHEOF'
-#!/bin/bash
-DUCKDNS_TOKEN="${DUCKDNS_TOKEN}"
-DUCKDNS_SUBDOMAIN="${DUCKDNS_SUBDOMAIN}"
-ENCODED_TOKEN=$(echo -n "${CERTBOT_VALIDATION}" | sed 's/ /%20/g')
-curl -s "https://www.duckdns.org/update?domains=${DUCKDNS_SUBDOMAIN}&token=${DUCKDNS_TOKEN}&txt=${ENCODED_TOKEN}"
-echo "Waiting 60 seconds for DNS propagation..."
-sleep 60
-AUTHEOF
-
-# Create cleanup hook
-cat > "$CERTBOT_HOOKS_DIR/cleanup-hook.sh" << 'CLEANEOF'
-#!/bin/bash
-DUCKDNS_TOKEN="${DUCKDNS_TOKEN}"
-DUCKDNS_SUBDOMAIN="${DUCKDNS_SUBDOMAIN}"
-curl -s "https://www.duckdns.org/update?domains=${DUCKDNS_SUBDOMAIN}&token=${DUCKDNS_TOKEN}&txt=&clear=true"
-CLEANEOF
-
-chmod +x "$CERTBOT_HOOKS_DIR"/*.sh
+# Hook DuckDNS del repository, gli stessi dei rinnovi automatici.
+CERTBOT_HOOKS_DIR="$PROJECT_DIR/scripts/ssl/hooks"
 
 # Run renewal
 docker run --rm \
     -v "$PROJECT_DIR/letsencrypt:/etc/letsencrypt" \
-    -v "$CERTBOT_HOOKS_DIR:/hooks" \
+    -v "$CERTBOT_HOOKS_DIR:/hooks:ro" \
     -e DUCKDNS_TOKEN="$DUCKDNS_TOKEN" \
     -e DUCKDNS_SUBDOMAIN="$DUCKDNS_SUBDOMAIN" \
     certbot/certbot renew \
     --manual-auth-hook "/hooks/auth-hook.sh" \
     --manual-cleanup-hook "/hooks/cleanup-hook.sh"
 
-# Cleanup
-rm -rf "$CERTBOT_HOOKS_DIR"
 
 # Reload nginx to pick up new certificate
 echo -e "${BLUE}[+] Reloading nginx...${NC}"

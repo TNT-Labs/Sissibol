@@ -92,49 +92,16 @@ fi
 echo -e "${BLUE}[3/4] Obtaining SSL certificate via DNS-01 challenge...${NC}"
 echo ""
 
-# Create a temporary directory for the DuckDNS authentication scripts
-CERTBOT_HOOKS_DIR="/tmp/certbot-hooks"
-mkdir -p "$CERTBOT_HOOKS_DIR"
-
-# Create the authentication hook script
-cat > "$CERTBOT_HOOKS_DIR/auth-hook.sh" << 'AUTHEOF'
-#!/bin/bash
-# DuckDNS authentication hook for Certbot
-# Sets TXT record for DNS-01 challenge
-
-DUCKDNS_TOKEN="${DUCKDNS_TOKEN}"
-DUCKDNS_SUBDOMAIN="${DUCKDNS_SUBDOMAIN}"
-
-# URL encode the validation token
-ENCODED_TOKEN=$(echo -n "${CERTBOT_VALIDATION}" | sed 's/ /%20/g')
-
-# Set TXT record via DuckDNS API
-curl -s "https://www.duckdns.org/update?domains=${DUCKDNS_SUBDOMAIN}&token=${DUCKDNS_TOKEN}&txt=${ENCODED_TOKEN}"
-
-# Wait for DNS propagation
-echo "Waiting 60 seconds for DNS propagation..."
-sleep 60
-AUTHEOF
-
-# Create the cleanup hook script
-cat > "$CERTBOT_HOOKS_DIR/cleanup-hook.sh" << 'CLEANEOF'
-#!/bin/bash
-# DuckDNS cleanup hook for Certbot
-# Clears TXT record after validation
-
-DUCKDNS_TOKEN="${DUCKDNS_TOKEN}"
-DUCKDNS_SUBDOMAIN="${DUCKDNS_SUBDOMAIN}"
-
-# Clear TXT record
-curl -s "https://www.duckdns.org/update?domains=${DUCKDNS_SUBDOMAIN}&token=${DUCKDNS_TOKEN}&txt=&clear=true"
-CLEANEOF
-
-chmod +x "$CERTBOT_HOOKS_DIR"/*.sh
+# Hook DuckDNS del repository (scripts/ssl/hooks), montati in /hooks: certbot
+# salva quel percorso nella configurazione di rinnovo, e il container certbot
+# del compose li monta nello stesso punto per i rinnovi automatici.
+CERTBOT_HOOKS_DIR="$PROJECT_DIR/scripts/ssl/hooks"
+chmod +x "$CERTBOT_HOOKS_DIR"/*.sh 2>/dev/null || true
 
 # Run Certbot in Docker with DNS-01 challenge
 docker run --rm \
     -v "$PROJECT_DIR/letsencrypt:/etc/letsencrypt" \
-    -v "$CERTBOT_HOOKS_DIR:/hooks" \
+    -v "$CERTBOT_HOOKS_DIR:/hooks:ro" \
     -e DUCKDNS_TOKEN="$DUCKDNS_TOKEN" \
     -e DUCKDNS_SUBDOMAIN="$DUCKDNS_SUBDOMAIN" \
     certbot/certbot certonly \
@@ -155,8 +122,6 @@ else
     exit 1
 fi
 
-# Cleanup temporary hooks
-rm -rf "$CERTBOT_HOOKS_DIR"
 
 # =============================================================================
 # Step 4: Set proper permissions

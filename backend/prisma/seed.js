@@ -1,5 +1,6 @@
 const { PrismaClient, Ruolo } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 
 const prisma = new PrismaClient();
 
@@ -458,6 +459,20 @@ async function seedTariffeLombardia2026() {
   console.log('✅ Tariffe ed esenzioni Lombardia 2026 inserite con successo!');
 }
 
+function passwordIniziale() {
+  const indicata = process.env.ADMIN_PASSWORD_INIZIALE;
+  if (indicata) {
+    if (indicata.length < 8) {
+      throw new Error('ADMIN_PASSWORD_INIZIALE deve avere almeno 8 caratteri');
+    }
+    return { password: indicata, origine: 'variabile' };
+  }
+  if (process.env.NODE_ENV === 'production') {
+    return { password: crypto.randomBytes(12).toString('base64url'), origine: 'generata' };
+  }
+  return { password: 'admin123', origine: 'sviluppo' };
+}
+
 async function main() {
   console.log('🌱 Inizializzazione del database...');
 
@@ -467,8 +482,13 @@ async function main() {
   });
 
   if (!existingAdmin) {
-    // Crea utente admin di default
-    const hashedPassword = await bcrypt.hash('admin123', 10);
+    // Password iniziale dell'amministratore. In produzione mai quella nota
+    // (admin123): un'installazione raggiungibile da Internet sarebbe aperta
+    // a chiunque la conosca. Si usa ADMIN_PASSWORD_INIZIALE se impostata,
+    // altrimenti se ne genera una casuale, mostrata una sola volta nei log.
+    const { password, origine } = passwordIniziale();
+
+    const hashedPassword = await bcrypt.hash(password, 10);
 
     await prisma.utente.create({
       data: {
@@ -480,7 +500,16 @@ async function main() {
 
     console.log('✅ Utente admin creato con successo!');
     console.log('📧 Email: admin@sissibol.it');
-    console.log('🔑 Password: admin123');
+    if (origine === 'generata') {
+      console.log('=================================================================');
+      console.log(`🔑 Password iniziale generata: ${password}`);
+      console.log('   Annotarla ora: non verrà mostrata di nuovo.');
+      console.log('=================================================================');
+    } else if (origine === 'variabile') {
+      console.log('🔑 Password: quella indicata in ADMIN_PASSWORD_INIZIALE');
+    } else {
+      console.log('🔑 Password: admin123 (solo sviluppo)');
+    }
     console.log('⚠️  IMPORTANTE: Cambiare la password al primo accesso!');
   } else {
     console.log('✅ Utente admin già esistente');

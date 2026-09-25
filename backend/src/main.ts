@@ -49,6 +49,10 @@ async function bootstrap() {
     transform: true,
   }));
 
+  // Su SIGTERM (docker stop, aggiornamenti) chiude in ordine: job pianificati
+  // fermati e connessioni al database rilasciate, invece di un'interruzione brusca.
+  app.enableShutdownHooks();
+
   const port = process.env.PORT || 3000;
   await app.listen(port);
   console.log(`🚀 Application is running on: http://localhost:${port}`);

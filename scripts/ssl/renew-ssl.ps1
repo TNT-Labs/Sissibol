@@ -48,46 +48,26 @@ if (-not (Test-Path $CertDir)) {
 Write-Host "[+] Renewing certificate for: $Domain" -ForegroundColor Green
 Write-Host ""
 
-# Create temporary hooks directory
-$TempHooksDir = Join-Path $env:TEMP "certbot-hooks-renew"
-if (Test-Path $TempHooksDir) {
-    Remove-Item -Recurse -Force $TempHooksDir
-}
-New-Item -ItemType Directory -Path $TempHooksDir -Force | Out-Null
-
-# Create auth hook
-$AuthHook = @"
-#!/bin/sh
-ENCODED_TOKEN=`$(echo -n "`${CERTBOT_VALIDATION}" | sed 's/ /%20/g')
-curl -s "https://www.duckdns.org/update?domains=${env:DUCKDNS_SUBDOMAIN}&token=${env:DUCKDNS_TOKEN}&txt=`${ENCODED_TOKEN}"
-echo "Waiting 60 seconds for DNS propagation..."
-sleep 60
-"@
-$AuthHook | Out-File -FilePath (Join-Path $TempHooksDir "auth-hook.sh") -Encoding utf8 -NoNewline
-
-# Create cleanup hook
-$CleanupHook = @"
-#!/bin/sh
-curl -s "https://www.duckdns.org/update?domains=${env:DUCKDNS_SUBDOMAIN}&token=${env:DUCKDNS_TOKEN}&txt=&clear=true"
-"@
-$CleanupHook | Out-File -FilePath (Join-Path $TempHooksDir "cleanup-hook.sh") -Encoding utf8 -NoNewline
+# Hook DuckDNS del repository (scripts/ssl/hooks), montati in /hooks: gli
+# stessi usati dal container certbot per i rinnovi automatici.
+$HooksDir = Join-Path $ProjectDir "scripts\ssl\hooks"
 
 # Convert paths for Docker
 $LetsencryptMount = $LetsencryptDir -replace '\\', '/' -replace '^([A-Za-z]):', '/$1'
-$HooksMount = $TempHooksDir -replace '\\', '/' -replace '^([A-Za-z]):', '/$1'
+$HooksMount = $HooksDir -replace '\\', '/' -replace '^([A-Za-z]):', '/$1'
 
 # Run renewal
 Write-Host "[+] Running certificate renewal..." -ForegroundColor Blue
 
 docker run --rm `
     -v "${LetsencryptMount}:/etc/letsencrypt" `
-    -v "${HooksMount}:/hooks" `
+    -v "${HooksMount}:/hooks:ro" `
+    -e "DUCKDNS_TOKEN=$env:DUCKDNS_TOKEN" `
+    -e "DUCKDNS_SUBDOMAIN=$env:DUCKDNS_SUBDOMAIN" `
     certbot/certbot renew `
     --manual-auth-hook "/hooks/auth-hook.sh" `
     --manual-cleanup-hook "/hooks/cleanup-hook.sh"
 
-# Cleanup
-Remove-Item -Recurse -Force $TempHooksDir -ErrorAction SilentlyContinue
 
 # Reload nginx to pick up new certificate
 Write-Host "[+] Reloading nginx..." -ForegroundColor Blue

@@ -106,7 +106,7 @@ git clone <repository-url>
 cd Sissibol
 
 # Avvia tutti i servizi con Docker Compose
-docker-compose up -d
+docker compose up -d
 
 # Attendi che tutti i servizi siano pronti (30-60 secondi)
 # L'applicazione sarà disponibile su:
@@ -119,23 +119,23 @@ docker-compose up -d
 
 ```bash
 # Avvia i servizi
-docker-compose up -d
+docker compose up -d
 
 # Ferma i servizi
-docker-compose down
+docker compose down
 
 # Visualizza log
-docker-compose logs -f
+docker compose logs -f
 
 # Ricostruisci le immagini (dopo modifiche al codice)
-docker-compose build --no-cache
-docker-compose up -d
+docker compose build --no-cache
+docker compose up -d
 
 # Accedi alla shell del backend
-docker-compose exec backend sh
+docker compose exec backend sh
 
 # Accedi al database
-docker-compose exec postgres psql -U sissibol -d sissibol
+docker compose exec postgres psql -U sissibol -d sissibol
 ```
 
 ### Metodo 2: Installazione Locale
@@ -414,13 +414,13 @@ L'applicazione è una Progressive Web App completa:
 
 ```bash
 # Build e avvio
-docker-compose up -d --build
+docker compose up -d --build
 
 # Per deployment su server:
 # 1. Modifica docker-compose.yml con configurazioni produzione
 # 2. Cambia JWT_SECRET con valore sicuro
 # 3. Configura HTTPS con reverse proxy (nginx/traefik)
-docker-compose -f docker-compose.yml up -d
+docker compose -f docker-compose.yml up -d
 ```
 
 ### Build Locale
@@ -449,30 +449,28 @@ npm run preview  # Preview della build
 
 ## Primo Accesso
 
-Dopo l'installazione, crea il primo utente amministratore:
+Al primo avvio il backend crea l'amministratore `admin@sissibol.it`. La
+password è quella di `ADMIN_PASSWORD_INIZIALE` nel file `.env`; se non è
+indicata se ne genera una casuale, mostrata una sola volta nei log:
 
 ```bash
-# Via API
-curl -X POST http://localhost:3000/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "admin@sissibol.com",
-    "password": "admin123",
-    "ruolo": "ADMIN"
-  }'
+make admin-password
 ```
 
-Oppure usa il seed automatico (Docker):
-```bash
-docker-compose exec backend npm run prisma:seed
-```
+In sviluppo (fuori da Docker, `NODE_ENV` diverso da `production`) resta
+`admin123`. In ogni caso va cambiata al primo accesso.
+
+## Backup
+
+Database e ricevute vengono salvati ogni giorno nella cartella `backups/`,
+verificati e conservati per 14 giorni (i mensili per 12 mesi). Stato,
+ripristino e copia fuori dal server: [BACKUP.md](BACKUP.md).
 
 ## Funzionalità Future
 
 - [ ] Integrazione calendario Google/Outlook
 - [ ] Dashboard con grafici e statistiche avanzate
 - [ ] Gestione allegati multipli per pagamento
-- [ ] Backup automatici schedulati
 - [ ] App mobile nativa (React Native)
 - [ ] Integrazione PagoPA per pagamenti online
 - [ ] OCR per lettura automatica documenti
@@ -482,15 +480,15 @@ docker-compose exec backend npm run prisma:seed
 ### Errore "Cannot find module dist/main.js"
 ```bash
 # Ricostruisci le immagini Docker
-docker-compose build --no-cache backend
-docker-compose up -d
+docker compose build --no-cache backend
+docker compose up -d
 ```
 
 ### Errore connessione database
 ```bash
 # Verifica che PostgreSQL sia avviato
-docker-compose ps
-docker-compose logs postgres
+docker compose ps
+docker compose logs postgres
 ```
 
 ### PWA non si aggiorna
