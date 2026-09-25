@@ -8,8 +8,10 @@ import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { SearchableSelect } from '../../components/common/SearchableSelect';
 import type { SelectOption } from '../../components/common/SearchableSelect';
-import { Plus, X, Edit, Trash2, Shield, User } from 'lucide-react';
+import { Plus, X, Edit, Trash2, Shield, User, KeyRound, Lock } from 'lucide-react';
 import { getErrorMessage } from '../../utils/errors';
+import { passwordValida } from '../../utils/password';
+import { RequisitiPassword } from '../../components/RequisitiPassword';
 
 // Opzioni per il ruolo
 const RUOLO_OPTIONS: SelectOption[] = [
@@ -20,6 +22,8 @@ const RUOLO_OPTIONS: SelectOption[] = [
 export const UtentiPage: React.FC = () => {
   const { user: currentUser } = useAuth();
   const [utenti, setUtenti] = useState<Utente[]>([]);
+  // Momento del caricamento: riferimento per dire se una sospensione è ancora attiva.
+  const [caricatiIl, setCaricatiIl] = useState(0);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUtente, setEditingUtente] = useState<Utente | null>(null);
@@ -39,6 +43,7 @@ export const UtentiPage: React.FC = () => {
       setLoading(true);
       const data = await utentiService.getAll();
       setUtenti(data);
+      setCaricatiIl(Date.now());
     } catch (error) {
       console.error('Errore nel caricamento degli utenti:', error);
       setError('Errore nel caricamento degli utenti');
@@ -81,6 +86,11 @@ export const UtentiPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    if (formData.password && !passwordValida(formData.password, formData.email)) {
+      setError('La password non rispetta tutti i requisiti indicati.');
+      return;
+    }
 
     try {
       if (editingUtente) {
@@ -174,7 +184,7 @@ export const UtentiPage: React.FC = () => {
       </div>
 
       {/* Tabella utenti */}
-      <div className="bg-white shadow rounded-lg overflow-hidden">
+      <div className="bg-white shadow rounded-lg overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
@@ -206,6 +216,7 @@ export const UtentiPage: React.FC = () => {
                       </span>
                     )}
                   </div>
+                  <StatoAccesso utente={utente} adesso={caricatiIl} />
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className={getRuoloBadge(utente.ruolo)}>
@@ -253,7 +264,7 @@ export const UtentiPage: React.FC = () => {
       {/* Modal creazione/modifica */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto mx-4">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold">
                 {editingUtente ? 'Modifica Utente' : 'Nuovo Utente'}
@@ -280,21 +291,35 @@ export const UtentiPage: React.FC = () => {
                   required
                 />
               </div>
-              <div>
-                <Input
-                  label={editingUtente ? 'Password (lascia vuoto per non modificare)' : 'Password *'}
-                  type="password"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  placeholder="••••••••"
-                  required={!editingUtente}
-                  minLength={6}
-                />
-                <p className="mt-1 text-sm text-gray-500">Minimo 6 caratteri</p>
-              </div>
+              {editingUtente?.id === currentUser?.id ? (
+                <p className="text-sm text-gray-500">
+                  Per cambiare la tua password usa <strong>Cambia password</strong> dal menu utente.
+                </p>
+              ) : (
+                <div>
+                  <Input
+                    label={editingUtente ? 'Nuova password provvisoria (lascia vuoto per non modificare)' : 'Password provvisoria *'}
+                    type="password"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    required={!editingUtente}
+                    maxLength={128}
+                    autoComplete="new-password"
+                  />
+                  {(!editingUtente || formData.password) && (
+                    <div className="mt-2 space-y-2">
+                      <RequisitiPassword password={formData.password} email={formData.email} />
+                      <p className="text-sm text-gray-500">
+                        Al primo accesso l'utente dovrà sostituirla con una password personale.
+                        {editingUtente && ' Le sue sessioni attive verranno chiuse e un eventuale blocco rimosso.'}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
               <div>
                 <SearchableSelect
-                  label="Ruolo *"
+                  label="Ruolo"
                   options={RUOLO_OPTIONS}
                   value={formData.ruolo}
                   onChange={(value) => setFormData({ ...formData, ruolo: value as Ruolo })}
@@ -318,6 +343,32 @@ export const UtentiPage: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+    </div>
+  );
+};
+
+/** Stato dell'accesso: password provvisoria da cambiare, accesso sospeso. */
+const StatoAccesso: React.FC<{ utente: Utente; adesso: number }> = ({ utente, adesso }) => {
+  const sospesoFino = utente.bloccatoFinoA ? new Date(utente.bloccatoFinoA) : null;
+  const sospeso = sospesoFino !== null && sospesoFino.getTime() > adesso;
+  if (!utente.deveCambiarePassword && !sospeso) return null;
+  return (
+    <div className="mt-1 flex flex-wrap gap-1">
+      {utente.deveCambiarePassword && (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-amber-100 text-amber-800 rounded-full">
+          <KeyRound size={12} aria-hidden="true" />
+          Password provvisoria
+        </span>
+      )}
+      {sospeso && (
+        <span
+          className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-red-100 text-red-800 rounded-full"
+          title="Troppi tentativi errati. Per riattivarlo subito, assegna una nuova password provvisoria."
+        >
+          <Lock size={12} aria-hidden="true" />
+          Sospeso fino alle {sospesoFino.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
+        </span>
       )}
     </div>
   );

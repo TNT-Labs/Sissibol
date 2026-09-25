@@ -31,6 +31,10 @@ export interface Utente {
   id: number;
   email: string;
   ruolo: Ruolo;
+  /** Deve scegliere una nuova password prima di usare l'applicazione */
+  deveCambiarePassword?: boolean;
+  /** Accesso sospeso fino a questo istante dopo troppi errori */
+  bloccatoFinoA?: string | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -15,6 +15,7 @@ import { AvvisiModule } from './avvisi/avvisi.module';
 import { AuditModule } from './audit/audit.module';
 import { MailModule } from './mail/mail.module';
 import { CompletezzaModule } from './completezza/completezza.module';
+import { SistemaModule } from './sistema/sistema.module';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { CompletezzaModule } from './completezza/completezza.module';
     AuditModule,
     MailModule,
     CompletezzaModule,
+    SistemaModule,
   ],
   providers: [
     // Applica rate limiting globalmente

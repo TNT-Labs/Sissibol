@@ -124,14 +124,17 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             allarga l'intera pagina oltre lo schermo. */}
         <main className="flex-1 min-w-0 lg:ml-0">
           <div className="py-6 px-4 sm:px-6 lg:px-8">
-            {children}
+            {/* Finché la password non è cambiata le pagine non si caricano:
+                il server rifiuterebbe comunque ogni richiesta. */}
+            {user?.deveCambiarePassword ? null : children}
           </div>
         </main>
       </div>
 
       {/* Modal cambio password */}
       <ChangePasswordModal
-        isOpen={showChangePassword}
+        isOpen={showChangePassword || !!user?.deveCambiarePassword}
+        obbligatorio={!!user?.deveCambiarePassword}
         onClose={() => setShowChangePassword(false)}
       />
 

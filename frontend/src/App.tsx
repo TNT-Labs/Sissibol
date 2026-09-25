@@ -180,7 +180,8 @@ const AppRoutes: React.FC = () => {
 
 function App() {
   return (
-    <BrowserRouter>
+    // basename: il percorso in cui è pubblicata l'app (es. /bolli dietro Cloudflare)
+    <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '') || '/'}>
       <AuthProvider>
         <ToastProvider>
           <AppRoutes />

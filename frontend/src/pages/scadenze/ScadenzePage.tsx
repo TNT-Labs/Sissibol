@@ -585,7 +585,7 @@ export const ScadenzePage: React.FC = () => {
             </div>
             <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
               <SearchableSelect
-                label="Veicolo *"
+                label="Veicolo"
                 options={veicoli.map(v => ({
                   value: v.id,
                   label: `${v.targa} - ${v.cliente ? getClienteDisplayName(v.cliente) : 'N/A'}`
@@ -597,7 +597,7 @@ export const ScadenzePage: React.FC = () => {
               />
               <div className="grid grid-cols-2 gap-4">
                 <SearchableSelect
-                  label="Mese Scadenza *"
+                  label="Mese Scadenza"
                   options={MESI_OPTIONS}
                   value={formData.meseScadenza}
                   onChange={(value) => setFormData({ ...formData, meseScadenza: Number(value) })}
@@ -605,7 +605,7 @@ export const ScadenzePage: React.FC = () => {
                   required
                 />
                 <SearchableSelect
-                  label="Anno *"
+                  label="Anno"
                   options={ANNI_FUTURI_OPTIONS}
                   value={formData.annoScadenza}
                   onChange={(value) => setFormData({ ...formData, annoScadenza: Number(value) })}
@@ -614,7 +614,7 @@ export const ScadenzePage: React.FC = () => {
                 />
               </div>
               <SearchableSelect
-                label="Periodicita *"
+                label="Periodicita"
                 options={PERIODICITA_OPTIONS}
                 value={formData.periodicita}
                 onChange={(value) => setFormData({ ...formData, periodicita: value as Periodicita })}
@@ -635,7 +635,7 @@ export const ScadenzePage: React.FC = () => {
                 </p>
               </div>
               <SearchableSelect
-                label="Stato *"
+                label="Stato"
                 options={STATO_OPTIONS}
                 value={formData.stato}
                 onChange={(value) => setFormData({ ...formData, stato: value as StatoScadenza })}

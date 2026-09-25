@@ -15,6 +15,13 @@
 #
 # =============================================================================
 
+# Log a rotazione: senza limiti i log dei container riempiono il disco in mesi.
+x-log: &log
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   # ===========================================================================
   # PostgreSQL Database
@@ -41,14 +48,16 @@ services:
     # Security: read-only root filesystem where possible
     security_opt:
       - no-new-privileges:true
+    logging: *log
 
   # ===========================================================================
   # Backend API (NestJS)
   # ===========================================================================
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      # Contesto: la radice del monorepo, per le build dal package-lock.json.
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: sissibol-backend
     restart: unless-stopped
     environment:
@@ -59,6 +68,14 @@ services:
       NODE_ENV: production
       # Trust proxy headers from nginx
       TRUST_PROXY: "true"
+      # Cookie di sessione solo in HTTPS e solo sulle rotte di autenticazione
+      COOKIE_PATH: /api/auth
+      COOKIE_SECURE: "true"
+      # Password del primo amministratore; se assente se ne genera una casuale,
+      # mostrata una sola volta nei log del backend.
+      ADMIN_PASSWORD_INIZIALE: ${ADMIN_PASSWORD_INIZIALE:-}
+      # Stato dei backup, mostrato agli amministratori nella dashboard
+      BACKUP_STATO_FILE: /backups/stato.json
       # Origini esterne ammesse dal CORS (la stessa origine lo è sempre)
       CORS_ORIGINS: ${CORS_ORIGINS:-}
       APP_FUSO_ORARIO: ${APP_FUSO_ORARIO:-Europe/Rome}
@@ -80,12 +97,16 @@ services:
       AVVISI_FIRMA: ${AVVISI_FIRMA:-}
       AVVISI_RISPONDI_A: ${AVVISI_RISPONDI_A:-}
     volumes:
-      - ./backend/uploads:/app/uploads
+      - ./backend/uploads:/app/backend/uploads
+      - ./backups:/backups:ro
     depends_on:
       postgres:
         condition: service_healthy
     networks:
       - sissibol-internal
+      # Solo in uscita, per il server di posta (avvisi e riepilogo): nessuna
+      # porta è pubblicata, quindi da fuori il backend resta irraggiungibile.
+      - sissibol-external
     # Security: Do NOT expose backend port externally
     # Only accessible via internal network through nginx
     security_opt:
@@ -99,14 +120,15 @@ services:
         reservations:
           cpus: '0.25'
           memory: 128M
+    logging: *log
 
   # ===========================================================================
   # Frontend (React + Nginx HTTPS)
   # ===========================================================================
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile.https
+      context: .
+      dockerfile: frontend/Dockerfile.https
       args:
         VITE_API_URL: /api
         DOMAIN_NAME: ${DUCKDNS_SUBDOMAIN}.duckdns.org
@@ -118,12 +140,15 @@ services:
     environment:
       DOMAIN_NAME: ${DUCKDNS_SUBDOMAIN}.duckdns.org
     volumes:
-      # SSL certificates from Let's Encrypt
-      - letsencrypt_data:/etc/letsencrypt:ro
+      # Certificati Let's Encrypt: la stessa cartella in cui li scrive
+      # scripts/ssl/init-ssl.sh (prima era un volume Docker diverso, vuoto,
+      # e nginx non trovava i certificati).
+      - ./letsencrypt:/etc/letsencrypt:ro
       # DH parameters
       - ./ssl/dhparam.pem:/etc/nginx/ssl/dhparam.pem:ro
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - sissibol-internal
       - sissibol-external
@@ -138,6 +163,7 @@ services:
         reservations:
           cpus: '0.1'
           memory: 64M
+    logging: *log
 
   # ===========================================================================
   # Certbot - Certificate Management
@@ -148,13 +174,16 @@ services:
     image: certbot/certbot:latest
     container_name: sissibol-certbot
     volumes:
-      - letsencrypt_data:/etc/letsencrypt
-      - ./scripts/ssl:/scripts:ro
+      - ./letsencrypt:/etc/letsencrypt
+      # Hook DuckDNS: certbot salva nella configurazione di rinnovo il
+      # percorso /hooks usato alla prima emissione, quindi devono essere qui.
+      - ./scripts/ssl/hooks:/hooks:ro
     environment:
       DUCKDNS_TOKEN: ${DUCKDNS_TOKEN:?DuckDNS token is required}
       DUCKDNS_SUBDOMAIN: ${DUCKDNS_SUBDOMAIN:?DuckDNS subdomain is required}
       CERT_EMAIL: ${CERT_EMAIL:?Email for certificate notifications is required}
-    # Run renewal check daily at 3 AM
+    # Verifica il rinnovo due volte al giorno (certbot rinnova solo a meno di
+    # 30 giorni dalla scadenza). Il file segnale fa ricaricare nginx.
     entrypoint: "/bin/sh"
     command: >
       -c 'trap exit TERM; while :; do
@@ -162,11 +191,43 @@ services:
         sleep 12h & wait $${!};
       done'
     networks:
-      - sissibol-internal
+      # Deve raggiungere Let's Encrypt e DuckDNS: la rete interna è isolata.
+      - sissibol-external
     depends_on:
       - frontend
     security_opt:
       - no-new-privileges:true
+    logging: *log
+
+  # ===========================================================================
+  # Backup giornaliero del database e delle ricevute (vedi BACKUP.md)
+  # ===========================================================================
+  backup:
+    image: postgres:15-alpine
+    container_name: sissibol-backup
+    restart: unless-stopped
+    entrypoint: ["sh", "/script/backup.sh", "ciclo"]
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER:-sissibol_user}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB:-sissibol}
+      TZ: ${APP_FUSO_ORARIO:-Europe/Rome}
+      BACKUP_ORA: ${BACKUP_ORA:-02:30}
+      BACKUP_GIORNI: ${BACKUP_GIORNI:-14}
+      BACKUP_MESI: ${BACKUP_MESI:-12}
+    volumes:
+      - ./backups:/backups
+      - ./backend/uploads:/uploads:ro
+      - ./scripts/backup:/script:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - sissibol-internal
+    security_opt:
+      - no-new-privileges:true
+    logging: *log
 
 # ===========================================================================
 # Volumes
@@ -174,17 +235,16 @@ services:
 volumes:
   postgres_data:
     driver: local
-  letsencrypt_data:
-    driver: local
 
 # ===========================================================================
 # Networks
 # ===========================================================================
 networks:
-  # Internal network - not accessible from outside
+  # Rete interna, senza accesso a Internet: database e comunicazioni fra servizi
   sissibol-internal:
     driver: bridge
     internal: true
-  # External network - for public-facing services
+  # Rete con accesso a Internet: la porta 443 del frontend e le connessioni in
+  # uscita di backend (posta) e certbot (Let's Encrypt, DuckDNS)
   sissibol-external:
     driver: bridge

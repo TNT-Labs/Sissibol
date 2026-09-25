@@ -1,32 +1,41 @@
-# Git
+# Contesto di build delle immagini di produzione: la radice del monorepo, per
+# usare il package-lock.json (build riproducibili). Qui si esclude tutto ciò
+# che non serve alla build o che non deve mai finire in un'immagine.
+
+# Dati e segreti dell'installazione
+backups
+letsencrypt
+ssl
+**/.env
+**/.env.*
+backend/uploads
+import
+
+# Dipendenze e prodotti di build locali: si ricostruiscono nell'immagine
+**/node_modules
+**/dist
+**/coverage
+**/*.tsbuildinfo
+
+# Non servono alla build
 .git
+.github
+backend/test
+scripts
+*.md
+**/*.log
+docker-compose*.yml
+Makefile
+LICENSE
 .gitignore
 .gitattributes
+.dockerignore
+.gitlab-ci.yml
 
-# Documentation
-README.md
-LICENSE
-*.md
-
-# IDE
+# IDE e sistema operativo
 .vscode
 .idea
 *.swp
 *.swo
-
-# OS
 .DS_Store
 Thumbs.db
-
-# Docker
-docker-compose.yml
-docker-compose.dev.yml
-Dockerfile
-.dockerignore
-
-# CI/CD
-.github
-.gitlab-ci.yml
-
-# Misc
-*.log

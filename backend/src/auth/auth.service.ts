@@ -1,19 +1,46 @@
-import { Injectable, UnauthorizedException, ConflictException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import * as bcrypt from 'bcryptjs';
 import { RegisterDto } from './dto/register.dto';
 import { randomUUID } from 'crypto';
+import { problemiPassword } from './politica-password';
 
 // Durata token
 const ACCESS_TOKEN_EXPIRY = '15m';  // Access token breve
 const REFRESH_TOKEN_EXPIRY_DAYS = 7;
+
+/** Errori di password consecutivi prima della sospensione dell'accesso. */
+export const MAX_TENTATIVI_FALLITI = 5;
+/** Durata della sospensione dopo troppi errori. */
+export const MINUTI_BLOCCO = 15;
+/** Costo di bcrypt per le nuove password (circa 250 ms per verifica). */
+const COSTO_BCRYPT = 12;
+
+/**
+ * Hash di confronto per le email inesistenti: la verifica richiede lo stesso
+ * tempo che per un utente vero, così i tempi di risposta non rivelano quali
+ * email hanno un account.
+ */
+const HASH_FITTIZIO = bcrypt.hashSync('verifica-tempo-costante-senza-utente', COSTO_BCRYPT);
+
+/** Tipo del token: un refresh token non deve valere come token di accesso. */
+export type TipoToken = 'access' | 'refresh';
 
 interface TokenPayload {
   email: string;
   sub: number;
   ruolo: string;
   jti?: string;
+  typ: TipoToken;
 }
 
 interface LoginMetadata {
@@ -23,21 +50,71 @@ interface LoginMetadata {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
+    private audit: AuditService,
   ) {}
 
-  async validateUser(email: string, password: string): Promise<any> {
-    const user = await this.prisma.utente.findUnique({
-      where: { email },
-    });
+  /**
+   * Verifica email e password, con sospensione temporanea dell'accesso dopo
+   * MAX_TENTATIVI_FALLITI errori consecutivi.
+   *
+   * Restituisce l'utente o null, senza mai dire perché: email inesistente,
+   * password errata e account sospeso danno la stessa risposta nello stesso
+   * tempo, così un attaccante non può scoprire quali account esistono.
+   */
+  async verificaCredenziali(email: string, password: string, ip?: string): Promise<any> {
+    const user = await this.prisma.utente.findUnique({ where: { email } });
 
-    if (user && await bcrypt.compare(password, user.password)) {
-      const { password, ...result } = user;
-      return result;
+    if (!user) {
+      await bcrypt.compare(password, HASH_FITTIZIO);
+      this.logger.warn(`Accesso fallito: email sconosciuta (${email}) da ${ip ?? '?'}`);
+      return null;
     }
-    return null;
+
+    if (user.bloccatoFinoA && user.bloccatoFinoA > new Date()) {
+      await bcrypt.compare(password, HASH_FITTIZIO);
+      this.logger.warn(`Accesso rifiutato: account ${email} sospeso fino alle ${user.bloccatoFinoA.toISOString()} (da ${ip ?? '?'})`);
+      return null;
+    }
+
+    if (!(await bcrypt.compare(password, user.password))) {
+      const aggiornato = await this.prisma.utente.update({
+        where: { id: user.id },
+        data: { tentativiFalliti: { increment: 1 } },
+      });
+      if (aggiornato.tentativiFalliti >= MAX_TENTATIVI_FALLITI) {
+        const fino = new Date(Date.now() + MINUTI_BLOCCO * 60_000);
+        await this.prisma.utente.update({
+          where: { id: user.id },
+          data: { bloccatoFinoA: fino, tentativiFalliti: 0 },
+        });
+        this.logger.warn(`Account ${email} sospeso per ${MINUTI_BLOCCO} minuti dopo ${MAX_TENTATIVI_FALLITI} errori (ultimo da ${ip ?? '?'})`);
+        await this.audit.registra({
+          entita: 'utente',
+          idEntita: user.id,
+          azione: 'MODIFICA',
+          datiDopo: { bloccatoFinoA: fino },
+          note: `Accesso sospeso dopo ${MAX_TENTATIVI_FALLITI} password errate (ultimo tentativo da ${ip ?? 'IP sconosciuto'})`,
+        });
+      } else {
+        this.logger.warn(`Accesso fallito: password errata per ${email} da ${ip ?? '?'}`);
+      }
+      return null;
+    }
+
+    if (user.tentativiFalliti > 0 || user.bloccatoFinoA) {
+      await this.prisma.utente.update({
+        where: { id: user.id },
+        data: { tentativiFalliti: 0, bloccatoFinoA: null },
+      });
+    }
+
+    const { password: _hash, ...result } = user;
+    return result;
   }
 
   /**
@@ -50,13 +127,14 @@ export class AuthService {
       sub: user.id,
       ruolo: user.ruolo,
       jti,
+      typ: 'access',
     };
 
     // Access token con scadenza breve
     const accessToken = this.jwtService.sign(payload, { expiresIn: ACCESS_TOKEN_EXPIRY });
 
     // Refresh token con scadenza lunga
-    const refreshTokenPayload = { sub: user.id, jti };
+    const refreshTokenPayload = { sub: user.id, jti, typ: 'refresh' as TipoToken };
     const refreshToken = this.jwtService.sign(refreshTokenPayload, {
       expiresIn: `${REFRESH_TOKEN_EXPIRY_DAYS}d`,
     });
@@ -85,6 +163,7 @@ export class AuthService {
         id: user.id,
         email: user.email,
         ruolo: user.ruolo,
+        deveCambiarePassword: !!user.deveCambiarePassword,
       },
     };
   }
@@ -96,6 +175,11 @@ export class AuthService {
     try {
       // Verifica e decodifica il refresh token
       const payload = this.jwtService.verify(refreshToken);
+      // Solo un refresh token può rinnovare la sessione (e i refresh token
+      // emessi prima dell'introduzione del tipo non valgono più).
+      if (payload.typ !== 'refresh') {
+        throw new UnauthorizedException('Refresh token non valido o scaduto');
+      }
 
       // Verifica che il refresh token esista e non sia revocato
       const storedToken = await this.prisma.refreshToken.findFirst({
@@ -221,7 +305,12 @@ export class AuthService {
         throw new ConflictException('Email già registrata');
       }
 
-      const hashedPassword = await bcrypt.hash(registerDto.password, 10);
+      const problemi = problemiPassword(registerDto.password, registerDto.email);
+      if (problemi.length) {
+        throw new BadRequestException(`Password non abbastanza sicura: ${problemi.join('; ')}`);
+      }
+
+      const hashedPassword = await bcrypt.hash(registerDto.password, COSTO_BCRYPT);
 
       // Primo utente è sempre ADMIN
       const ruolo = isInitialSetup ? 'ADMIN' : registerDto.ruolo;
@@ -231,6 +320,9 @@ export class AuthService {
           email: registerDto.email,
           password: hashedPassword,
           ruolo: ruolo as any,
+          // Una password scelta da un amministratore va cambiata dall'utente;
+          // al setup iniziale l'ha scelta l'utente stesso.
+          deveCambiarePassword: !isInitialSetup,
         },
       });
 
@@ -269,15 +361,30 @@ export class AuthService {
 
     const passwordValida = await bcrypt.compare(dto.currentPassword, user.password);
     if (!passwordValida) {
+      this.logger.warn(`Cambio password rifiutato: password attuale errata per ${user.email}`);
       throw new UnauthorizedException('Password attuale non corretta');
     }
 
-    const hashedPassword = await bcrypt.hash(dto.newPassword, 10);
+    const problemi = problemiPassword(dto.newPassword, user.email);
+    if (problemi.length) {
+      throw new BadRequestException(`Password non abbastanza sicura: ${problemi.join('; ')}`);
+    }
+    if (await bcrypt.compare(dto.newPassword, user.password)) {
+      throw new BadRequestException('La nuova password deve essere diversa da quella attuale');
+    }
+
+    const hashedPassword = await bcrypt.hash(dto.newPassword, COSTO_BCRYPT);
 
     const [, revoked] = await this.prisma.$transaction([
       this.prisma.utente.update({
         where: { id: userId },
-        data: { password: hashedPassword },
+        data: {
+          password: hashedPassword,
+          deveCambiarePassword: false,
+          passwordCambiataIl: new Date(),
+          tentativiFalliti: 0,
+          bloccatoFinoA: null,
+        },
       }),
       // Revoca tutte le sessioni tranne quella corrente
       this.prisma.refreshToken.updateMany({
@@ -289,6 +396,15 @@ export class AuthService {
         data: { revokedAt: new Date() },
       }),
     ]);
+
+    // Nel registro solo il fatto, mai la password né il suo hash.
+    await this.audit.registra({
+      entita: 'utente',
+      idEntita: userId,
+      azione: 'MODIFICA',
+      utente: user.email,
+      note: `Password cambiata dall'utente; ${revoked.count} altre sessioni chiuse`,
+    });
 
     return {
       message: 'Password aggiornata con successo',
@@ -303,6 +419,7 @@ export class AuthService {
         id: true,
         email: true,
         ruolo: true,
+        deveCambiarePassword: true,
         createdAt: true,
       },
     });

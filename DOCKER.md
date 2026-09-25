@@ -37,31 +37,30 @@ Scarica [Docker Desktop](https://www.docker.com/products/docker-desktop)
 
 ## Quick Start
 
-### Con Make (Consigliato)
-
 ```bash
-# Avvia tutto in modalità produzione
+# 1. Configurazione: JWT_SECRET è obbligatoria
+cp .env.example .env
+# impostare in .env:  JWT_SECRET=<output di: openssl rand -base64 48>
+# facoltativo:        ADMIN_PASSWORD_INIZIALE=<password provvisoria di almeno 12 caratteri>
+
+# 2. Avvio (con Make, oppure: docker compose up -d --build)
 make up
 
-# Crea utente admin
-make seed-admin
+# 3. Password del primo amministratore (admin@sissibol.it), se non indicata in .env
+make admin-password
 
-# Accedi a http://localhost
-# Email: admin@sissibol.com
-# Password: admin123
+# Accedi a http://localhost e cambia la password al primo accesso
 ```
 
-### Senza Make
+Al primo avvio il backend applica le migrazioni e crea l'amministratore. In
+produzione la password non è più `admin123`: si usa `ADMIN_PASSWORD_INIZIALE`
+oppure se ne genera una casuale, mostrata una sola volta nei log. È
+provvisoria: al primo accesso l'applicazione chiede di sceglierne una
+personale (almeno 12 caratteri con maiuscole, minuscole, numeri e simboli).
 
-```bash
-# Avvia tutto
-docker-compose up -d
-
-# Crea utente admin
-curl -X POST http://localhost:3000/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"email":"admin@sissibol.com","password":"admin123","ruolo":"ADMIN"}'
-```
+Per raggiungere l'applicazione da Internet: [CLOUDFLARE.md](CLOUDFLARE.md)
+(tunnel Cloudflare, `docker-compose.cloudflare.yml`, consigliato) oppure
+[HTTPS.md](HTTPS.md) (DuckDNS, `docker-compose.https.yml`).
 
 ## Modalità Produzione
 
@@ -78,33 +77,32 @@ Usa `docker-compose.yml` per la modalità produzione.
 
 ```bash
 # Build e avvio
-docker-compose up -d --build
+docker compose up -d --build
 
 # Verifica stato
-docker-compose ps
+docker compose ps
 
 # Log
-docker-compose logs -f
+docker compose logs -f
 ```
 
 ### Servizi Esposti
 
-- **Frontend**: http://localhost (porta 80)
-- **Backend API**: http://localhost:3000
-- **PostgreSQL**: localhost:5432
+- **Frontend**: http://<server> (porta 80, anche dalla rete)
+- **Backend API**: http://localhost:3000 (solo da questo computer; dalla rete: http://<server>/api)
+- **PostgreSQL**: localhost:5432 (solo da questo computer)
+- **Salute**: http://localhost:3000/health (200 se l'applicazione raggiunge il database)
 
 ### Configurazione Produzione
 
-Modifica `docker-compose.yml`:
+Tutta la configurazione sta nel file `.env` (vedi `.env.example`); il compose
+non va modificato. Le immagini si costruiscono dalla radice del repository con
+`npm ci` sul `package-lock.json`: due build dello stesso commit installano le
+stesse versioni delle dipendenze.
 
-```yaml
-services:
-  backend:
-    environment:
-      JWT_SECRET: "cambia-questo-secret-in-produzione"  # ⚠️ IMPORTANTE
-      DATABASE_URL: "postgresql://..."
-      NODE_ENV: "production"
-```
+Database e API sono esposti solo su `127.0.0.1` (il computer che ospita
+l'applicazione); dalla rete si passa dall'interfaccia su porta 80, che
+inoltra `/api` al backend.
 
 ## Modalità Sviluppo
 
@@ -123,7 +121,7 @@ Usa `docker-compose.dev.yml` per lo sviluppo con hot reload.
 make dev-up
 
 # Senza Make
-docker-compose -f docker-compose.dev.yml up -d
+docker compose -f docker-compose.dev.yml up -d
 ```
 
 ### Servizi Esposti
@@ -176,8 +174,8 @@ make backend-shell  # Shell backend
 make frontend-shell # Shell frontend
 
 # Oppure
-docker-compose exec backend sh
-docker-compose exec frontend sh
+docker compose exec backend sh
+docker compose exec frontend sh
 ```
 
 ### Pulizia
@@ -208,30 +206,30 @@ services:
 
 ```bash
 # Verifica che PostgreSQL sia healthy
-docker-compose ps
+docker compose ps
 
 # Controlla i log del database
-docker-compose logs postgres
+docker compose logs postgres
 
 # Riavvia solo il database
-docker-compose restart postgres
+docker compose restart postgres
 ```
 
 ### Problema: Prisma non trova il database
 
 ```bash
 # Esegui manualmente le migrations
-docker-compose exec backend npx prisma migrate deploy
+docker compose exec backend npx prisma migrate deploy
 
 # Rigenera Prisma Client
-docker-compose exec backend npx prisma generate
+docker compose exec backend npx prisma generate
 ```
 
 ### Problema: Modifiche non si riflettono (modalità dev)
 
 ```bash
 # Verifica che i volumi siano montati
-docker-compose -f docker-compose.dev.yml config
+docker compose -f docker-compose.dev.yml config
 
 # Ricostruisci
 make dev-rebuild
@@ -254,7 +252,7 @@ docker image prune -a
 
 ```bash
 # Ferma tutto e rimuovi volumi
-docker-compose down -v
+docker compose down -v
 
 # Rimuovi immagini Sissibol
 docker images | grep sissibol | awk '{print $3}' | xargs docker rmi
@@ -293,33 +291,16 @@ server {
 }
 ```
 
-### Backup Database
+### Backup
+
+Il servizio `backup` del compose salva ogni giorno database e ricevute nella
+cartella `backups/`, verifica ogni backup e conserva giornalieri e mensili.
+Stato, ripristino e copia fuori sede sono descritti in [BACKUP.md](BACKUP.md).
 
 ```bash
-# Backup manuale
-docker-compose exec postgres pg_dump -U sissibol_user sissibol > backup.sql
-
-# Restore
-cat backup.sql | docker-compose exec -T postgres psql -U sissibol_user sissibol
-```
-
-### Backup Automatico
-
-Aggiungi al `docker-compose.yml`:
-
-```yaml
-services:
-  backup:
-    image: prodrigestivill/postgres-backup-local
-    restart: always
-    volumes:
-      - ./backups:/backups
-    environment:
-      POSTGRES_HOST: postgres
-      POSTGRES_DB: sissibol
-      POSTGRES_USER: sissibol_user
-      POSTGRES_PASSWORD: sissibol_password
-      SCHEDULE: "0 2 * * *"  # Ogni giorno alle 2:00
+make backup-stato   # stato dell'ultimo backup
+make backup         # backup immediato
+make ripristina FILE=sissibol-20261001-023000.dump
 ```
 
 ### Monitoraggio
@@ -329,10 +310,10 @@ services:
 docker stats
 
 # Log in tempo reale
-docker-compose logs -f --tail=100
+docker compose logs -f --tail=100
 
 # Solo errori
-docker-compose logs | grep -i error
+docker compose logs | grep -i error
 ```
 
 ### Scalabilità
@@ -340,7 +321,7 @@ docker-compose logs | grep -i error
 Per scalare il backend:
 
 ```bash
-docker-compose up -d --scale backend=3
+docker compose up -d --scale backend=3
 ```
 
 Richiede un load balancer (nginx/traefik) davanti.
@@ -353,7 +334,7 @@ Richiede un load balancer (nginx/traefik) davanti.
 |-----------|---------|-------------|
 | `DATABASE_URL` | - | Connection string PostgreSQL |
 | `JWT_SECRET` | - | Chiave segreta JWT |
-| `JWT_EXPIRATION` | `24h` | Durata token |
+| `JWT_EXPIRATION` | — | Non più usata: l'accesso dura 15 minuti e si rinnova da solo per 7 giorni |
 | `PORT` | `3000` | Porta backend |
 | `NODE_ENV` | `production` | Ambiente |
 

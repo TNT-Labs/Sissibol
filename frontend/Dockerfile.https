@@ -5,27 +5,27 @@
 # =============================================================================
 
 # Build stage
+# Contesto di build: la radice del monorepo, per installare dal package-lock.json
+# con npm ci (build riproducibili).
 # Node 22 LTS: Vite 7 e il plugin PWA richiedono Node >= 20, e Node 18 e 20
 # sono fuori supporto. Deve coincidere con la versione usata dalla CI.
 FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+COPY package.json package-lock.json ./
+COPY backend/package.json backend/
+COPY frontend/package.json frontend/
+RUN npm ci --workspace=frontend
 
-# Install dependencies
-RUN npm install --legacy-peer-deps
-
-# Copy source code
-COPY . .
+COPY frontend/ frontend/
 
 # Build arguments
 ARG VITE_API_URL=/api
 ARG DOMAIN_NAME=localhost
 ENV VITE_API_URL=$VITE_API_URL
 
-# Build application
+WORKDIR /app/frontend
 RUN npm run build
 
 # =============================================================================
@@ -44,13 +44,13 @@ ENV DOMAIN_NAME=$DOMAIN_NAME
 RUN rm -f /etc/nginx/conf.d/default.conf
 
 # Copy main nginx configuration
-COPY nginx-main.conf /etc/nginx/nginx.conf
+COPY frontend/nginx-main.conf /etc/nginx/nginx.conf
 
 # Copy HTTPS server configuration as template
-COPY nginx.https.conf /etc/nginx/templates/default.conf.template
+COPY frontend/nginx.https.conf /etc/nginx/templates/default.conf.template
 
 # Copy built assets from builder
-COPY --from=builder /app/dist /usr/share/nginx/html
+COPY --from=builder /app/frontend/dist /usr/share/nginx/html
 
 # Create SSL directory
 RUN mkdir -p /etc/nginx/ssl
@@ -67,6 +67,27 @@ echo "Nginx configuration generated for domain: $DOMAIN_NAME"
 EOF
 
 RUN chmod +x /docker-entrypoint.d/40-envsubst-on-templates.sh
+
+# Ricarica nginx quando certbot rinnova il certificato. Senza, nginx continua
+# a servire il certificato caricato all'avvio fino alla sua scadenza.
+# Il container certbot, a rinnovo avvenuto, tocca /etc/letsencrypt/renewal-complete.
+RUN cat > /docker-entrypoint.d/50-ricarica-certificati.sh << 'EOF'
+#!/bin/sh
+SEGNALE=/etc/letsencrypt/renewal-complete
+ULTIMA=/tmp/ultima-ricarica-certificati
+touch "$ULTIMA"
+(
+  while :; do
+    sleep 600
+    if [ -f "$SEGNALE" ] && [ "$SEGNALE" -nt "$ULTIMA" ]; then
+      touch "$ULTIMA"
+      nginx -t 2>/dev/null && nginx -s reload && echo "Certificato rinnovato: nginx ricaricato"
+    fi
+  done
+) &
+EOF
+
+RUN chmod +x /docker-entrypoint.d/50-ricarica-certificati.sh
 
 # Create directory for templates
 RUN mkdir -p /etc/nginx/templates

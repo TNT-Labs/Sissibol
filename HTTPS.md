@@ -2,6 +2,10 @@
 
 Questa guida spiega come configurare Sissibol per funzionare via HTTPS usando DuckDNS e certificati Let's Encrypt, **senza bisogno di aprire la porta 80**.
 
+> In alternativa, senza porte aperte né certificati da gestire e con
+> l'accesso limitato al personale: [CLOUDFLARE.md](CLOUDFLARE.md) (tunnel
+> Cloudflare, anche su un dominio proprio come `shopbeautylab.it/bolli`).
+
 ## Panoramica
 
 La configurazione utilizza:
@@ -154,8 +158,10 @@ Apri nel browser: `https://tuodominio.duckdns.org`
 - Login: 30 richieste/minuto per IP (anti-brute force)
 
 ### Isolamento di Rete
-- PostgreSQL accessibile solo dalla rete interna Docker
-- Backend non esposto direttamente all'esterno
+- PostgreSQL e servizio di backup solo sulla rete interna Docker, senza accesso a Internet
+- Backend non esposto all'esterno (nessuna porta pubblicata); ha accesso in
+  uscita per il server di posta (avvisi ai clienti e riepilogo)
+- certbot ha accesso in uscita per Let's Encrypt e DuckDNS
 - Solo porta 443 esposta pubblicamente
 
 ### Container Security
@@ -167,7 +173,25 @@ Apri nel browser: `https://tuodominio.duckdns.org`
 
 ### Rinnovo Automatico
 
-Il container `certbot` rinnova automaticamente i certificati prima della scadenza (ogni 12 ore verifica se necessario).
+Il container `certbot` verifica il rinnovo ogni 12 ore e rinnova a meno di 30
+giorni dalla scadenza; nginx ricarica da solo il certificato rinnovato (entro
+10 minuti). Perché funzioni:
+
+- gli hook DuckDNS stanno in `scripts/ssl/hooks/` e sono montati in `/hooks`,
+  lo stesso percorso usato alla prima emissione e salvato da certbot nella
+  configurazione di rinnovo;
+- certbot è sulla rete con accesso a Internet (Let's Encrypt e DuckDNS);
+- i certificati sono nella cartella `letsencrypt/` del progetto, la stessa
+  per `init-ssl`, certbot e nginx.
+
+Fino alla fase 5 nessuna di queste condizioni era soddisfatta: i certificati
+non si sarebbero rinnovati, e nginx non li trovava nemmeno al primo avvio.
+Su un'installazione già esistente, dopo l'aggiornamento verificare il rinnovo
+con una prova:
+
+```bash
+docker compose -f docker-compose.https.yml run --rm --entrypoint certbot certbot renew --dry-run
+```
 
 ### Rinnovo Manuale
 
