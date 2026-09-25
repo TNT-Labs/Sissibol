@@ -6,6 +6,7 @@ import { ScadenzeService } from './scadenze.service';
 import { MailerService } from '../mail/mailer.service';
 import { formattaOrario, fusoOrarioApplicazione, leggiOrario } from '../mail/fuso-orario';
 import { escapeHtml } from '../avvisi/composizione';
+import { destinatariStudio } from '../mail/destinatari';
 
 const NOTIFICHE_CRON_JOB = 'notifiche-riepilogo-giornaliero';
 
@@ -58,18 +59,8 @@ export class NotificheService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async getDestinatari(): Promise<string[]> {
-    const configurati = process.env.NOTIFICHE_EMAIL_TO;
-    if (configurati) {
-      return configurati.split(',').map((e) => e.trim()).filter(Boolean);
-    }
-
-    // Fallback: tutti gli utenti ADMIN
-    const admins = await this.prisma.utente.findMany({
-      where: { ruolo: 'ADMIN' },
-      select: { email: true },
-    });
-    return admins.map((a) => a.email);
+  private getDestinatari(): Promise<string[]> {
+    return destinatariStudio(this.prisma);
   }
 
   /**
