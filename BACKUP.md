@@ -33,7 +33,8 @@ equivale a non averlo.
 
 Se un backup fallisce non viene cancellato nulla. Alla prima installazione il
 servizio fa subito un backup, così una configurazione sbagliata si scopre
-all'avvio e non la mattina dopo. Se il server è spento all'ora prevista, il
+all'avvio e non la mattina dopo (dopo aver atteso, fino a 10 minuti, che il
+backend crei le tabelle del database). Se il server è spento all'ora prevista, il
 backup del giorno viene fatto appena il servizio riparte.
 
 ---
