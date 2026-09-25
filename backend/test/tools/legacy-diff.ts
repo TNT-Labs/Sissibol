@@ -15,6 +15,8 @@
 import { PrismaClient } from '@prisma/client';
 import { BolloService } from '../../src/bollo/bollo.service';
 import { AuditService } from '../../src/audit/audit.service';
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { IMPORTO_SEGNAPOSTO_ARCHIVIO } = require('../../prisma/import-mapping');
 
 const prisma = new PrismaClient();
 
@@ -35,9 +37,12 @@ interface Riga {
 async function main() {
   const bollo = new BolloService(prisma as never, new AuditService(prisma as never));
 
-  // Per ogni veicolo, l'importo più recente presente in archivio.
+  // Per ogni veicolo, l'importo reale più recente presente in archivio.
   const scadenze = await prisma.scadenza.findMany({
-    where: { importoPrevisto: { not: null } },
+    // Il segnaposto di 1 euro dell'archivio non è un importo di riferimento:
+    // conservato sulle scadenze pagate, altrimenti farebbe da termine di
+    // confronto per molti veicoli.
+    where: { importoPrevisto: { gt: IMPORTO_SEGNAPOSTO_ARCHIVIO } },
     orderBy: [{ annoScadenza: 'desc' }, { meseScadenza: 'desc' }],
     select: {
       idVeicolo: true,

@@ -30,6 +30,7 @@ const {
   mapTipoSospensione,
   mapNumeroAssi,
   mapGrandezzaFisica,
+  importoPrevistoDaArchivio,
   readPeriodicitaRaw,
 } = require('./import-mapping');
 
@@ -330,7 +331,7 @@ async function importScadenziario(veicoliMap) {
             meseScadenza: first.meseScadenza,
             annoScadenza: first.annoScadenza,
             periodicita: first.periodicita,
-            importoPrevisto: first.importoPrevisto,
+            importoPrevisto: importoPrevistoDaArchivio(first.importoPrevisto, hasPagamento),
             stato,
           },
         });

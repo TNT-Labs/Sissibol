@@ -233,3 +233,31 @@ describe('mapNumeroAssi', () => {
     expect(mapping.mapNumeroAssi(null)).toBeNull();
   });
 });
+
+describe('importoPrevistoDaArchivio', () => {
+  it('rende mancante il segnaposto di 1 euro sulle scadenze non pagate', () => {
+    // Nessun bollo reale vale 1 euro: conservarlo lo faceva sembrare un
+    // importo valido, e il pagamento multiplo avrebbe pagato 1 euro.
+    expect(mapping.importoPrevistoDaArchivio(1, false)).toBeNull();
+  });
+
+  it('conserva il segnaposto sulle scadenze pagate', () => {
+    // Accompagna un pagamento effettivamente registrato: è un fatto storico.
+    expect(mapping.importoPrevistoDaArchivio(1, true)).toBe(1);
+  });
+
+  it('conserva gli importi reali', () => {
+    expect(mapping.importoPrevistoDaArchivio(233.1, false)).toBe(233.1);
+    expect(mapping.importoPrevistoDaArchivio(20.98, false)).toBe(20.98);
+    expect(mapping.importoPrevistoDaArchivio(233.1, true)).toBe(233.1);
+  });
+
+  it('lascia mancante un importo mancante', () => {
+    expect(mapping.importoPrevistoDaArchivio(null, false)).toBeNull();
+    expect(mapping.importoPrevistoDaArchivio(undefined, true)).toBeNull();
+  });
+
+  it('usa lo stesso segnaposto della migrazione', () => {
+    expect(mapping.IMPORTO_SEGNAPOSTO_ARCHIVIO).toBe(1);
+  });
+});

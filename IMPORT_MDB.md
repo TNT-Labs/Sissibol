@@ -8,6 +8,11 @@ Dalla fase 1 l'import conserva la data di scadenza originale dell'archivio
 `Secondo_Avviso` nella tabella `avvisi`, e scrive `NULL` invece di `0` dove il
 dato tecnico del veicolo manca. Vedi `MODELLO-DATI.md`.
 
+L'archivio segnava con 1 € le scadenze di cui non conosceva il bollo. Sulle
+scadenze non pagate l'import rende mancante quel segnaposto; su quelle pagate
+lo conserva, perché accompagna un pagamento registrato. Vedi
+`MOTORE-CALCOLO.md`.
+
 ## 1. Aggiorna il codice
 git pull
 
