@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/commo
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateClienteDto } from './dto/create-cliente.dto';
 import { UpdateClienteDto } from './dto/update-cliente.dto';
+import { paginazioneSicura } from '../common/paginazione';
 
 @Injectable()
 export class ClientiService {
@@ -54,6 +55,7 @@ export class ClientiService {
     search?: string,
     attivo?: boolean,
   ) {
+    ({ page, pageSize } = paginazioneSicura(page, pageSize, 50));
     const skip = (page - 1) * pageSize;
 
     const where: any = search

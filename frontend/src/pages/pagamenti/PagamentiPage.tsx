@@ -1,12 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { pagamentiService } from '../../services/pagamenti.service';
-import { scadenzeService } from '../../services/scadenze.service';
-import { StatoScadenza, getClienteDisplayName } from '../../types';
-import type { Pagamento, Scadenza } from '../../types';
+import { scadenzeService, type ScadenzaTrovata } from '../../services/scadenze.service';
+import { getClienteDisplayName } from '../../types';
+import type { Pagamento } from '../../types';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
-import { SearchableSelect } from '../../components/common/SearchableSelect';
+import { RicercaRemota } from '../../components/common/RicercaRemota';
 import type { SelectOption } from '../../components/common/SearchableSelect';
+import { getErrorMessage } from '../../utils/errors';
 import { Plus, X, CreditCard, Upload, FileText, Trash2, Edit } from 'lucide-react';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -16,14 +17,29 @@ import { Pagination } from '../../components/common/Pagination';
 
 const PAGE_SIZE = 50;
 
+// Separatore delle migliaia sempre ("1.043,45 €"); 'always' non è ancora nei
+// tipi di TypeScript. I browser che non lo conoscono usano quello predefinito.
+const EURO = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', useGrouping: 'always' as unknown as boolean });
+
+/** Etichetta di una scadenza nella ricerca: targa, cliente, mese, stato, importo. */
+function etichettaScadenza(s: ScadenzaTrovata): string {
+  const importo = s.importoPrevisto !== null ? EURO.format(Number(s.importoPrevisto)) : 'importo da calcolare';
+  const stato = s.stato === 'SCADUTO' ? ' · scaduta' : '';
+  return `${s.veicolo.targa} · ${getClienteDisplayName(s.veicolo.cliente)} · ${getMeseLabel(s.meseScadenza)} ${s.annoScadenza}${stato} · ${importo}`;
+}
+
 export const PagamentiPage: React.FC = () => {
   const [pagamenti, setPagamenti] = useState<Pagamento[]>([]);
-  const [scadenze, setScadenze] = useState<Scadenza[]>([]);
+  // Scadenza scelta nel modulo (con la sua etichetta) e ultimi risultati della
+  // ricerca, per proporre l'importo previsto.
+  const [scadenzaScelta, setScadenzaScelta] = useState<SelectOption | null>(null);
+  const trovate = useRef(new Map<number, ScadenzaTrovata>());
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [importoTotale, setImportoTotale] = useState(0);
+  const [scadute, setScadute] = useState<number | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [editingPagamento, setEditingPagamento] = useState<Pagamento | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -42,18 +58,20 @@ export const PagamentiPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page]);
 
-  // Caricamento paginato server-side: la pagina non carica più tutti i pagamenti
+  // Caricamento paginato server-side. Le scadenze da pagare non si caricano
+  // più tutte (oltre 74.000 sull'archivio reale): si cercano nel modulo.
   const loadData = async () => {
     try {
-      const [pagamentiResult, scadenzeData] = await Promise.all([
-        pagamentiService.getAllPaginated({ page, pageSize: PAGE_SIZE }),
-        scadenzeService.getAll(StatoScadenza.DA_PAGARE),
-      ]);
+      const pagamentiResult = await pagamentiService.getAllPaginated({ page, pageSize: PAGE_SIZE });
       setPagamenti(pagamentiResult.data);
       setTotalPages(pagamentiResult.pagination.totalPages);
       setTotalCount(pagamentiResult.pagination.totalCount);
       setImportoTotale(pagamentiResult.summary.importoTotale);
-      setScadenze(scadenzeData);
+      // Conteggio calcolato dal server, senza scaricare le scadenze.
+      scadenzeService
+        .getStats()
+        .then((stats) => setScadute(stats.scaduto))
+        .catch(() => setScadute(null));
     } catch (error) {
       console.error('Errore nel caricamento dei dati:', error);
     } finally {
@@ -70,15 +88,25 @@ export const PagamentiPage: React.FC = () => {
         importoPagato: pagamento.importoPagato.toString(),
         metodoPagamento: pagamento.metodoPagamento || '',
       });
+      const sc = pagamento.scadenza;
+      setScadenzaScelta({
+        value: pagamento.idScadenza,
+        label: sc
+          ? `${sc.veicolo?.targa ?? ''} · ${sc.veicolo?.cliente ? getClienteDisplayName(sc.veicolo.cliente) : ''} · ${getMeseLabel(sc.meseScadenza)} ${sc.annoScadenza}`
+          : `Scadenza n. ${pagamento.idScadenza}`,
+      });
       setSelectedFile(null);
     } else {
       setEditingPagamento(null);
       setFormData({
-        idScadenza: scadenze.length > 0 ? scadenze[0].id : 0,
+        // Nessuna scadenza preselezionata: prima veniva proposta la prima
+        // dell'elenco (una del 2050), facile da confermare per sbaglio.
+        idScadenza: 0,
         dataPagamento: format(new Date(), 'yyyy-MM-dd'),
         importoPagato: '',
         metodoPagamento: '',
       });
+      setScadenzaScelta(null);
       setSelectedFile(null);
     }
     setShowModal(true);
@@ -88,6 +116,24 @@ export const PagamentiPage: React.FC = () => {
     setShowModal(false);
     setEditingPagamento(null);
     setSelectedFile(null);
+  };
+
+  const cercaScadenze = useCallback(async (testo: string): Promise<SelectOption[]> => {
+    const risultati = await scadenzeService.cercaDaPagare(testo);
+    trovate.current = new Map(risultati.map((r) => [r.id, r]));
+    return risultati.map((r) => ({ value: r.id, label: etichettaScadenza(r) }));
+  }, []);
+
+  const scegliScadenza = (opzione: SelectOption | null) => {
+    setScadenzaScelta(opzione);
+    const trovata = opzione ? trovate.current.get(Number(opzione.value)) : undefined;
+    setFormData((attuale) => ({
+      ...attuale,
+      idScadenza: opzione ? Number(opzione.value) : 0,
+      // Propone l'importo previsto, se noto e se non è già stato scritto.
+      importoPagato:
+        attuale.importoPagato || !trovata?.importoPrevisto ? attuale.importoPagato : Number(trovata.importoPrevisto).toFixed(2),
+    }));
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -113,6 +159,11 @@ export const PagamentiPage: React.FC = () => {
 
     // BUG FIX: protezione contro submit multipli
     if (isSubmitting) return;
+
+    if (!formData.idScadenza) {
+      toast.error('Scadenza mancante', 'Cerca e scegli la scadenza a cui si riferisce il pagamento.');
+      return;
+    }
 
     // BUG FIX: validazione importo prima del submit
     const importo = parseFloat(formData.importoPagato);
@@ -145,7 +196,7 @@ export const PagamentiPage: React.FC = () => {
       loadData();
     } catch (error) {
       console.error('Errore nel salvataggio del pagamento:', error);
-      toast.error('Errore', 'Impossibile salvare il pagamento. Riprova.');
+      toast.error('Errore', getErrorMessage(error, 'Impossibile salvare il pagamento. Riprova.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -208,12 +259,14 @@ export const PagamentiPage: React.FC = () => {
         <div className="bg-white rounded-lg shadow p-6">
           <div className="text-sm font-medium text-gray-600">Importo Totale</div>
           <div className="mt-2 text-3xl font-semibold text-gray-900">
-            € {importoTotale.toFixed(2)}
+            {EURO.format(importoTotale)}
           </div>
         </div>
         <div className="bg-white rounded-lg shadow p-6">
-          <div className="text-sm font-medium text-gray-600">Scadenze da Pagare</div>
-          <div className="mt-2 text-3xl font-semibold text-gray-900">{scadenze.length}</div>
+          <div className="text-sm font-medium text-gray-600">Scadute da pagare</div>
+          <div className="mt-2 text-3xl font-semibold text-gray-900">
+            {scadute === null ? '—' : scadute.toLocaleString('it-IT')}
+          </div>
         </div>
       </div>
 
@@ -265,7 +318,7 @@ export const PagamentiPage: React.FC = () => {
                     {pagamento.scadenza?.veicolo?.targa || '-'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    € {Number(pagamento.importoPagato).toFixed(2)}
+                    {EURO.format(Number(pagamento.importoPagato))}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {pagamento.metodoPagamento || '-'}
@@ -325,24 +378,13 @@ export const PagamentiPage: React.FC = () => {
               </button>
             </div>
             <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
-              <SearchableSelect
+              <RicercaRemota
                 label="Scadenza"
-                options={(() => {
-                  const opts: SelectOption[] = scadenze.map((scadenza) => ({
-                    value: scadenza.id,
-                    label: `${scadenza.veicolo?.targa} - ${scadenza.veicolo?.cliente ? getClienteDisplayName(scadenza.veicolo.cliente) : 'N/A'} - ${getMeseLabel(scadenza.meseScadenza)} ${scadenza.annoScadenza}`
-                  }));
-                  if (editingPagamento) {
-                    opts.push({
-                      value: editingPagamento.idScadenza,
-                      label: `${editingPagamento.scadenza?.veicolo?.targa} - ${editingPagamento.scadenza?.veicolo?.cliente ? getClienteDisplayName(editingPagamento.scadenza.veicolo.cliente) : 'N/A'}`
-                    });
-                  }
-                  return opts;
-                })()}
-                value={formData.idScadenza}
-                onChange={(value) => setFormData({ ...formData, idScadenza: Number(value) })}
-                placeholder="Cerca scadenza per targa o cliente..."
+                valore={scadenzaScelta}
+                onChange={scegliScadenza}
+                cerca={cercaScadenze}
+                placeholder="Cerca per targa o cliente..."
+                aiuto="Scadenze da pagare e scadute, dalle più vecchie. Più parole restringono la ricerca (es. rossi AB123)."
                 required
                 disabled={!!editingPagamento}
               />

@@ -1,13 +1,11 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import type { Utente } from '../types';
 import { authService } from '../services/auth.service';
-import { offlineQueue } from '../services/offline-queue.service';
 
 interface AuthContextType {
   user: Utente | null;
   isAuthenticated: boolean;
   isOnline: boolean;
-  pendingSync: number;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -21,7 +19,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<Utente | null>(null);
   const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [pendingSync, setPendingSync] = useState(0);
 
   // Gestione stato online/offline
   useEffect(() => {
@@ -35,23 +32,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, []);
-
-  // Aggiorna contatore richieste pendenti
-  useEffect(() => {
-    const updatePendingCount = async () => {
-      try {
-        const count = await offlineQueue.getPendingCount();
-        setPendingSync(count);
-      } catch {
-        // Ignora errori IndexedDB
-      }
-    };
-
-    updatePendingCount();
-    const interval = setInterval(updatePendingCount, 30000); // Ogni 30 secondi
-
-    return () => clearInterval(interval);
   }, []);
 
   // Il server rifiuta le richieste di chi deve cambiare la password (403
@@ -148,14 +128,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       user,
       isAuthenticated: !!user,
       isOnline,
-      pendingSync,
       loading,
       login,
       logout,
       logoutAll,
       refreshProfile,
     }),
-    [user, isOnline, pendingSync, loading, login, logout, logoutAll, refreshProfile]
+    [user, isOnline, loading, login, logout, logoutAll, refreshProfile]
   );
 
   return (

@@ -174,10 +174,18 @@ export class PagamentiController {
     return this.pagamentiService.create(createPagamentoDto, req.user?.email);
   }
 
+  /**
+   * Pagamenti di una scadenza. Senza scadenza la risposta sarebbe l'intero
+   * archivio (quasi 20.000 pagamenti con scadenza, veicolo e cliente): per
+   * gli elenchi c'è /pagamenti/paginated, per le esportazioni /report.
+   */
   @Get()
   findAll(@Query('idScadenza') idScadenza?: string) {
-    const parsedIdScadenza = idScadenza ? parseInt(idScadenza, 10) : undefined;
-    return this.pagamentiService.findAll(parsedIdScadenza);
+    const id = Number(idScadenza);
+    if (!Number.isInteger(id) || id < 1) {
+      throw new BadRequestException('Indicare idScadenza');
+    }
+    return this.pagamentiService.findAll(id);
   }
 
   /**

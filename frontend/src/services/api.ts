@@ -149,8 +149,11 @@ api.interceptors.response.use(
 );
 
 /**
- * Svuota la cache API del service worker: le risposte autenticate non devono
- * restare leggibili in Cache Storage dopo il logout.
+ * Elimina i dati dell'applicazione rimasti nel browser dalle versioni
+ * precedenti: la cache delle risposte API del service worker (dati dei
+ * clienti leggibili da chiunque usi quel computer, anche dopo aver chiuso
+ * il browser) e il database della vecchia coda offline, mai utilizzata.
+ * Chiamata all'avvio e al logout.
  */
 export const clearApiCache = async (): Promise<void> => {
   try {
@@ -159,6 +162,11 @@ export const clearApiCache = async (): Promise<void> => {
     }
   } catch {
     // Cache Storage non disponibile (browser vecchio/contesto insicuro): ignora
+  }
+  try {
+    indexedDB?.deleteDatabase('sissibol-offline');
+  } catch {
+    // IndexedDB non disponibile: niente da eliminare
   }
 };
 

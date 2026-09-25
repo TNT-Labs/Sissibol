@@ -16,6 +16,7 @@ import { AuditModule } from './audit/audit.module';
 import { MailModule } from './mail/mail.module';
 import { CompletezzaModule } from './completezza/completezza.module';
 import { SistemaModule } from './sistema/sistema.module';
+import { ReportModule } from './report/report.module';
 
 @Module({
   imports: [
@@ -31,15 +32,20 @@ import { SistemaModule } from './sistema/sistema.module';
         ttl: 1000, // 1 secondo
         limit: 10, // max 10 richieste per secondo
       },
+      // Limiti per IP. Dietro Cloudflare tutto lo studio può uscire da un
+      // unico indirizzo pubblico, e la ricerca durante la digitazione moltiplica
+      // le richieste: con 100 al minuto e 1000 all'ora il lavoro normale di più
+      // persone riceveva errori 429. Il login ha limiti propri, molto più
+      // stretti, e il blocco dell'utente dopo 5 password errate.
       {
         name: 'medium',
         ttl: 60000, // 1 minuto
-        limit: 100, // max 100 richieste per minuto
+        limit: 300,
       },
       {
         name: 'long',
         ttl: 3600000, // 1 ora
-        limit: 1000, // max 1000 richieste per ora
+        limit: 6000,
       },
     ]),
     PrismaModule,
@@ -55,6 +61,7 @@ import { SistemaModule } from './sistema/sistema.module';
     MailModule,
     CompletezzaModule,
     SistemaModule,
+    ReportModule,
   ],
   providers: [
     // Applica rate limiting globalmente

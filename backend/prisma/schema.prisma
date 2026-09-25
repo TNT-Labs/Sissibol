@@ -297,6 +297,7 @@ enum AzioneAudit {
   CREAZIONE
   MODIFICA
   ELIMINAZIONE
+  ESPORTAZIONE
 }
 
 enum StatoScadenza {

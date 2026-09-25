@@ -63,7 +63,9 @@ export interface Cliente {
 }
 
 // Helper per ottenere il nome visualizzato del cliente
-export const getClienteDisplayName = (cliente: Cliente): string => {
+export const getClienteDisplayName = (
+  cliente: Pick<Cliente, 'tipoCliente' | 'ragioneSociale' | 'nome' | 'cognome'>,
+): string => {
   if (cliente.tipoCliente === TipoCliente.PERSONA_FISICA) {
     return `${cliente.cognome || ''} ${cliente.nome || ''}`.trim() || 'N/A';
   }

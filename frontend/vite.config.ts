@@ -16,10 +16,6 @@ export default defineConfig({
     __BUILD_TIME__: JSON.stringify(buildTime),
   },
   build: {
-    // exceljs/jspdf sono importati dinamicamente (solo alla generazione di
-    // un report), quindi finiscono in chunk separati e non pesano sul bundle
-    // iniziale: alziamo la soglia per non far scattare warning su di loro.
-    chunkSizeWarningLimit: 1000,
     rollupOptions: {
       output: {
         manualChunks: {
@@ -63,32 +59,10 @@ export default defineConfig({
         // (Prima qui c'era version.json, un file che non esiste: un file
         // mancante nel precache fa fallire l'installazione del service worker.)
         runtimeCaching: [
-          {
-            // Risposte delle API per l'uso offline, solo sotto il percorso
-            // dell'app e solo risposte riuscite. Mai autenticazione e stato
-            // del sistema. La cache viene svuotata al logout (clearApiCache).
-            urlPattern: ({ url, sameOrigin }) => {
-              const api = `${base}api/`
-              const percorso = sameOrigin && url.pathname.startsWith(api)
-                ? url.pathname.slice(api.length - 1)
-                : url.pathname
-              const apiPaths = ['/clienti', '/veicoli', '/scadenze', '/pagamenti', '/bollo', '/tariffe']
-              return apiPaths.some(path => percorso.startsWith(path))
-            },
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'api-cache',
-              expiration: {
-                maxEntries: 100,
-                maxAgeSeconds: 86400, // 1 giorno
-              },
-              networkTimeoutSeconds: 10, // Fallback a cache dopo 10s di timeout
-              cacheableResponse: {
-                // Solo 200: una risposta opaca (0) potrebbe essere un errore.
-                statuses: [200],
-              },
-            },
-          },
+          // Nessuna cache delle risposte API: contengono dati dei clienti, che
+          // resterebbero leggibili sul computer anche dopo aver chiuso il
+          // browser. Le versioni precedenti le salvavano ("api-cache"):
+          // clearApiCache() le elimina all'avvio.
           {
             // Cache immagini e asset statici
             urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp|ico)$/i,

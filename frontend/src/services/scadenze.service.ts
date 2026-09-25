@@ -1,5 +1,5 @@
 import { api } from './api';
-import type { Scadenza, StatoScadenza } from '../types';
+import type { Cliente, Scadenza, StatoScadenza } from '../types';
 
 // Interfaccia per la risposta paginata
 export interface PaginatedResponse<T> {
@@ -22,10 +22,30 @@ export interface ScadenzeStats {
   importoTotale: number;
 }
 
+/** Risultato della ricerca di scadenze da pagare (dati essenziali). */
+export interface ScadenzaTrovata {
+  id: number;
+  dataScadenza: string;
+  meseScadenza: number;
+  annoScadenza: number;
+  periodicita: string;
+  importoPrevisto: string | null;
+  stato: StatoScadenza;
+  veicolo: {
+    id: number;
+    targa: string;
+    cliente: Pick<Cliente, 'id' | 'tipoCliente' | 'ragioneSociale' | 'nome' | 'cognome'>;
+  };
+}
+
 export const scadenzeService = {
-  async getAll(stato?: StatoScadenza, idCliente?: number): Promise<Scadenza[]> {
-    const response = await api.get<Scadenza[]>('/scadenze', {
-      params: { stato, idCliente },
+  /**
+   * Scadenze non pagate (da pagare o scadute) per targa o cliente: pochi
+   * risultati, per scegliere quella a cui registrare un pagamento.
+   */
+  async cercaDaPagare(testo: string): Promise<ScadenzaTrovata[]> {
+    const response = await api.get<ScadenzaTrovata[]>('/scadenze/cerca', {
+      params: { q: testo || undefined, limite: 20 },
     });
     return response.data;
   },
@@ -56,40 +76,6 @@ export const scadenzeService = {
       params: options,
     });
     return response.data;
-  },
-
-  /**
-   * Itera su tutte le pagine e chiama il callback per ogni chunk.
-   * Utile per generare report senza caricare tutto in memoria.
-   *
-   * @param options - Opzioni di filtro
-   * @param onChunk - Callback chiamata per ogni pagina di dati
-   * @param pageSize - Dimensione della pagina (default: 500)
-   */
-  async iterateAll(
-    options: { stato?: StatoScadenza; idCliente?: number; annoFrom?: number; annoTo?: number },
-    onChunk: (scadenze: Scadenza[], progress: { current: number; total: number }) => Promise<void> | void,
-    pageSize: number = 500,
-  ): Promise<{ totalCount: number }> {
-    let page = 1;
-    let totalCount = 0;
-
-    while (true) {
-      const response = await this.getAllPaginated({ ...options, page, pageSize });
-      totalCount = response.pagination.totalCount;
-
-      if (response.data.length === 0) break;
-
-      await onChunk(response.data, {
-        current: Math.min(page * pageSize, totalCount),
-        total: totalCount,
-      });
-
-      if (!response.pagination.hasNextPage) break;
-      page++;
-    }
-
-    return { totalCount };
   },
 
   /**

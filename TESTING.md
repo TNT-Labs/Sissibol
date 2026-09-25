@@ -38,6 +38,8 @@ backend/test/
 │   ├── avvisi.int-spec.ts
 │   ├── invio-avvisi.int-spec.ts    invio: doppi invii, ritentativi, recuperi
 │   ├── completezza.int-spec.ts     bonifica dati: rapporto, importi, audit
+│   ├── sicurezza-http.int-spec.ts  accessi via HTTP: cookie, blocco, token, cambio password
+│   ├── dati-http.int-spec.ts       ricerca, limiti delle liste, report Excel/PDF, audit esportazioni
 │   └── audit.int-spec.ts
 └── tools/                          generatori dei fixture e diagnostica
 ```
