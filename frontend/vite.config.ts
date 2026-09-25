@@ -21,7 +21,7 @@ export default defineConfig({
         manualChunks: {
           // Vendor stabile (React + router): cache di lungo periodo separata
           // dal codice applicativo che cambia più spesso.
-          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          'react-vendor': ['react', 'react-dom', 'react-router'],
         },
       },
     },

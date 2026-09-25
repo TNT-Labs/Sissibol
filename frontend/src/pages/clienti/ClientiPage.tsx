@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router';
 import { clientiService } from '../../services/clienti.service';
 import { TipoCliente, getClienteDisplayName } from '../../types';
 import type { Cliente } from '../../types';

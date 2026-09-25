@@ -52,7 +52,6 @@ services:
       # Obbligatoria: con un valore noto chiunque potrebbe firmare token validi.
       # Generarla con: openssl rand -base64 48
       JWT_SECRET: ${JWT_SECRET:?Impostare JWT_SECRET nel file .env (openssl rand -base64 48)}
-      JWT_EXPIRATION: ${JWT_EXPIRATION:-24h}
       PORT: 3000
       NODE_ENV: production
       # Dietro nginx: l'IP del client arriva in X-Forwarded-For (limiti dei

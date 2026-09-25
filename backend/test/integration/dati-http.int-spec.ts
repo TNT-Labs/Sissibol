@@ -8,6 +8,8 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
 import * as bcrypt from 'bcryptjs';
 import * as ExcelJS from 'exceljs';
+import { readdirSync, rmSync, statSync } from 'fs';
+import { join } from 'path';
 import { disconnectPrisma, getPrisma, getTestDatabaseUrl, resetDatabase } from './setup/test-db';
 
 const PASSWORD = 'Tassa#Automobilistica-42';
@@ -144,6 +146,55 @@ describe('Liste e report (HTTP)', () => {
       expect(tutte.json.map((s: any) => s.veicolo.targa)).toEqual(['AB123CD', 'AB123CD', 'XY987ZW', 'AB123CD']);
       expect((await richiesta('GET', '/scadenze/cerca?limite=2')).json).toHaveLength(2);
       expect((await richiesta('GET', '/scadenze/cerca?limite=abc')).stato).toBe(200);
+    });
+  });
+
+  describe('ricevute dei pagamenti (caricamento multipart)', () => {
+    const invia = async (file: Blob, nome: string) => {
+      const scadenza = await prisma.scadenza.findFirst({ where: { stato: 'DA_PAGARE', veicolo: { targa: 'XY987ZW' } } });
+      const modulo = new FormData();
+      modulo.append('idScadenza', String(scadenza.id));
+      modulo.append('dataPagamento', '2026-06-10');
+      modulo.append('importoPagato', '250.25');
+      modulo.append('ricevuta', file, nome);
+      const r = await fetch(`${base}/pagamenti`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'X-Forwarded-For': `198.51.100.${ip++ % 250}` },
+        body: modulo,
+      });
+      return { stato: r.status, json: await r.json() };
+    };
+
+    it('una ricevuta PDF si carica e si riscarica identica', async () => {
+      const contenuto = Buffer.from('%PDF-1.4\n% ricevuta di prova\n%%EOF\n');
+      const creato = await invia(new Blob([contenuto], { type: 'application/pdf' }), 'ricevuta.pdf');
+      expect(creato.stato).toBe(201);
+      expect(creato.json.ricevutaFile).toMatch(/^ricevuta-\d+-\d+\.pdf$/);
+
+      try {
+        const r = await richiesta('GET', `/pagamenti/${creato.json.id}/ricevuta`);
+        expect(r.stato).toBe(200);
+        expect(r.intestazioni.get('content-type')).toBe('application/pdf');
+        expect(r.buffer.equals(contenuto)).toBe(true);
+      } finally {
+        rmSync(join('uploads/ricevute', creato.json.ricevutaFile), { force: true });
+      }
+    });
+
+    it('tipi non ammessi o travestiti e file oltre 5 MB sono respinti, senza lasciare file', async () => {
+      const inizio = Date.now();
+      expect((await invia(new Blob(['MZ'], { type: 'application/x-msdownload' }), 'programma.exe')).stato).toBe(400);
+      expect((await invia(new Blob(['<script>'], { type: 'text/html' }), 'finto.pdf')).stato).toBe(400);
+      // Tipo ed estensione dichiarati coerenti, ma il contenuto è una pagina HTML.
+      const travestito = await invia(new Blob(['<html><script>alert(1)</script>'], { type: 'application/pdf' }), 'ricevuta.pdf');
+      expect(travestito.stato).toBe(400);
+      expect(travestito.json.message).toMatch(/contenuto del file non corrisponde/);
+      expect(readdirSync('uploads/ricevute').filter((f) => statSync(join('uploads/ricevute', f)).mtimeMs > inizio)).toEqual([]);
+      const grande = await invia(new Blob([Buffer.alloc(5 * 1024 * 1024 + 1)], { type: 'application/pdf' }), 'grande.pdf');
+      expect(grande.stato).toBe(413);
+      expect(await prisma.pagamento.count({ where: { importoPagato: 250.25 } })).toBe(0);
+      // Nemmeno il file troppo grande resta a metà sul disco.
+      expect(readdirSync('uploads/ricevute').filter((f) => statSync(join('uploads/ricevute', f)).mtimeMs > inizio)).toEqual([]);
     });
   });
 

@@ -60,8 +60,9 @@ export class ScadenzeController {
    * GET /scadenze/cerca?q=rossi AB123&limite=20
    */
   @Get('cerca')
-  cerca(@Query('q') q?: string, @Query('limite') limite?: string) {
-    return this.scadenzeService.cercaDaPagare(q, limite ? Number(limite) : undefined);
+  cerca(@Query('q') q?: unknown, @Query('limite') limite?: string) {
+    // Un parametro ripetuto (?q=a&q=b) arriva come array: si usa solo se testo.
+    return this.scadenzeService.cercaDaPagare(typeof q === 'string' ? q : undefined, limite ? Number(limite) : undefined);
   }
 
   /**

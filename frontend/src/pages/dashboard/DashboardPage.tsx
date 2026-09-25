@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { scadenzeService, type ScadenzeStats } from '../../services/scadenze.service';
 import type { Scadenza } from '../../types';
 import { getClienteDisplayName } from '../../types';

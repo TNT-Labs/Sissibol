@@ -68,9 +68,11 @@ export const RicercaRemota: React.FC<RicercaRemotaProps> = ({
       });
   }, [aperto, testoRitardato]);
 
-  const risultati = risposta.opzioni;
-  const errore = risposta.errore;
   const caricamento = aperto && (risposta.testo !== testoRitardato || testo !== testoRitardato);
+  // Mentre si scrive, i risultati del testo precedente non si mostrano: sceglierli
+  // (anche con Invio) selezionerebbe un elemento diverso da quello cercato.
+  const risultati = caricamento ? [] : risposta.opzioni;
+  const errore = !caricamento && risposta.errore;
 
   const chiudi = () => {
     setAperto(false);

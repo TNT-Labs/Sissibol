@@ -1,896 +1,169 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
-import { scadenzeService } from '../../services/scadenze.service';
-import { veicoliService } from '../../services/veicoli.service';
-import { pagamentiService } from '../../services/pagamenti.service';
-import { StatoScadenza, Periodicita, TipoCliente, getClienteDisplayName } from '../../types';
-import type { Scadenza, Cliente } from '../../types';
-import { getErrorMessage } from '../../utils/errors';
-import { haImporto, formattaImporto, IMPORTO_MANCANTE } from '../../utils/importi';
+import React, { useMemo, useState } from 'react';
+import { Calendar as CalendarIcon, Plus, RotateCcw, Wand2 } from 'lucide-react';
 import { Button } from '../../components/common/Button';
-import { Input } from '../../components/common/Input';
-import { SearchableSelect } from '../../components/common/SearchableSelect';
-import { RicercaRemota } from '../../components/common/RicercaRemota';
-import type { SelectOption } from '../../components/common/SearchableSelect';
-import { Modal } from '../../components/common/Modal';
+import { getMeseLabel } from '../../constants/domini';
 import { useToast } from '../../context/ToastContext';
-import { Plus, X, Calendar as CalendarIcon, ChevronDown, ChevronRight, Car, Edit, Trash2, Calculator, Wand2, CreditCard, CheckCircle } from 'lucide-react';
-import { MESI, getMeseLabel } from '../../constants/domini';
+import { scadenzeService } from '../../services/scadenze.service';
+import type { Cliente, Scadenza } from '../../types';
+import { getErrorMessage } from '../../utils/errors';
+import { FiltroPeriodo } from './FiltroPeriodo';
+import { GeneraScadenzeModal } from './GeneraScadenzeModal';
+import { GruppoCliente } from './GruppoCliente';
+import { PagamentoMultiploModal } from './PagamentoMultiploModal';
+import { raggruppaPerCliente } from './raggruppa';
+import { ScadenzaModal } from './ScadenzaModal';
+import { daRegolare } from './stati';
+import { useScadenzeDelMese } from './useScadenzeDelMese';
 
-// Opzioni per i mesi
-const MESI_OPTIONS: SelectOption[] = MESI.map(m => ({ value: m.value, label: m.label }));
+/** Modale aperto: al massimo uno alla volta. */
+type Aperto =
+  | { tipo: 'scadenza'; scadenza: Scadenza | null }
+  | { tipo: 'genera' }
+  | { tipo: 'paga'; cliente: Cliente; scadenze: Scadenza[] }
+  | null;
 
-// Genera opzioni per gli anni
-const getAnniOptions = (startOffset: number = -1, count: number = 5): SelectOption[] => {
-  const currentYear = new Date().getFullYear();
-  return Array.from({ length: count }, (_, i) => {
-    const anno = currentYear + startOffset + i;
-    return { value: anno, label: String(anno) };
-  });
-};
-
-const ANNI_OPTIONS = getAnniOptions(-1, 5);
-const ANNI_FUTURI_OPTIONS = getAnniOptions(0, 10);
-
-// Opzioni per periodicita
-const PERIODICITA_OPTIONS: SelectOption[] = [
-  { value: 'ANNUALE', label: 'Annuale (12 mesi)' },
-  { value: 'QUADRIMESTRALE', label: 'Quadrimestrale (4 mesi)' },
-];
-
-// Opzioni per stato
-const STATO_OPTIONS: SelectOption[] = [
-  { value: 'DA_PAGARE', label: 'Da Pagare' },
-  { value: 'PAGATO', label: 'Pagato' },
-  { value: 'SCADUTO', label: 'Scaduto' },
-];
-
-// Calcola il mese corrente
-const getCurrentMonth = () => {
-  const oggi = new Date();
-  const mese = oggi.getMonth() + 1; // +1 per 0-indexed
-  const anno = oggi.getFullYear();
-  return { mese, anno };
-};
-
-interface ClienteConScadenze {
-  cliente: Cliente;
-  scadenze: Scadenza[];
-  veicoliCount: number;
-}
-
+/**
+ * Scadenziario: le scadenze di un mese, raggruppate per cliente.
+ *
+ * La pagina coordina; filtro, gruppi e modali sono componenti separati
+ * (prima era un unico file di quasi 900 righe).
+ */
 export const ScadenzePage: React.FC = () => {
-  const [scadenze, setScadenze] = useState<Scadenza[]>([]);
-  // Veicolo scelto nel modulo: si cerca sul server (i veicoli sono migliaia).
-  const [veicoloScelto, setVeicoloScelto] = useState<SelectOption | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  // Filtro mese/anno - default mese corrente
-  const defaultPeriod = getCurrentMonth();
-  const [meseSelezionato, setMeseSelezionato] = useState(defaultPeriod.mese);
-  const [annoSelezionato, setAnnoSelezionato] = useState(defaultPeriod.anno);
-
-  // Clienti espansi
-  const [expandedClienti, setExpandedClienti] = useState<Set<number>>(new Set());
-
-  // Modal per nuova/modifica scadenza
-  const [showModal, setShowModal] = useState(false);
-  const [editingScadenza, setEditingScadenza] = useState<Scadenza | null>(null);
-
-  // Modal per generazione scadenze future
-  const [showGeneraModal, setShowGeneraModal] = useState(false);
-  const [annoTarget, setAnnoTarget] = useState(new Date().getFullYear() + 1);
-  const [generaLoading, setGeneraLoading] = useState(false);
-  const [generaResult, setGeneraResult] = useState<{
-    veicoliProcessati: number;
-    scadenzeCreate: number;
-    scadenzeSaltate: number;
-    scadenzeSenzaImporto: number;
-    errori: string[];
-  } | null>(null);
-
-  // Modal per pagamento multiplo
-  const [showPagaModal, setShowPagaModal] = useState(false);
-  const [clientePagamento, setClientePagamento] = useState<{ cliente: Cliente; scadenze: Scadenza[] } | null>(null);
-  const [pagaLoading, setPagaLoading] = useState(false);
-  const [pagaFormData, setPagaFormData] = useState({
-    dataPagamento: new Date().toISOString().split('T')[0],
-    metodoPagamento: '',
-  });
+  const oggi = new Date();
+  const [periodo, setPeriodo] = useState({ mese: oggi.getMonth() + 1, anno: oggi.getFullYear() });
+  const { scadenze, caricamento, aggiornamento, errore, ricarica } = useScadenzeDelMese(periodo.mese, periodo.anno);
+  const [aperti, setAperti] = useState<Set<number>>(new Set());
+  const [modale, setModale] = useState<Aperto>(null);
   const toast = useToast();
 
-  const [formData, setFormData] = useState<{
-    idVeicolo: number;
-    meseScadenza: number;
-    annoScadenza: number;
-    periodicita: Periodicita;
-    importoPrevisto: string;
-    stato: StatoScadenza;
-  }>({
-    idVeicolo: 0,
-    meseScadenza: defaultPeriod.mese,
-    annoScadenza: defaultPeriod.anno,
-    periodicita: Periodicita.ANNUALE,
-    importoPrevisto: '',
-    stato: StatoScadenza.DA_PAGARE,
-  });
+  const gruppi = useMemo(() => raggruppaPerCliente(scadenze), [scadenze]);
+  const veicoliInScadenza = gruppi.reduce((totale, g) => totale + g.veicoli, 0);
 
-  const cercaVeicoli = useCallback(async (testo: string): Promise<SelectOption[]> => {
-    const risultato = await veicoliService.getAllPaginated({ search: testo || undefined, pageSize: 20 });
-    return risultato.data.map((v) => ({
-      value: v.id,
-      label: `${v.targa} · ${v.cliente ? getClienteDisplayName(v.cliente) : 'cliente non indicato'}`,
-    }));
-  }, []);
-
-  const loadScadenze = useCallback(async () => {
-    setLoading(true);
-    try {
-      // Carica solo le scadenze del mese/anno selezionato (ottimizzato)
-      const scadenzeData = await scadenzeService.getByMeseAnno(meseSelezionato, annoSelezionato);
-      setScadenze(scadenzeData);
-    } catch (error) {
-      console.error('Errore nel caricamento delle scadenze:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [meseSelezionato, annoSelezionato]);
-
-
-  // Ricarica scadenze quando cambia mese/anno
-  useEffect(() => {
-    loadScadenze();
-  }, [loadScadenze]);
-
-  // Raggruppa scadenze per cliente (già filtrate dal server)
-  const clientiConScadenze = useMemo((): ClienteConScadenze[] => {
-    const clienteMap = new Map<number, ClienteConScadenze>();
-
-    scadenze.forEach((scadenza) => {
-      const clienteId = scadenza.veicolo?.cliente?.id;
-      // Se non c'è cliente associato, usa un ID fittizio per raggruppare
-      const effectiveClienteId = clienteId || -1;
-
-      if (!clienteMap.has(effectiveClienteId)) {
-        clienteMap.set(effectiveClienteId, {
-          cliente: scadenza.veicolo?.cliente || {
-            id: -1,
-            tipoCliente: TipoCliente.PERSONA_GIURIDICA,
-            ragioneSociale: 'Cliente non associato',
-          } as Cliente,
-          scadenze: [],
-          veicoliCount: 0,
-        });
-      }
-
-      const entry = clienteMap.get(effectiveClienteId)!;
-      entry.scadenze.push(scadenza);
-      entry.veicoliCount = entry.scadenze.length;
+  const apriChiudi = (idCliente: number) =>
+    setAperti((prima) => {
+      const dopo = new Set(prima);
+      if (dopo.has(idCliente)) dopo.delete(idCliente);
+      else dopo.add(idCliente);
+      return dopo;
     });
 
-    // Ordina per nome cliente
-    return Array.from(clienteMap.values()).sort((a, b) =>
-      getClienteDisplayName(a.cliente).localeCompare(getClienteDisplayName(b.cliente))
-    );
-  }, [scadenze]);
-
-  const toggleExpanded = (clienteId: number) => {
-    setExpandedClienti((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(clienteId)) {
-        newSet.delete(clienteId);
-      } else {
-        newSet.add(clienteId);
-      }
-      return newSet;
-    });
-  };
-
-  const handleOpenModal = (scadenza?: Scadenza) => {
-    if (scadenza) {
-      setEditingScadenza(scadenza);
-      setFormData({
-        idVeicolo: scadenza.idVeicolo,
-        meseScadenza: scadenza.meseScadenza,
-        annoScadenza: scadenza.annoScadenza,
-        periodicita: scadenza.periodicita,
-        importoPrevisto: scadenza.importoPrevisto?.toString() || '',
-        stato: scadenza.stato,
-      });
-      setVeicoloScelto({
-        value: scadenza.idVeicolo,
-        label: `${scadenza.veicolo?.targa ?? ''} · ${scadenza.veicolo?.cliente ? getClienteDisplayName(scadenza.veicolo.cliente) : ''}`,
-      });
-    } else {
-      setEditingScadenza(null);
-      setVeicoloScelto(null);
-      setFormData({
-        // Nessun veicolo preselezionato: va cercato e scelto.
-        idVeicolo: 0,
-        meseScadenza: meseSelezionato,
-        annoScadenza: annoSelezionato,
-        periodicita: Periodicita.ANNUALE,
-        importoPrevisto: '',
-        stato: StatoScadenza.DA_PAGARE,
-      });
-    }
-    setShowModal(true);
-  };
-
-  const handleCloseModal = () => {
-    setShowModal(false);
-    setEditingScadenza(null);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.idVeicolo) {
-      toast.error('Veicolo mancante', 'Cerca e scegli il veicolo della scadenza.');
-      return;
-    }
+  const ricalcola = async (scadenza: Scadenza) => {
     try {
-      const data = {
-        idVeicolo: formData.idVeicolo,
-        meseScadenza: formData.meseScadenza,
-        annoScadenza: formData.annoScadenza,
-        periodicita: formData.periodicita,
-        importoPrevisto: formData.importoPrevisto ? parseFloat(formData.importoPrevisto) : undefined,
-        stato: formData.stato,
-      };
-      if (editingScadenza) {
-        await scadenzeService.update(editingScadenza.id, data);
-      } else {
-        await scadenzeService.create(data);
-      }
-      handleCloseModal();
-      loadScadenze();
-    } catch (error) {
-      console.error('Errore nel salvataggio della scadenza:', error);
-    }
-  };
-
-  const handleDelete = async (id: number) => {
-    if (confirm('Sei sicuro di voler eliminare questa scadenza?')) {
-      try {
-        await scadenzeService.delete(id);
-        loadScadenze();
-      } catch (error) {
-        console.error('Errore nell\'eliminazione della scadenza:', error);
-      }
-    }
-  };
-
-  const handleRicalcolaBollo = async (id: number) => {
-    try {
-      await scadenzeService.ricalcolaImporto(id);
-      toast.success('Importo ricalcolato', 'L\'importo previsto è stato aggiornato dal tariffario.');
-      loadScadenze();
-    } catch (error) {
+      await scadenzeService.ricalcolaImporto(scadenza.id);
+      toast.success('Importo ricalcolato', "L'importo previsto è stato aggiornato dal tariffario.");
+      ricarica();
+    } catch (e) {
       // Il backend indica i dati mancanti; l'importo esistente resta invariato.
-      toast.error(
-        'Ricalcolo non possibile',
-        getErrorMessage(error, 'Verifica che il veicolo abbia tutti i dati necessari.'),
-      );
+      toast.error('Ricalcolo non possibile', getErrorMessage(e, 'Verifica che il veicolo abbia tutti i dati necessari.'));
     }
   };
 
-  const handleGeneraScadenze = async () => {
-    setGeneraLoading(true);
-    setGeneraResult(null);
+  const elimina = async (scadenza: Scadenza) => {
+    if (!window.confirm(`Eliminare la scadenza di ${scadenza.veicolo?.targa ?? 'questo veicolo'}?`)) return;
     try {
-      const result = await scadenzeService.generaScadenzeFuture(annoTarget);
-      setGeneraResult(result);
-      // Ricarica le scadenze dopo la generazione
-      loadScadenze();
-    } catch (error: unknown) {
-      console.error('Errore nella generazione delle scadenze:', error);
-      setGeneraResult({
-        veicoliProcessati: 0,
-        scadenzeCreate: 0,
-        scadenzeSaltate: 0,
-        scadenzeSenzaImporto: 0,
-        errori: [getErrorMessage(error, 'Errore sconosciuto')],
-      });
-    } finally {
-      setGeneraLoading(false);
+      await scadenzeService.delete(scadenza.id);
+      toast.success('Scadenza eliminata');
+      ricarica();
+    } catch (e) {
+      // Prima l'errore finiva solo nella console.
+      toast.error('Scadenza non eliminata', getErrorMessage(e, 'Riprova tra qualche istante.'));
     }
   };
 
-  // Apre il modal per pagamento multiplo di un cliente
-  const handleOpenPagaModal = useCallback((cliente: Cliente, scadenzeCliente: Scadenza[]) => {
-    // Filtra solo le scadenze DA_PAGARE
-    const scadenzeDaPagare = scadenzeCliente.filter(s => s.stato === StatoScadenza.DA_PAGARE);
-    if (scadenzeDaPagare.length === 0) {
-      toast.info('Nessuna scadenza da pagare', 'Tutte le scadenze di questo cliente sono già pagate.');
-      return;
-    }
-    setClientePagamento({ cliente, scadenze: scadenzeDaPagare });
-    setPagaFormData({
-      dataPagamento: new Date().toISOString().split('T')[0],
-      metodoPagamento: '',
-    });
-    setShowPagaModal(true);
-  }, [toast]);
-
-  const handleClosePagaModal = useCallback(() => {
-    setShowPagaModal(false);
-    setClientePagamento(null);
-  }, []);
-
-  // Esegue il pagamento multiplo
-  const handlePagaMultiplo = useCallback(async () => {
-    if (!clientePagamento) return;
-
-    setPagaLoading(true);
-    try {
-      const result = await pagamentiService.createMultiplo({
-        idCliente: clientePagamento.cliente.id,
-        meseScadenza: meseSelezionato,
-        annoScadenza: annoSelezionato,
-        dataPagamento: pagaFormData.dataPagamento,
-        metodoPagamento: pagaFormData.metodoPagamento || undefined,
-      });
-
-      if (result.pagamentiCreati > 0) {
-        toast.success(
-          'Pagamenti registrati',
-          `${result.pagamentiCreati} pagament${result.pagamentiCreati === 1 ? 'o' : 'i'} registrat${result.pagamentiCreati === 1 ? 'o' : 'i'} con successo.`
-        );
-      }
-
-      if (result.errori.length > 0) {
-        console.error('Errori pagamento multiplo:', result.errori);
-        toast.warning(
-          'Alcuni errori',
-          `${result.errori.length} scadenze non pagate: ${result.errori.join('; ')}`
-        );
-      }
-
-      handleClosePagaModal();
-      loadScadenze();
-    } catch (error: unknown) {
-      console.error('Errore nel pagamento multiplo:', error);
-      toast.error('Errore', getErrorMessage(error, 'Impossibile completare il pagamento.'));
-    } finally {
-      setPagaLoading(false);
-    }
-  }, [clientePagamento, meseSelezionato, annoSelezionato, pagaFormData, toast, handleClosePagaModal, loadScadenze]);
-
-  const getStatoColor = (stato: string) => {
-    switch (stato) {
-      case 'DA_PAGARE':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'PAGATO':
-        return 'bg-green-100 text-green-800';
-      case 'SCADUTO':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
+  const chiudiERicarica = () => {
+    setModale(null);
+    ricarica();
   };
-
-  // Conta totale veicoli in scadenza
-  const totaleVeicoli = clientiConScadenze.reduce((acc, c) => acc + c.veicoliCount, 0);
-
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap justify-between items-center gap-3">
-        <h1 className="text-3xl font-bold text-gray-900 flex items-center">
-          <CalendarIcon className="mr-3" size={32} />
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 flex items-center">
+          <CalendarIcon className="mr-3" size={30} aria-hidden="true" />
           Scadenziario
         </h1>
         <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" onClick={() => setShowGeneraModal(true)}>
-            <Wand2 size={20} className="mr-2" />
-            Genera Scadenze
+          <Button variant="secondary" onClick={() => setModale({ tipo: 'genera' })}>
+            <Wand2 size={20} className="mr-2" aria-hidden="true" />
+            Genera scadenze
           </Button>
-          <Button onClick={() => handleOpenModal()}>
-            <Plus size={20} className="mr-2" />
-            Nuova Scadenza
+          <Button onClick={() => setModale({ tipo: 'scadenza', scadenza: null })}>
+            <Plus size={20} className="mr-2" aria-hidden="true" />
+            Nuova scadenza
           </Button>
         </div>
       </div>
 
-      {/* Filtro Mese/Anno */}
-      <div className="bg-white rounded-lg shadow p-4">
-        <div className="flex flex-wrap items-end gap-4">
-          <div className="w-48">
-            <SearchableSelect
-              label="Mese"
-              options={MESI_OPTIONS}
-              value={meseSelezionato}
-              onChange={(value) => setMeseSelezionato(Number(value))}
-              placeholder="Seleziona mese..."
-            />
-          </div>
-          <div className="w-36">
-            <SearchableSelect
-              label="Anno"
-              options={ANNI_OPTIONS}
-              value={annoSelezionato}
-              onChange={(value) => setAnnoSelezionato(Number(value))}
-              placeholder="Seleziona anno..."
-            />
-          </div>
-          <div className="hidden sm:block flex-1"></div>
-          <div className="text-sm text-gray-600 pb-2">
-            <span className="font-semibold text-lg text-blue-600">{totaleVeicoli}</span> veicoli in scadenza
-          </div>
-        </div>
-      </div>
+      {/* Il filtro resta visibile durante il caricamento: prima spariva a ogni cambio di mese. */}
+      <FiltroPeriodo
+        mese={periodo.mese}
+        anno={periodo.anno}
+        onChange={(mese, anno) => setPeriodo({ mese, anno })}
+        riepilogo={
+          !caricamento && (
+            <>
+              <span className="font-semibold text-lg text-blue-600">{veicoliInScadenza}</span> veicol
+              {veicoliInScadenza === 1 ? 'o' : 'i'} in scadenza
+            </>
+          )
+        }
+      />
 
-      {/* Lista raggruppata per cliente */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        {clientiConScadenze.length === 0 ? (
+      <div className="bg-white rounded-lg shadow overflow-hidden" aria-busy={caricamento || aggiornamento}>
+        {caricamento ? (
+          <div className="flex justify-center items-center h-48" role="status" aria-label="Caricamento">
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" />
+          </div>
+        ) : errore ? (
+          <div className="px-6 py-12 text-center" role="alert">
+            <p className="text-red-700">Impossibile caricare le scadenze.</p>
+            <Button variant="secondary" className="mt-4" onClick={ricarica}>
+              <RotateCcw size={16} className="mr-2" aria-hidden="true" />
+              Riprova
+            </Button>
+          </div>
+        ) : gruppi.length === 0 ? (
           <div className="px-6 py-12 text-center text-gray-500">
-            Nessuna scadenza per {getMeseLabel(meseSelezionato)} {annoSelezionato}
+            Nessuna scadenza per {getMeseLabel(periodo.mese).toLowerCase()} {periodo.anno}
           </div>
         ) : (
-          <div className="divide-y divide-gray-200">
-            {clientiConScadenze.map(({ cliente, scadenze: scadenzeCliente, veicoliCount }) => {
-              const isExpanded = expandedClienti.has(cliente.id);
-              return (
-                <div key={cliente.id}>
-                  {/* Riga cliente */}
-                  <div
-                    className="px-4 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-2 cursor-pointer hover:bg-gray-50"
-                    onClick={() => toggleExpanded(cliente.id)}
-                  >
-                    <div className="flex items-center space-x-3 min-w-0">
-                      {isExpanded ? (
-                        <ChevronDown size={20} className="text-gray-400" />
-                      ) : (
-                        <ChevronRight size={20} className="text-gray-400" />
-                      )}
-                      <div>
-                        <p className="font-medium text-gray-900">{getClienteDisplayName(cliente)}</p>
-                        <p className="text-sm text-gray-500">
-                          {cliente.email || cliente.telefono || '-'}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {/* CTA Paga Tutti - solo se ci sono scadenze DA_PAGARE */}
-                      {scadenzeCliente.some(s => s.stato === StatoScadenza.DA_PAGARE) && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleOpenPagaModal(cliente, scadenzeCliente);
-                          }}
-                          className="inline-flex items-center whitespace-nowrap px-3 py-1.5 rounded-lg text-sm font-medium bg-green-600 text-white hover:bg-green-700 transition-colors"
-                          title="Segna tutti come pagati"
-                        >
-                          <CreditCard size={16} className="mr-1.5" />
-                          Paga Tutti
-                        </button>
-                      )}
-                      <span className="inline-flex items-center whitespace-nowrap px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
-                        <Car size={16} className="mr-1" />
-                        {veicoliCount} veicol{veicoliCount === 1 ? 'o' : 'i'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Dettaglio veicoli espanso */}
-                  {isExpanded && (
-                    <div className="bg-gray-50 px-4 sm:px-6 py-4 overflow-x-auto">
-                      <table className="min-w-full">
-                        <thead>
-                          <tr className="text-xs text-gray-500 uppercase">
-                            <th className="text-left py-2">Targa</th>
-                            <th className="text-left py-2">Tipo</th>
-                            <th className="text-left py-2">Data Immatric.</th>
-                            <th className="text-left py-2">Periodicita</th>
-                            <th className="text-left py-2">Importo</th>
-                            <th className="text-left py-2">Stato</th>
-                            <th className="text-right py-2">Azioni</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200">
-                          {scadenzeCliente.map((scadenza) => (
-                            <tr key={scadenza.id} className="text-sm">
-                              <td className="py-3 font-medium text-gray-900">
-                                {scadenza.veicolo?.targa || '-'}
-                              </td>
-                              <td className="py-3 text-gray-500">
-                                {scadenza.veicolo?.tipoVeicolo || '-'}
-                              </td>
-                              <td className="py-3 text-gray-500">
-                                {scadenza.veicolo?.dataImmatricolazione
-                                  ? new Date(scadenza.veicolo.dataImmatricolazione).toLocaleDateString('it-IT')
-                                  : '-'}
-                              </td>
-                              <td className="py-3">
-                                <span className="whitespace-nowrap px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
-                                  {scadenza.periodicita === 'QUADRIMESTRALE' ? '4 mesi' : 'Annuale'}
-                                </span>
-                              </td>
-                              <td className="py-3 pr-3 text-gray-500 whitespace-nowrap">
-                                {haImporto(scadenza.importoPrevisto) ? (
-                                  formattaImporto(scadenza.importoPrevisto)
-                                ) : (
-                                  <span
-                                    className="whitespace-nowrap px-2 py-1 text-xs font-medium rounded-full bg-amber-100 text-amber-800"
-                                    title={IMPORTO_MANCANTE.spiegazione}
-                                  >
-                                    {IMPORTO_MANCANTE.etichetta}
-                                  </span>
-                                )}
-                              </td>
-                              <td className="py-3">
-                                <span
-                                  className={`whitespace-nowrap px-2 py-1 text-xs font-medium rounded-full ${getStatoColor(
-                                    scadenza.stato
-                                  )}`}
-                                >
-                                  {scadenza.stato.replace('_', ' ')}
-                                </span>
-                              </td>
-                              <td className="py-3 text-right">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleRicalcolaBollo(scadenza.id);
-                                  }}
-                                  className="text-green-600 hover:text-green-900 mr-3"
-                                  title="Ricalcola importo bollo"
-                                >
-                                  <Calculator size={16} />
-                                </button>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleOpenModal(scadenza);
-                                  }}
-                                  className="text-blue-600 hover:text-blue-900 mr-3"
-                                  title="Modifica scadenza"
-                                >
-                                  <Edit size={16} />
-                                </button>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleDelete(scadenza.id);
-                                  }}
-                                  className="text-red-600 hover:text-red-900"
-                                  title="Elimina scadenza"
-                                >
-                                  <Trash2 size={16} />
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+          <div className={`divide-y divide-gray-200 transition-opacity ${aggiornamento ? 'opacity-60' : ''}`}>
+            {gruppi.map((gruppo) => (
+              <GruppoCliente
+                key={gruppo.cliente.id}
+                gruppo={gruppo}
+                aperto={aperti.has(gruppo.cliente.id)}
+                onApriChiudi={() => apriChiudi(gruppo.cliente.id)}
+                onPagaTutte={(cliente, elenco) => setModale({ tipo: 'paga', cliente, scadenze: elenco.filter(daRegolare) })}
+                onRicalcola={ricalcola}
+                onModifica={(scadenza) => setModale({ tipo: 'scadenza', scadenza })}
+                onElimina={elimina}
+              />
+            ))}
           </div>
         )}
       </div>
 
-      {/* Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-              <h2 className="text-xl font-semibold text-gray-900">
-                {editingScadenza ? 'Modifica Scadenza' : 'Nuova Scadenza'}
-              </h2>
-              <button onClick={handleCloseModal} className="text-gray-400 hover:text-gray-600">
-                <X size={24} />
-              </button>
-            </div>
-            <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
-              <RicercaRemota
-                label="Veicolo"
-                valore={veicoloScelto}
-                onChange={(opzione) => {
-                  setVeicoloScelto(opzione);
-                  setFormData({ ...formData, idVeicolo: opzione ? Number(opzione.value) : 0 });
-                }}
-                cerca={cercaVeicoli}
-                placeholder="Cerca per targa o cliente..."
-                required
-              />
-              <div className="grid grid-cols-2 gap-4">
-                <SearchableSelect
-                  label="Mese Scadenza"
-                  options={MESI_OPTIONS}
-                  value={formData.meseScadenza}
-                  onChange={(value) => setFormData({ ...formData, meseScadenza: Number(value) })}
-                  placeholder="Seleziona mese..."
-                  required
-                />
-                <SearchableSelect
-                  label="Anno"
-                  options={ANNI_FUTURI_OPTIONS}
-                  value={formData.annoScadenza}
-                  onChange={(value) => setFormData({ ...formData, annoScadenza: Number(value) })}
-                  placeholder="Seleziona anno..."
-                  required
-                />
-              </div>
-              <SearchableSelect
-                label="Periodicita"
-                options={PERIODICITA_OPTIONS}
-                value={formData.periodicita}
-                onChange={(value) => setFormData({ ...formData, periodicita: value as Periodicita })}
-                placeholder="Seleziona periodicita..."
-                required
-              />
-              <div>
-                <Input
-                  label="Importo Previsto"
-                  type="number"
-                  step="0.01"
-                  value={formData.importoPrevisto}
-                  onChange={(e) => setFormData({ ...formData, importoPrevisto: e.target.value })}
-                  placeholder="es. 150.00"
-                />
-                <p className="mt-1 text-sm text-gray-500">
-                  Lascia vuoto per calcolare automaticamente in base alle tariffe configurate
-                </p>
-              </div>
-              <SearchableSelect
-                label="Stato"
-                options={STATO_OPTIONS}
-                value={formData.stato}
-                onChange={(value) => setFormData({ ...formData, stato: value as StatoScadenza })}
-                placeholder="Seleziona stato..."
-                required
-              />
-              <div className="flex justify-end space-x-2 pt-4">
-                <Button type="button" variant="secondary" onClick={handleCloseModal}>
-                  Annulla
-                </Button>
-                <Button type="submit">
-                  {editingScadenza ? 'Salva' : 'Crea'}
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {modale?.tipo === 'scadenza' && (
+        <ScadenzaModal
+          scadenza={modale.scadenza}
+          mese={periodo.mese}
+          anno={periodo.anno}
+          onClose={() => setModale(null)}
+          onSalvata={chiudiERicarica}
+        />
       )}
-
-      {/* Modal Genera Scadenze Future */}
-      {showGeneraModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-lg w-full">
-            <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-              <h2 className="text-xl font-semibold text-gray-900 flex items-center">
-                <Wand2 size={24} className="mr-2 text-blue-600" />
-                Genera Scadenze Future
-              </h2>
-              <button
-                onClick={() => {
-                  setShowGeneraModal(false);
-                  setGeneraResult(null);
-                }}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X size={24} />
-              </button>
-            </div>
-            <div className="px-6 py-4 space-y-4">
-              {!generaResult ? (
-                <>
-                  <p className="text-gray-600">
-                    Questa funzione genera automaticamente le scadenze per tutti i veicoli
-                    fino all'anno selezionato. Le scadenze gia esistenti non verranno duplicate.
-                  </p>
-                  <SearchableSelect
-                    label="Genera scadenze fino all'anno:"
-                    options={ANNI_FUTURI_OPTIONS}
-                    value={annoTarget}
-                    onChange={(value) => setAnnoTarget(Number(value))}
-                    placeholder="Seleziona anno..."
-                    disabled={generaLoading}
-                  />
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <h4 className="font-medium text-blue-800 mb-2">Come funziona:</h4>
-                    <ul className="text-sm text-blue-700 space-y-1">
-                      <li>- Il mese di scadenza e calcolato dalla data di immatricolazione</li>
-                      <li>- Annuale: scadenza nel mese di immatricolazione</li>
-                      <li>- Quadrimestrale: 3 scadenze/anno, ogni 4 mesi a partire dal mese di immatricolazione</li>
-                      <li>- Calcola automaticamente l'importo in base alle tariffe</li>
-                      <li>- Veicoli senza data immatricolazione: usa scadenze esistenti come riferimento</li>
-                    </ul>
-                  </div>
-                </>
-              ) : (
-                <div className="space-y-4">
-                  <div className={`p-4 rounded-lg ${generaResult.scadenzeCreate > 0 ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-gray-200'}`}>
-                    <h4 className={`font-semibold mb-3 ${generaResult.scadenzeCreate > 0 ? 'text-green-800' : 'text-gray-800'}`}>
-                      Risultato Generazione
-                    </h4>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
-                      <div>
-                        <p className="text-2xl font-bold text-gray-900">{generaResult.veicoliProcessati}</p>
-                        <p className="text-sm text-gray-600">Veicoli processati</p>
-                      </div>
-                      <div>
-                        <p className="text-2xl font-bold text-green-600">{generaResult.scadenzeCreate}</p>
-                        <p className="text-sm text-gray-600">Scadenze create</p>
-                      </div>
-                      <div>
-                        <p className="text-2xl font-bold text-gray-500">{generaResult.scadenzeSaltate}</p>
-                        <p className="text-sm text-gray-600">Già esistenti</p>
-                      </div>
-                      <div title={IMPORTO_MANCANTE.spiegazione}>
-                        <p
-                          className={`text-2xl font-bold ${generaResult.scadenzeSenzaImporto > 0 ? 'text-amber-600' : 'text-gray-500'}`}
-                        >
-                          {generaResult.scadenzeSenzaImporto}
-                        </p>
-                        <p className="text-sm text-gray-600">Senza importo</p>
-                      </div>
-                    </div>
-                  </div>
-                  {generaResult.errori.length > 0 && (
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                      <h4 className="font-medium text-red-800 mb-2">Errori ({generaResult.errori.length}):</h4>
-                      <ul className="text-sm text-red-700 space-y-1 max-h-32 overflow-y-auto">
-                        {generaResult.errori.map((err, i) => (
-                          <li key={i}>- {err}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-2">
-              {!generaResult ? (
-                <>
-                  <Button
-                    variant="secondary"
-                    onClick={() => setShowGeneraModal(false)}
-                    disabled={generaLoading}
-                  >
-                    Annulla
-                  </Button>
-                  <Button onClick={handleGeneraScadenze} disabled={generaLoading}>
-                    {generaLoading ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                        Generazione in corso...
-                      </>
-                    ) : (
-                      <>
-                        <Wand2 size={18} className="mr-2" />
-                        Genera Scadenze
-                      </>
-                    )}
-                  </Button>
-                </>
-              ) : (
-                <Button
-                  onClick={() => {
-                    setShowGeneraModal(false);
-                    setGeneraResult(null);
-                  }}
-                >
-                  Chiudi
-                </Button>
-              )}
-            </div>
-          </div>
-        </div>
+      {modale?.tipo === 'genera' && <GeneraScadenzeModal onClose={() => setModale(null)} onGenerate={ricarica} />}
+      {modale?.tipo === 'paga' && (
+        <PagamentoMultiploModal
+          cliente={modale.cliente}
+          scadenze={modale.scadenze}
+          mese={periodo.mese}
+          anno={periodo.anno}
+          onClose={() => setModale(null)}
+          onPagato={chiudiERicarica}
+        />
       )}
-
-      {/* Modal Pagamento Multiplo */}
-      <Modal
-        isOpen={showPagaModal}
-        onClose={handleClosePagaModal}
-        title="Registra Pagamento Bolli"
-      >
-        {clientePagamento && (
-          <div className="space-y-4">
-            {/* Info Cliente */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="font-medium text-blue-900">
-                {getClienteDisplayName(clientePagamento.cliente)}
-              </p>
-              <p className="text-sm text-blue-700 mt-1">
-                Periodo: {getMeseLabel(meseSelezionato)} {annoSelezionato}
-              </p>
-            </div>
-
-            {/* Riepilogo Scadenze */}
-            <div>
-              <h4 className="text-sm font-medium text-gray-700 mb-2">
-                Scadenze da pagare ({clientePagamento.scadenze.length})
-              </h4>
-              <div className="max-h-48 overflow-y-auto border rounded-lg divide-y">
-                {clientePagamento.scadenze.map((scadenza) => (
-                  <div key={scadenza.id} className="px-3 py-2 flex justify-between items-center text-sm">
-                    <div>
-                      <span className="font-medium">{scadenza.veicolo?.targa}</span>
-                      <span className="text-gray-500 ml-2">{scadenza.veicolo?.tipoVeicolo}</span>
-                    </div>
-                    {haImporto(scadenza.importoPrevisto) ? (
-                      <span className="font-medium text-green-700">
-                        {formattaImporto(scadenza.importoPrevisto)}
-                      </span>
-                    ) : (
-                      <span
-                        className="text-xs font-medium text-amber-700"
-                        title={IMPORTO_MANCANTE.spiegazione}
-                      >
-                        Senza importo: esclusa
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-              <div className="mt-2 flex justify-between items-center px-3 py-2 bg-gray-100 rounded-lg">
-                <span className="font-medium text-gray-900">Totale</span>
-                <span className="font-bold text-lg text-green-700">
-                  {formattaImporto(
-                    clientePagamento.scadenze
-                      .filter((s) => haImporto(s.importoPrevisto))
-                      .reduce((sum, s) => sum + Number(s.importoPrevisto), 0),
-                  )}
-                </span>
-              </div>
-              {clientePagamento.scadenze.some((s) => !haImporto(s.importoPrevisto)) && (
-                <p className="mt-2 text-xs text-amber-700">
-                  {clientePagamento.scadenze.filter((s) => !haImporto(s.importoPrevisto)).length} scadenze
-                  senza importo non verranno pagate: completare i dati del veicolo o inserire l'importo,
-                  poi registrarle singolarmente.
-                </p>
-              )}
-            </div>
-
-            {/* Form Pagamento */}
-            <div className="space-y-3">
-              <Input
-                label="Data Pagamento *"
-                type="date"
-                value={pagaFormData.dataPagamento}
-                onChange={(e) => setPagaFormData({ ...pagaFormData, dataPagamento: e.target.value })}
-                required
-              />
-              <Input
-                label="Metodo di Pagamento"
-                value={pagaFormData.metodoPagamento}
-                onChange={(e) => setPagaFormData({ ...pagaFormData, metodoPagamento: e.target.value })}
-                placeholder="es. Bonifico, Contanti, PagoPA..."
-              />
-            </div>
-
-            {/* Azioni */}
-            <div className="flex justify-end space-x-2 pt-4 border-t">
-              <Button type="button" variant="secondary" onClick={handleClosePagaModal} disabled={pagaLoading}>
-                Annulla
-              </Button>
-              <Button onClick={handlePagaMultiplo} disabled={pagaLoading}>
-                {pagaLoading ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Elaborazione...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle size={18} className="mr-2" />
-                    Conferma Pagamento
-                  </>
-                )}
-              </Button>
-            </div>
-          </div>
-        )}
-      </Modal>
     </div>
   );
 };

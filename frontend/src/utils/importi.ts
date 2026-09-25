@@ -15,8 +15,16 @@ export function haImporto(valore: ImportoApi): valore is number | string {
   return valore !== null && valore !== undefined && valore !== '';
 }
 
+// Formato italiano con separatore delle migliaia sempre ("1.043,45 €"):
+// 'always' è standard ma non ancora nei tipi di TypeScript.
+const EURO = new Intl.NumberFormat('it-IT', {
+  style: 'currency',
+  currency: 'EUR',
+  useGrouping: 'always' as unknown as boolean,
+});
+
 export function formattaImporto(valore: number | string): string {
-  return `€ ${Number(valore).toFixed(2)}`;
+  return EURO.format(Number(valore));
 }
 
 /** Testo e spiegazione mostrati quando l'importo manca. */
