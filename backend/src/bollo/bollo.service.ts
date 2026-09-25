@@ -68,7 +68,24 @@ export interface EsitoAggiornamentoImporti {
   motivi: string[];
 }
 
-type CacheTariffari = Map<string, TariffarioInput | null>;
+export type CacheTariffari = Map<string, TariffarioInput | null>;
+
+/** I campi del veicolo che il calcolo legge. */
+export interface DatiVeicoloCalcolo {
+  regione: string | null;
+  tipoVeicolo: string | null;
+  classeAmbientale: string | null;
+  alimentazione: string | null;
+  potenzaKw: { toString(): string } | null;
+  cilindrata: number | null;
+  portataKg: number | null;
+  pesoComplessivoKg: number | null;
+  numeroAssi: number | null;
+  tipoSospensione: string | null;
+  numeroPosti: number | null;
+  massaRimorchiabileKg: number | null;
+  dataImmatricolazione: Date | null;
+}
 
 function toNumber(valore: string | null): number | null {
   return valore === null ? null : Number(valore);
@@ -179,7 +196,21 @@ export class BolloService {
     if (!veicolo) {
       throw new NotFoundException(`Veicolo con ID ${idVeicolo} non trovato`);
     }
+    return this.valutaVeicolo(veicolo, anno, periodicita, cache);
+  }
 
+  /**
+   * Calcola il bollo di un veicolo già caricato.
+   *
+   * Permette di valutare molti veicoli con una sola query (rapporto di
+   * completezza) invece di rileggerli uno per uno.
+   */
+  async valutaVeicolo(
+    veicolo: DatiVeicoloCalcolo,
+    anno: number = new Date().getFullYear(),
+    periodicita: Periodicita = 'ANNUALE',
+    cache?: CacheTariffari,
+  ): Promise<CalcolobolloResult> {
     // La regione sceglie il tariffario: senza, non c'è nulla su cui calcolare.
     // Il motore precedente assumeva la Lombardia.
     if (!veicolo.regione) {
@@ -288,10 +319,16 @@ export class BolloService {
   async aggiornaImportiScadenze(
     idVeicolo: number,
     utente?: string,
+    opzioni: { soloMancanti?: boolean } = {},
   ): Promise<EsitoAggiornamentoImporti> {
     const annoCorrente = new Date().getFullYear();
     const scadenze = await this.prisma.scadenza.findMany({
-      where: { idVeicolo, stato: 'DA_PAGARE', annoScadenza: { gte: annoCorrente } },
+      where: {
+        idVeicolo,
+        stato: 'DA_PAGARE',
+        annoScadenza: { gte: annoCorrente },
+        ...(opzioni.soloMancanti ? { importoPrevisto: null } : {}),
+      },
       orderBy: { dataScadenza: 'asc' },
     });
 
@@ -325,11 +362,24 @@ export class BolloService {
         utente,
         datiPrima: { importoPrevisto: scadenza.importoPrevisto },
         datiDopo: { importoPrevisto: calcolo.importoBase },
-        note: `Ricalcolo massivo dal tariffario (motore ${calcolo.versioneMotore})`,
+        note: opzioni.soloMancanti
+          ? `Importo mancante calcolato dal tariffario dopo il completamento dei dati del veicolo (motore ${calcolo.versioneMotore})`
+          : `Ricalcolo massivo dal tariffario (motore ${calcolo.versioneMotore})`,
       });
       esito.aggiornate++;
     }
 
     return esito;
+  }
+
+  /**
+   * Calcola l'importo delle sole scadenze future che non ne hanno uno.
+   *
+   * È ciò che serve dopo aver completato i dati di un veicolo: gli importi
+   * già presenti (dall'archivio o inseriti a mano) non vengono toccati.
+   * Per ricalcolarli tutti c'è aggiornaImportiScadenze, come scelta esplicita.
+   */
+  completaImportiMancanti(idVeicolo: number, utente?: string): Promise<EsitoAggiornamentoImporti> {
+    return this.aggiornaImportiScadenze(idVeicolo, utente, { soloMancanti: true });
   }
 }

@@ -37,6 +37,7 @@ backend/test/
 │   ├── modello-dati.int-spec.ts    vincoli applicati dal database
 │   ├── avvisi.int-spec.ts
 │   ├── invio-avvisi.int-spec.ts    invio: doppi invii, ritentativi, recuperi
+│   ├── completezza.int-spec.ts     bonifica dati: rapporto, importi, audit
 │   └── audit.int-spec.ts
 └── tools/                          generatori dei fixture e diagnostica
 ```
@@ -198,9 +199,10 @@ verificarne i progressi in modo oggettivo.
 
 `test/tools/completezza-dati.ts` elenca, veicolo per veicolo, quali campi
 mancano al calcolo e su quale riquadro della carta di circolazione trovarli.
-Non ha un elenco proprio dei campi richiesti: esegue il motore di calcolo su
-ogni veicolo e ne raccoglie i motivi, quindi resta allineato alle regole per
-costruzione. Separa i dati indispensabili, quelli consigliati (che servono a
+Usa lo stesso servizio della pagina Dati veicoli (`CompletezzaService`), quindi
+i due non possono divergere. Non ha un elenco proprio dei campi richiesti:
+esegue il motore di calcolo su ogni veicolo e ne raccoglie i motivi, quindi
+resta allineato alle regole per costruzione. Separa i dati indispensabili, quelli consigliati (che servono a
 valutare esenzioni e riduzioni) e i problemi del tariffario.
 
 ```bash

@@ -111,7 +111,7 @@ export interface EsitoEsenzioni {
   assunzioni: string[];
 }
 
-const TESTO_ASSUNZIONE: Record<'alimentazione' | 'dataImmatricolazione', string> = {
+export const TESTO_ASSUNZIONE: Record<'alimentazione' | 'dataImmatricolazione', string> = {
   alimentazione:
     'Alimentazione non indicata: le esenzioni e riduzioni legate all\'alimentazione non sono state valutate né applicate.',
   dataImmatricolazione:
