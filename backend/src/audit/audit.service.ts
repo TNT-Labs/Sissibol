@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 /** Entità tracciate nel registro delle modifiche. */
-export type EntitaAudit = 'scadenza' | 'pagamento' | 'veicolo' | 'cliente' | 'tariffa' | 'avviso' | 'utente' | 'report';
+export type EntitaAudit = 'scadenza' | 'pagamento' | 'veicolo' | 'cliente' | 'tariffa' | 'avviso' | 'utente' | 'report' | 'configurazione';
 
 export type AzioneAudit = 'CREAZIONE' | 'MODIFICA' | 'ELIMINAZIONE' | 'ESPORTAZIONE';
 

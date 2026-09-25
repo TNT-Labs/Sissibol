@@ -27,6 +27,19 @@ export function formattaImporto(valore: number | string): string {
   return EURO.format(Number(valore));
 }
 
+// Tariffe al kW o al quintale: fino a 4 decimali ("2,5823 €", "3,00 €").
+const EURO_UNITARIO = new Intl.NumberFormat('it-IT', {
+  style: 'currency',
+  currency: 'EUR',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 4,
+  useGrouping: 'always' as unknown as boolean,
+});
+
+export function formattaImportoUnitario(valore: number | string): string {
+  return EURO_UNITARIO.format(Number(valore));
+}
+
 /** Testo e spiegazione mostrati quando l'importo manca. */
 export const IMPORTO_MANCANTE = {
   etichetta: 'Da calcolare',

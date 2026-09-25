@@ -1,401 +1,191 @@
-import React, { useEffect, useState } from 'react';
-import { bolloService } from '../../services/bollo.service';
-import type { ConfigurazioneBollo, TariffaBollo } from '../../types';
+import React, { useMemo, useState } from 'react';
+import { Copy, Plus, RotateCcw, Settings } from 'lucide-react';
 import { Button } from '../../components/common/Button';
-import { Input } from '../../components/common/Input';
 import { SearchableSelect } from '../../components/common/SearchableSelect';
-import { Settings, Plus, Copy, ChevronDown, ChevronRight, Edit2, Check, X } from 'lucide-react';
-import { getErrorMessage } from '../../utils/errors';
+import { useIsAdmin } from '../../context/AuthContext';
+import type { ConfigurazioneBollo, TariffaBollo } from '../../types';
+import { DuplicaConfigurazioneModal } from './DuplicaConfigurazioneModal';
+import { GruppoTariffe } from './GruppoTariffe';
+import { NuovaConfigurazioneModal } from './NuovaConfigurazioneModal';
+import { TariffaModal } from './TariffaModal';
+import { configurazionePredefinita, raggruppaPerTipo } from './tariffe';
+import { useConfigurazioni, useTariffe } from './useTariffe';
 
+/** Modale aperto: al massimo uno alla volta. */
+type Aperto = { tipo: 'nuova' } | { tipo: 'duplica'; origine: ConfigurazioneBollo } | { tipo: 'tariffa'; tariffa: TariffaBollo } | null;
+
+const PERCENTUALE = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 2 });
+
+/**
+ * Tariffe del bollo per configurazione (anno e regione).
+ *
+ * Tutti consultano; modificano solo gli amministratori (prima un operatore
+ * vedeva i pulsanti e riceveva un errore silenzioso dal server).
+ */
 export const TariffePage: React.FC = () => {
-  const [configurazioni, setConfigurazioni] = useState<ConfigurazioneBollo[]>([]);
-  const [selectedConfig, setSelectedConfig] = useState<ConfigurazioneBollo | null>(null);
-  const [tariffe, setTariffe] = useState<TariffaBollo[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [expandedTipi, setExpandedTipi] = useState<Set<string>>(new Set());
-  const [editingTariffa, setEditingTariffa] = useState<number | null>(null);
-  const [editValues, setEditValues] = useState<{ importoUnitario: string; importoFisso: string }>({
-    importoUnitario: '',
-    importoFisso: '',
-  });
+  const admin = useIsAdmin();
+  const { configurazioni, caricamento: caricamentoConfig, errore: erroreConfig, ricarica: ricaricaConfig } =
+    useConfigurazioni();
+  const [idScelto, setIdScelto] = useState<number | null>(null);
+  // Appena creata o duplicata: si mostra subito, anche prima che l'elenco sia ricaricato.
+  const [appena, setAppena] = useState<ConfigurazioneBollo | null>(null);
+  const selezionata =
+    configurazioni.find((c) => c.id === idScelto) ??
+    (appena && appena.id === idScelto ? appena : null) ??
+    configurazionePredefinita(configurazioni, new Date().getFullYear());
+  const { tariffe, caricamento, aggiornamento, errore, ricarica } = useTariffe(selezionata?.id ?? null);
+  const [chiusi, setChiusi] = useState<Set<string>>(new Set());
+  const [modale, setModale] = useState<Aperto>(null);
 
-  // Modal per nuova configurazione
-  const [showNewConfigModal, setShowNewConfigModal] = useState(false);
-  const [newConfigData, setNewConfigData] = useState({
-    annoValidita: new Date().getFullYear() + 1,
-    regione: 'Lombardia',
-    scontoRid: 15,
-  });
+  const gruppi = useMemo(() => raggruppaPerTipo(tariffe), [tariffe]);
 
-  // Modal per duplica configurazione
-  const [showDuplicaModal, setShowDuplicaModal] = useState(false);
-  const [duplicaAnno, setDuplicaAnno] = useState(new Date().getFullYear() + 1);
-
-  // Caricamento iniziale delle configurazioni (solo al mount).
-  useEffect(() => {
-    loadConfigurazioni();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const loadConfigurazioni = async () => {
-    try {
-      const data = await bolloService.getConfigurazioni();
-      setConfigurazioni(data);
-      if (data.length > 0 && !selectedConfig) {
-        handleSelectConfig(data[0]);
-      }
-    } catch (error) {
-      console.error('Errore nel caricamento delle configurazioni:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSelectConfig = async (config: ConfigurazioneBollo) => {
-    setSelectedConfig(config);
-    try {
-      const tariffeData = await bolloService.getTariffe(config.id);
-      setTariffe(tariffeData);
-      // Espandi tutti i tipi veicolo di default
-      const tipi = new Set(tariffeData.map((t) => t.tipoVeicolo));
-      setExpandedTipi(tipi);
-    } catch (error) {
-      console.error('Errore nel caricamento delle tariffe:', error);
-    }
-  };
-
-  const toggleTipoExpanded = (tipo: string) => {
-    const newExpanded = new Set(expandedTipi);
-    if (newExpanded.has(tipo)) {
-      newExpanded.delete(tipo);
-    } else {
-      newExpanded.add(tipo);
-    }
-    setExpandedTipi(newExpanded);
-  };
-
-  const handleCreateConfig = async () => {
-    try {
-      const newConfig = await bolloService.createConfigurazione(newConfigData);
-      setConfigurazioni([newConfig, ...configurazioni]);
-      setShowNewConfigModal(false);
-      handleSelectConfig(newConfig);
-    } catch (error: unknown) {
-      alert(getErrorMessage(error, 'Errore nella creazione della configurazione'));
-    }
-  };
-
-  const handleDuplicaConfig = async () => {
-    if (!selectedConfig) return;
-    try {
-      const newConfig = await bolloService.duplicaConfigurazione(selectedConfig.id, duplicaAnno);
-      await loadConfigurazioni();
-      handleSelectConfig(newConfig);
-      setShowDuplicaModal(false);
-    } catch (error: unknown) {
-      alert(getErrorMessage(error, 'Errore nella duplicazione della configurazione'));
-    }
-  };
-
-  const startEditTariffa = (tariffa: TariffaBollo) => {
-    setEditingTariffa(tariffa.id);
-    setEditValues({
-      importoUnitario: tariffa.importoUnitario.toString(),
-      importoFisso: tariffa.importoFisso?.toString() || '',
+  const apriChiudi = (tipo: string) =>
+    setChiusi((prima) => {
+      const dopo = new Set(prima);
+      if (dopo.has(tipo)) dopo.delete(tipo);
+      else dopo.add(tipo);
+      return dopo;
     });
+
+  const mostraNuova = (configurazione: ConfigurazioneBollo) => {
+    setModale(null);
+    setAppena(configurazione);
+    setIdScelto(configurazione.id);
+    ricaricaConfig();
   };
 
-  const cancelEditTariffa = () => {
-    setEditingTariffa(null);
-    setEditValues({ importoUnitario: '', importoFisso: '' });
-  };
-
-  const saveEditTariffa = async (id: number) => {
-    try {
-      await bolloService.updateTariffa(id, {
-        importoUnitario: parseFloat(editValues.importoUnitario),
-        importoFisso: editValues.importoFisso ? parseFloat(editValues.importoFisso) : undefined,
-      });
-      // Ricarica le tariffe
-      if (selectedConfig) {
-        const tariffeData = await bolloService.getTariffe(selectedConfig.id);
-        setTariffe(tariffeData);
-      }
-      setEditingTariffa(null);
-    } catch (error) {
-      console.error('Errore nel salvataggio della tariffa:', error);
-    }
-  };
-
-  // Raggruppa tariffe per tipo veicolo
-  const tariffeRaggruppate = tariffe.reduce(
-    (acc, tariffa) => {
-      if (!acc[tariffa.tipoVeicolo]) {
-        acc[tariffa.tipoVeicolo] = [];
-      }
-      acc[tariffa.tipoVeicolo].push(tariffa);
-      return acc;
-    },
-    {} as Record<string, TariffaBollo[]>
-  );
-
-  const formatImporto = (value: number | string | undefined | null, decimali: number = 2) => {
-    if (value === undefined || value === null) return '-';
-    const numValue = typeof value === 'string' ? parseFloat(value) : value;
-    if (isNaN(numValue)) return '-';
-    return `€ ${numValue.toFixed(decimali)}`;
-  };
-
-  if (loading) {
+  if (caricamentoConfig) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="flex justify-center items-center h-64" role="status" aria-label="Caricamento">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-gray-900 flex items-center">
-          <Settings className="mr-3" size={32} />
-          Configurazione Tariffe Bollo
+      <div className="flex flex-wrap justify-between items-center gap-3">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 flex items-center">
+          <Settings className="mr-3" size={30} aria-hidden="true" />
+          Tariffe bollo
         </h1>
-        <div className="flex space-x-2">
-          {selectedConfig && (
-            <Button variant="secondary" onClick={() => setShowDuplicaModal(true)}>
-              <Copy size={20} className="mr-2" />
-              Duplica per nuovo anno
+        {admin && (
+          <div className="flex flex-wrap gap-2">
+            {selezionata && (
+              <Button variant="secondary" onClick={() => setModale({ tipo: 'duplica', origine: selezionata })}>
+                <Copy size={20} className="mr-2" aria-hidden="true" />
+                Duplica per un nuovo anno
+              </Button>
+            )}
+            <Button onClick={() => setModale({ tipo: 'nuova' })}>
+              <Plus size={20} className="mr-2" aria-hidden="true" />
+              Nuova configurazione
             </Button>
-          )}
-          <Button onClick={() => setShowNewConfigModal(true)}>
-            <Plus size={20} className="mr-2" />
-            Nuova Configurazione
-          </Button>
-        </div>
-      </div>
-
-      {/* Selector configurazione */}
-      <div className="bg-white rounded-lg shadow p-4">
-        <div className="flex items-center space-x-4">
-          <div className="flex-1">
-            <SearchableSelect
-              label="Configurazione"
-              options={configurazioni.map(c => ({
-                value: c.id,
-                label: `${c.regione} - Anno ${c.annoValidita}${c.attivo ? ' (Attiva)' : ''}`
-              }))}
-              value={selectedConfig?.id || ''}
-              onChange={(value) => {
-                const config = configurazioni.find((c) => c.id === Number(value));
-                if (config) handleSelectConfig(config);
-              }}
-              placeholder="Cerca configurazione..."
-            />
-          </div>
-        </div>
-        {selectedConfig && (
-          <div className="mt-4 grid grid-cols-3 gap-4 text-sm">
-            <div>
-              <span className="text-gray-500">Sconto RID:</span>
-              <span className="ml-2 font-medium">{selectedConfig.scontoRid}%</span>
-            </div>
-            <div>
-              <span className="text-gray-500">Tariffe configurate:</span>
-              <span className="ml-2 font-medium">{tariffe.length}</span>
-            </div>
-            <div>
-              <span className="text-gray-500">Note:</span>
-              <span className="ml-2">{selectedConfig.note || '-'}</span>
-            </div>
           </div>
         )}
       </div>
 
-      {/* Tabella tariffe raggruppate */}
-      {selectedConfig && (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg font-semibold">Tariffe per tipo veicolo</h2>
-          </div>
-          <div className="divide-y divide-gray-200">
-            {Object.entries(tariffeRaggruppate).map(([tipoVeicolo, tariffeTipo]) => (
-              <div key={tipoVeicolo}>
-                <button
-                  className="w-full px-6 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
-                  onClick={() => toggleTipoExpanded(tipoVeicolo)}
-                >
-                  <div className="flex items-center">
-                    {expandedTipi.has(tipoVeicolo) ? (
-                      <ChevronDown size={20} className="mr-2 text-gray-400" />
-                    ) : (
-                      <ChevronRight size={20} className="mr-2 text-gray-400" />
-                    )}
-                    <span className="font-medium">{tipoVeicolo}</span>
-                    <span className="ml-2 text-sm text-gray-500">({tariffeTipo.length} tariffe)</span>
-                  </div>
-                </button>
-                {expandedTipi.has(tipoVeicolo) && (
-                  <div className="bg-gray-50 px-6 py-2">
-                    <table className="min-w-full text-sm">
-                      <thead>
-                        <tr className="text-left text-gray-500">
-                          <th className="py-2 pr-4">Categoria Euro</th>
-                          <th className="py-2 pr-4">Unità</th>
-                          <th className="py-2 pr-4">Soglia</th>
-                          <th className="py-2 pr-4">Importo Unitario</th>
-                          <th className="py-2 pr-4">Importo Fisso</th>
-                          <th className="py-2 pr-4">Periodicità</th>
-                          <th className="py-2">Azioni</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {tariffeTipo.map((tariffa) => (
-                          <tr key={tariffa.id} className="border-t border-gray-200">
-                            <td className="py-2 pr-4">{tariffa.categoriaEuro || '-'}</td>
-                            <td className="py-2 pr-4">{tariffa.unitaMisura}</td>
-                            <td className="py-2 pr-4">
-                              {tariffa.sogliaMin !== null && tariffa.sogliaMin !== undefined
-                                ? `${tariffa.sogliaMin}${tariffa.sogliaMax ? ` - ${tariffa.sogliaMax}` : '+'}`
-                                : '-'}
-                              {tariffa.tipoSospensione && ` (${tariffa.tipoSospensione})`}
-                            </td>
-                            <td className="py-2 pr-4">
-                              {editingTariffa === tariffa.id ? (
-                                <Input
-                                  type="number"
-                                  step="0.0001"
-                                  value={editValues.importoUnitario}
-                                  onChange={(e) =>
-                                    setEditValues({ ...editValues, importoUnitario: e.target.value })
-                                  }
-                                  className="w-24 text-sm"
-                                />
-                              ) : (
-                                formatImporto(tariffa.importoUnitario, 4)
-                              )}
-                            </td>
-                            <td className="py-2 pr-4">
-                              {editingTariffa === tariffa.id ? (
-                                <Input
-                                  type="number"
-                                  step="0.01"
-                                  value={editValues.importoFisso}
-                                  onChange={(e) =>
-                                    setEditValues({ ...editValues, importoFisso: e.target.value })
-                                  }
-                                  className="w-24 text-sm"
-                                />
-                              ) : (
-                                formatImporto(tariffa.importoFisso)
-                              )}
-                            </td>
-                            <td className="py-2 pr-4">{tariffa.periodicita}</td>
-                            <td className="py-2">
-                              {editingTariffa === tariffa.id ? (
-                                <div className="flex space-x-1">
-                                  <button
-                                    onClick={() => saveEditTariffa(tariffa.id)}
-                                    className="text-green-600 hover:text-green-800"
-                                  >
-                                    <Check size={16} />
-                                  </button>
-                                  <button
-                                    onClick={cancelEditTariffa}
-                                    className="text-red-600 hover:text-red-800"
-                                  >
-                                    <X size={16} />
-                                  </button>
-                                </div>
-                              ) : (
-                                <button
-                                  onClick={() => startEditTariffa(tariffa)}
-                                  className="text-blue-600 hover:text-blue-800"
-                                >
-                                  <Edit2 size={16} />
-                                </button>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+      {erroreConfig && configurazioni.length === 0 ? (
+        <div className="bg-white rounded-lg shadow px-6 py-12 text-center" role="alert">
+          <p className="text-red-700">Impossibile caricare le configurazioni delle tariffe.</p>
+          <Button variant="secondary" className="mt-4" onClick={ricaricaConfig}>
+            <RotateCcw size={16} className="mr-2" aria-hidden="true" />
+            Riprova
+          </Button>
+        </div>
+      ) : !selezionata ? (
+        <div className="bg-white rounded-lg shadow px-6 py-12 text-center text-gray-500">
+          Nessuna configurazione delle tariffe.
+          {admin ? ' Creane una con «Nuova configurazione».' : ''}
+        </div>
+      ) : (
+        <>
+          <div className="bg-white rounded-lg shadow p-4">
+            <SearchableSelect
+              label="Configurazione"
+              options={configurazioni.map((c) => ({
+                value: c.id,
+                label: `${c.regione} – ${c.annoValidita}${c.attivo ? '' : ' (non attiva)'}`,
+              }))}
+              value={selezionata.id}
+              onChange={(v) => v && setIdScelto(Number(v))}
+              placeholder="Cerca configurazione..."
+            />
+            <dl className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4 text-sm">
+              <div>
+                <dt className="inline text-gray-500">Sconto RID:</dt>
+                <dd className="inline ml-2 font-medium">{PERCENTUALE.format(Number(selezionata.scontoRid))}%</dd>
               </div>
-            ))}
+              <div>
+                <dt className="inline text-gray-500">Tariffe:</dt>
+                <dd className="inline ml-2 font-medium">{caricamento ? '…' : tariffe.length}</dd>
+              </div>
+              <div className="min-w-0">
+                <dt className="inline text-gray-500">Note:</dt>
+                <dd className="inline ml-2 break-words">{selezionata.note || '—'}</dd>
+              </div>
+            </dl>
           </div>
-        </div>
+
+          <div className="bg-white rounded-lg shadow overflow-hidden" aria-busy={caricamento || aggiornamento}>
+            <div className="px-4 sm:px-6 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-semibold">Tariffe per tipo di veicolo</h2>
+              {!admin && <p className="text-sm text-gray-500 mt-1">Solo gli amministratori possono modificarle.</p>}
+            </div>
+            {caricamento ? (
+              <div className="flex justify-center items-center h-48" role="status" aria-label="Caricamento">
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" />
+              </div>
+            ) : errore ? (
+              <div className="px-6 py-12 text-center" role="alert">
+                <p className="text-red-700">Impossibile caricare le tariffe.</p>
+                <Button variant="secondary" className="mt-4" onClick={ricarica}>
+                  <RotateCcw size={16} className="mr-2" aria-hidden="true" />
+                  Riprova
+                </Button>
+              </div>
+            ) : gruppi.length === 0 ? (
+              <div className="px-6 py-12 text-center text-gray-500">
+                Nessuna tariffa in questa configurazione.
+                {admin ? ' Per partire da un anno esistente usa «Duplica per un nuovo anno» su quella configurazione.' : ''}
+              </div>
+            ) : (
+              <div className={`divide-y divide-gray-200 transition-opacity ${aggiornamento ? 'opacity-60' : ''}`}>
+                {gruppi.map((gruppo) => (
+                  <GruppoTariffe
+                    key={gruppo.tipoVeicolo}
+                    gruppo={gruppo}
+                    aperto={!chiusi.has(gruppo.tipoVeicolo)}
+                    onApriChiudi={() => apriChiudi(gruppo.tipoVeicolo)}
+                    onModifica={admin ? (tariffa) => setModale({ tipo: 'tariffa', tariffa }) : undefined}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </>
       )}
 
-      {/* Modal nuova configurazione */}
-      {showNewConfigModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-md w-full">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-xl font-semibold">Nuova Configurazione Tariffe</h2>
-            </div>
-            <div className="px-6 py-4 space-y-4">
-              <Input
-                label="Anno Validità"
-                type="number"
-                value={newConfigData.annoValidita}
-                onChange={(e) =>
-                  setNewConfigData({ ...newConfigData, annoValidita: parseInt(e.target.value) })
-                }
-              />
-              <Input
-                label="Regione"
-                value={newConfigData.regione}
-                onChange={(e) => setNewConfigData({ ...newConfigData, regione: e.target.value })}
-              />
-              <Input
-                label="Sconto RID (%)"
-                type="number"
-                step="0.01"
-                value={newConfigData.scontoRid}
-                onChange={(e) =>
-                  setNewConfigData({ ...newConfigData, scontoRid: parseFloat(e.target.value) })
-                }
-              />
-            </div>
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-2">
-              <Button variant="secondary" onClick={() => setShowNewConfigModal(false)}>
-                Annulla
-              </Button>
-              <Button onClick={handleCreateConfig}>Crea</Button>
-            </div>
-          </div>
-        </div>
+      {modale?.tipo === 'nuova' && (
+        <NuovaConfigurazioneModal configurazioni={configurazioni} onClose={() => setModale(null)} onCreata={mostraNuova} />
       )}
-
-      {/* Modal duplica configurazione */}
-      {showDuplicaModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-md w-full">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-xl font-semibold">Duplica Configurazione</h2>
-            </div>
-            <div className="px-6 py-4 space-y-4">
-              <p className="text-gray-600">
-                Duplica la configurazione <strong>{selectedConfig?.regione}</strong> per un nuovo anno.
-                Tutte le tariffe verranno copiate.
-              </p>
-              <Input
-                label="Nuovo Anno"
-                type="number"
-                value={duplicaAnno}
-                onChange={(e) => setDuplicaAnno(parseInt(e.target.value))}
-              />
-            </div>
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-2">
-              <Button variant="secondary" onClick={() => setShowDuplicaModal(false)}>
-                Annulla
-              </Button>
-              <Button onClick={handleDuplicaConfig}>Duplica</Button>
-            </div>
-          </div>
-        </div>
+      {modale?.tipo === 'duplica' && (
+        <DuplicaConfigurazioneModal
+          origine={modale.origine}
+          configurazioni={configurazioni}
+          onClose={() => setModale(null)}
+          onDuplicata={mostraNuova}
+        />
+      )}
+      {modale?.tipo === 'tariffa' && (
+        <TariffaModal
+          tariffa={modale.tariffa}
+          onClose={() => setModale(null)}
+          onSalvata={() => {
+            setModale(null);
+            ricarica();
+          }}
+        />
       )}
     </div>
   );
