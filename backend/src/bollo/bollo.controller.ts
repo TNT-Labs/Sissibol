@@ -113,8 +113,11 @@ export class BolloController {
   @Post('configurazioni')
   @UseGuards(RolesGuard)
   @Roles('ADMIN')
-  async createConfigurazione(@Body() data: CreateConfigurazioneDto) {
-    return this.tariffeService.createConfigurazione(data);
+  async createConfigurazione(
+    @Body() data: CreateConfigurazioneDto,
+    @Req() req: { user?: { email?: string } },
+  ) {
+    return this.tariffeService.createConfigurazione(data, req.user?.email);
   }
 
   /**
@@ -127,8 +130,9 @@ export class BolloController {
   async duplicaConfigurazione(
     @Param('id', ParseIntPipe) id: number,
     @Body() data: DuplicaConfigurazioneDto,
+    @Req() req: { user?: { email?: string } },
   ) {
-    return this.tariffeService.duplicaConfigurazione(id, data.nuovoAnno);
+    return this.tariffeService.duplicaConfigurazione(id, data.nuovoAnno, req.user?.email);
   }
 
   /**
@@ -150,8 +154,9 @@ export class BolloController {
   async updateTariffa(
     @Param('id', ParseIntPipe) id: number,
     @Body() data: UpdateTariffaDto,
+    @Req() req: { user?: { email?: string } },
   ) {
-    return this.tariffeService.updateTariffa(id, data);
+    return this.tariffeService.updateTariffa(id, data, req.user?.email);
   }
 
   /**
@@ -164,7 +169,8 @@ export class BolloController {
   async createTariffa(
     @Param('id', ParseIntPipe) idConfigurazione: number,
     @Body() data: CreateTariffaDto,
+    @Req() req: { user?: { email?: string } },
   ) {
-    return this.tariffeService.createTariffa(idConfigurazione, data);
+    return this.tariffeService.createTariffa(idConfigurazione, data, req.user?.email);
   }
 }

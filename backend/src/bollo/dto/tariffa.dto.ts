@@ -77,11 +77,12 @@ export class UpdateTariffaDto {
   @Type(() => Number)
   importoUnitario?: number;
 
+  /** null toglie l'importo fisso (omesso: resta com'è). */
   @IsNumber()
   @Min(0)
   @IsOptional()
   @Type(() => Number)
-  importoFisso?: number;
+  importoFisso?: number | null;
 
   @IsString()
   @IsOptional()

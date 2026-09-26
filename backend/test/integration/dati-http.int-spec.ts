@@ -149,6 +149,40 @@ describe('Liste e report (HTTP)', () => {
     });
   });
 
+  describe('ricerca di veicoli e clienti', () => {
+    const targhe = async (q: string, extra = '') =>
+      (await richiesta('GET', `/veicoli/paginated?search=${encodeURIComponent(q)}${extra}`)).json.data.map((v: any) => v.targa);
+
+    it('veicoli: ogni parola nella targa o nel nome del cliente, in qualsiasi ordine', async () => {
+      expect(await targhe('Rossi Mario')).toEqual(['AB123CD']);
+      expect(await targhe('mario ab12')).toEqual(['AB123CD']);
+      expect(await targhe('alfa')).toEqual(['XY987ZW']);
+      expect(await targhe('rossi alfa')).toEqual([]);
+      // Disattivati a parte; i veicoli di clienti non attivi mai.
+      expect(await targhe('alfa', '&attivo=false')).toEqual(['ZZ000ZZ']);
+      expect(await targhe('cessata')).toEqual([]);
+    });
+
+    it('clienti: ogni parola in un campo qualsiasi; parametro ripetuto senza errori', async () => {
+      const nomi = async (q: string) =>
+        (await richiesta('GET', `/clienti/paginated?${q}`)).json.data.map((c: any) => c.cognome ?? c.ragioneSociale);
+      expect(await nomi('search=Rossi%20Mario')).toEqual(['Rossi']);
+      expect(await nomi('search=trasporti%2001234')).toEqual(['Trasporti Alfa SRL']);
+      expect((await richiesta('GET', '/clienti/paginated?search=a&search=b')).stato).toBe(200);
+    });
+
+    it('clienti: la lista ha tutti i campi del modulo di modifica', async () => {
+      await prisma.cliente.update({
+        where: { id: ids.rossi },
+        data: { indirizzo: 'Via Roma 1', note: 'Paga in contanti', avvisiEmail: false },
+      });
+      const [rossi] = (await richiesta('GET', '/clienti/paginated?search=rossi')).json.data;
+      expect(rossi).toEqual(
+        expect.objectContaining({ indirizzo: 'Via Roma 1', note: 'Paga in contanti', avvisiEmail: false, attivo: true }),
+      );
+    });
+  });
+
   describe('ricevute dei pagamenti (caricamento multipart)', () => {
     const invia = async (file: Blob, nome: string) => {
       const scadenza = await prisma.scadenza.findFirst({ where: { stato: 'DA_PAGARE', veicolo: { targa: 'XY987ZW' } } });
@@ -213,6 +247,82 @@ describe('Liste e report (HTTP)', () => {
       const invalida = await richiesta('GET', '/veicoli/paginated?page=abc&pageSize=-3');
       expect(invalida.stato).toBe(200);
       expect(invalida.json.pagination).toEqual(expect.objectContaining({ page: 1, pageSize: 50 }));
+    });
+  });
+
+  describe('tariffe', () => {
+    async function configurazioneConTariffa() {
+      const config = await prisma.configurazioneBollo.create({
+        data: { annoValidita: 2026, validoDa: d(2026, 1), validoA: d(2026, 12, 31), regione: 'Lombardia' },
+      });
+      const tariffa = await prisma.tariffaBollo.create({
+        data: { idConfigurazione: config.id, tipoVeicolo: 'Autovettura', categoriaEuro: 'Euro 4', unitaMisura: 'KW', importoUnitario: 2.58 },
+      });
+      return { config, tariffa };
+    }
+
+    it('ogni modifica di una tariffa resta nel registro, con il valore prima e dopo', async () => {
+      const { tariffa } = await configurazioneConTariffa();
+
+      const risposta = await richiesta('POST', `/bollo/tariffe/${tariffa.id}`, { corpo: { importoUnitario: 2.7 } });
+      expect(risposta.stato).toBe(201);
+
+      const voci = await prisma.auditLog.findMany({ where: { entita: 'tariffa', idEntita: tariffa.id } });
+      expect(voci).toHaveLength(1);
+      expect(voci[0]).toEqual(
+        expect.objectContaining({
+          azione: 'MODIFICA',
+          utente: 'admin@studio.it',
+          datiPrima: expect.objectContaining({ importoUnitario: '2.58', tipoVeicolo: 'Autovettura' }),
+          datiDopo: expect.objectContaining({ importoUnitario: '2.7' }),
+        }),
+      );
+      expect((await richiesta('POST', '/bollo/tariffe/999999', { corpo: { importoUnitario: 1 } })).stato).toBe(404);
+
+      // L'importo fisso si toglie con null; omesso resta com'è.
+      await richiesta('POST', `/bollo/tariffe/${tariffa.id}`, { corpo: { importoFisso: 12.5 } });
+      await richiesta('POST', `/bollo/tariffe/${tariffa.id}`, { corpo: { importoUnitario: 2.8 } });
+      expect((await prisma.tariffaBollo.findUnique({ where: { id: tariffa.id } }))!.importoFisso?.toString()).toBe('12.5');
+      expect((await richiesta('POST', `/bollo/tariffe/${tariffa.id}`, { corpo: { importoFisso: null } })).stato).toBe(201);
+      expect((await prisma.tariffaBollo.findUnique({ where: { id: tariffa.id } }))!.importoFisso).toBeNull();
+      expect((await richiesta('POST', `/bollo/tariffe/${tariffa.id}`, { corpo: { importoUnitario: -1 } })).stato).toBe(400);
+    });
+
+    it('nuove configurazioni (anche duplicate) e nuove tariffe restano nel registro', async () => {
+      const { config } = await configurazioneConTariffa();
+
+      const duplicata = await richiesta('POST', `/bollo/configurazioni/${config.id}/duplica`, { corpo: { nuovoAnno: 2027 } });
+      expect(duplicata.stato).toBe(201);
+      expect(duplicata.json.tariffe).toHaveLength(1);
+      const nuova = await richiesta('POST', '/bollo/configurazioni', { corpo: { annoValidita: 2026, regione: 'Piemonte' } });
+      expect(nuova.stato).toBe(201);
+      const tariffa = await richiesta('POST', `/bollo/configurazioni/${nuova.json.id}/tariffe`, {
+        corpo: { tipoVeicolo: 'Motociclo', unitaMisura: 'FISSO', importoUnitario: 0, importoFisso: 20.5 },
+      });
+      expect(tariffa.stato).toBe(201);
+
+      const voci = await prisma.auditLog.findMany({ where: { azione: 'CREAZIONE' }, orderBy: { id: 'asc' } });
+      expect(voci.map((v) => [v.entita, v.utente])).toEqual([
+        ['configurazione', 'admin@studio.it'],
+        ['configurazione', 'admin@studio.it'],
+        ['tariffa', 'admin@studio.it'],
+      ]);
+      expect(voci[0].note).toContain('Duplicata');
+      expect(voci[2].datiDopo).toEqual(expect.objectContaining({ importoFisso: '20.5', tipoVeicolo: 'Motociclo' }));
+    });
+
+    it('un operatore consulta le tariffe ma non può modificarle', async () => {
+      const { config, tariffa } = await configurazioneConTariffa();
+      await prisma.utente.create({
+        data: { email: 'operatore@studio.it', password: await bcrypt.hash(PASSWORD, 4), ruolo: 'OPERATORE' },
+      });
+      token = (await richiesta('POST', '/auth/login', { corpo: { email: 'operatore@studio.it', password: PASSWORD } })).json
+        .access_token;
+
+      expect((await richiesta('GET', `/bollo/configurazioni/${config.id}/tariffe`)).stato).toBe(200);
+      expect((await richiesta('POST', `/bollo/tariffe/${tariffa.id}`, { corpo: { importoUnitario: 9 } })).stato).toBe(403);
+      expect((await prisma.tariffaBollo.findUnique({ where: { id: tariffa.id } }))!.importoUnitario.toString()).toBe('2.58');
+      expect(await prisma.auditLog.count({ where: { entita: 'tariffa' } })).toBe(0);
     });
   });
 

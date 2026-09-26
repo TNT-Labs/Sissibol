@@ -41,6 +41,13 @@ backup del giorno viene fatto appena il servizio riparte.
 
 ## Controllare che funzionino
 
+- **Email automatica**: se il server di posta è configurato (`SMTP_*`),
+  ogni 30 minuti il backend controlla lo stato dei backup e, se un tentativo
+  fallisce o non ci sono backup riusciti da più di 30 ore, scrive a
+  `NOTIFICHE_EMAIL_TO` (o, se vuota, agli amministratori). Finché il problema
+  resta arriva un promemoria ogni 24 ore; quando si risolve, un messaggio di
+  conferma. Nei primi 20 minuti dopo l'avvio non controlla (il primo backup
+  di una nuova installazione è in corso).
 - **Dashboard** (amministratori): la sezione *Stato del sistema* mostra
   l'ultimo backup riuscito e diventa rossa se l'ultimo tentativo è fallito o
   se non ci sono backup riusciti da più di 30 ore.

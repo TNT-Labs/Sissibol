@@ -106,7 +106,8 @@ export const bolloService = {
     id: number,
     data: {
       importoUnitario?: number;
-      importoFisso?: number;
+      /** null toglie l'importo fisso. */
+      importoFisso?: number | null;
       descrizione?: string;
     }
   ): Promise<TariffaBollo> {

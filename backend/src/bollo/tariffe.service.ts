@@ -1,9 +1,14 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { TariffaBollo } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 
 @Injectable()
 export class TariffeService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private audit: AuditService,
+  ) {}
 
   /**
    * Ottieni tutte le configurazioni
@@ -47,7 +52,7 @@ export class TariffeService {
     regione: string;
     scontoRid?: number;
     note?: string;
-  }) {
+  }, utente?: string) {
     // Verifica che non esista già
     const existing = await this.prisma.configurazioneBollo.findUnique({
       where: {
@@ -64,7 +69,7 @@ export class TariffeService {
       );
     }
 
-    return this.prisma.configurazioneBollo.create({
+    const config = await this.prisma.configurazioneBollo.create({
       data: {
         annoValidita: data.annoValidita,
         ...this.intervalloValiditaAnno(data.annoValidita),
@@ -74,6 +79,14 @@ export class TariffeService {
         attivo: true,
       },
     });
+    await this.audit.registra({
+      entita: 'configurazione',
+      idEntita: config.id,
+      azione: 'CREAZIONE',
+      utente,
+      datiDopo: { annoValidita: config.annoValidita, regione: config.regione, scontoRid: config.scontoRid.toString() },
+    });
+    return config;
   }
 
   /**
@@ -94,7 +107,7 @@ export class TariffeService {
   /**
    * Duplica una configurazione esistente per un nuovo anno
    */
-  async duplicaConfigurazione(id: number, nuovoAnno: number) {
+  async duplicaConfigurazione(id: number, nuovoAnno: number, utente?: string) {
     const configOriginale = await this.prisma.configurazioneBollo.findUnique({
       where: { id },
       include: { tariffe: true },
@@ -174,6 +187,15 @@ export class TariffeService {
       return config;
     });
 
+    await this.audit.registra({
+      entita: 'configurazione',
+      idEntita: nuovaConfig.id,
+      azione: 'CREAZIONE',
+      utente,
+      datiDopo: { annoValidita: nuovoAnno, regione: configOriginale.regione, tariffe: configOriginale.tariffe.length },
+      note: `Duplicata dalla configurazione ${configOriginale.annoValidita} (id ${id})`,
+    });
+
     return this.getConfigurazione(nuovaConfig.id);
   }
 
@@ -223,22 +245,46 @@ export class TariffeService {
   }
 
   /**
-   * Aggiorna una tariffa
+   * Aggiorna una tariffa. Le tariffe determinano gli importi di tutti i
+   * bolli: ogni modifica resta nel registro, con i valori prima e dopo.
    */
   async updateTariffa(
     id: number,
     data: {
       importoUnitario?: number;
-      importoFisso?: number;
+      importoFisso?: number | null;
       descrizione?: string;
       sogliaMin?: number;
       sogliaMax?: number;
     },
+    utente?: string,
   ) {
-    return this.prisma.tariffaBollo.update({
-      where: { id },
-      data,
+    const prima = await this.prisma.tariffaBollo.findUnique({ where: { id } });
+    if (!prima) throw new NotFoundException(`Tariffa ${id} non trovata`);
+    const dopo = await this.prisma.tariffaBollo.update({ where: { id }, data });
+    await this.audit.registra({
+      entita: 'tariffa',
+      idEntita: id,
+      azione: 'MODIFICA',
+      utente,
+      datiPrima: this.campiAudit(prima),
+      datiDopo: this.campiAudit(dopo),
     });
+    return dopo;
+  }
+
+  /** I campi di una tariffa che contano per il registro (i Decimal come testo esatto). */
+  private campiAudit(t: TariffaBollo) {
+    return {
+      idConfigurazione: t.idConfigurazione,
+      tipoVeicolo: t.tipoVeicolo,
+      categoriaEuro: t.categoriaEuro,
+      importoUnitario: t.importoUnitario.toString(),
+      importoFisso: t.importoFisso?.toString() ?? null,
+      sogliaMin: t.sogliaMin?.toString() ?? null,
+      sogliaMax: t.sogliaMax?.toString() ?? null,
+      descrizione: t.descrizione,
+    };
   }
 
   /**
@@ -259,8 +305,9 @@ export class TariffeService {
       descrizione?: string;
       ordine?: number;
     },
+    utente?: string,
   ) {
-    return this.prisma.tariffaBollo.create({
+    const tariffa = await this.prisma.tariffaBollo.create({
       data: {
         idConfigurazione,
         tipoVeicolo: data.tipoVeicolo,
@@ -276,6 +323,14 @@ export class TariffeService {
         ordine: data.ordine || 0,
       },
     });
+    await this.audit.registra({
+      entita: 'tariffa',
+      idEntita: tariffa.id,
+      azione: 'CREAZIONE',
+      utente,
+      datiDopo: this.campiAudit(tariffa),
+    });
+    return tariffa;
   }
 
   /**
