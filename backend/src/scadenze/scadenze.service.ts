@@ -7,6 +7,7 @@ import { BolloService } from '../bollo/bollo.service';
 import { AuditService } from '../audit/audit.service';
 import { StatoScadenza, Periodicita } from '../prisma/types';
 import { paginazioneSicura } from '../common/paginazione';
+import { paroleDiRicerca } from '../common/ricerca';
 
 /** Risultati della ricerca di scadenze da pagare: pochi, per una tendina. */
 export const LIMITE_RICERCA = 20;
@@ -436,7 +437,7 @@ export class ScadenzeService implements OnModuleInit {
    * Le più vecchie per prime: quelle scadute sono le prime da regolare.
    */
   async cercaDaPagare(testo: string | undefined, limite: number = LIMITE_RICERCA) {
-    const parole = (testo ?? '').slice(0, 100).trim().split(/\s+/).filter(Boolean).slice(0, 5);
+    const parole = paroleDiRicerca(testo);
     const quante = Number.isInteger(limite) && limite >= 1 ? Math.min(limite, LIMITE_RICERCA_MASSIMO) : LIMITE_RICERCA;
 
     return this.prisma.scadenza.findMany({

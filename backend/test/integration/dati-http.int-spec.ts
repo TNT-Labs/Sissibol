@@ -149,6 +149,29 @@ describe('Liste e report (HTTP)', () => {
     });
   });
 
+  describe('ricerca di veicoli e clienti', () => {
+    const targhe = async (q: string, extra = '') =>
+      (await richiesta('GET', `/veicoli/paginated?search=${encodeURIComponent(q)}${extra}`)).json.data.map((v: any) => v.targa);
+
+    it('veicoli: ogni parola nella targa o nel nome del cliente, in qualsiasi ordine', async () => {
+      expect(await targhe('Rossi Mario')).toEqual(['AB123CD']);
+      expect(await targhe('mario ab12')).toEqual(['AB123CD']);
+      expect(await targhe('alfa')).toEqual(['XY987ZW']);
+      expect(await targhe('rossi alfa')).toEqual([]);
+      // Disattivati a parte; i veicoli di clienti non attivi mai.
+      expect(await targhe('alfa', '&attivo=false')).toEqual(['ZZ000ZZ']);
+      expect(await targhe('cessata')).toEqual([]);
+    });
+
+    it('clienti: ogni parola in un campo qualsiasi; parametro ripetuto senza errori', async () => {
+      const nomi = async (q: string) =>
+        (await richiesta('GET', `/clienti/paginated?${q}`)).json.data.map((c: any) => c.cognome ?? c.ragioneSociale);
+      expect(await nomi('search=Rossi%20Mario')).toEqual(['Rossi']);
+      expect(await nomi('search=trasporti%2001234')).toEqual(['Trasporti Alfa SRL']);
+      expect((await richiesta('GET', '/clienti/paginated?search=a&search=b')).stato).toBe(200);
+    });
+  });
+
   describe('ricevute dei pagamenti (caricamento multipart)', () => {
     const invia = async (file: Blob, nome: string) => {
       const scadenza = await prisma.scadenza.findFirst({ where: { stato: 'DA_PAGARE', veicolo: { targa: 'XY987ZW' } } });

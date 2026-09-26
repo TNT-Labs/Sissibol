@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateClienteDto } from './dto/create-cliente.dto';
 import { UpdateClienteDto } from './dto/update-cliente.dto';
 import { paginazioneSicura } from '../common/paginazione';
+import { paroleDiRicerca } from '../common/ricerca';
 
 @Injectable()
 export class ClientiService {
@@ -14,19 +15,26 @@ export class ClientiService {
     });
   }
 
+  /** Ogni parola in almeno un campo: "Rossi Mario" trova Mario Rossi. */
+  private filtroRicerca(search: unknown) {
+    const parole = paroleDiRicerca(search);
+    if (parole.length === 0) return {};
+    return {
+      AND: parole.map((parola) => ({
+        OR: [
+          { ragioneSociale: { contains: parola, mode: 'insensitive' as const } },
+          { nome: { contains: parola, mode: 'insensitive' as const } },
+          { cognome: { contains: parola, mode: 'insensitive' as const } },
+          { partitaIva: { contains: parola, mode: 'insensitive' as const } },
+          { codiceFiscale: { contains: parola, mode: 'insensitive' as const } },
+          { email: { contains: parola, mode: 'insensitive' as const } },
+        ],
+      })),
+    };
+  }
+
   async findAll(search?: string) {
-    const where = search
-      ? {
-          OR: [
-            { ragioneSociale: { contains: search, mode: 'insensitive' as const } },
-            { nome: { contains: search, mode: 'insensitive' as const } },
-            { cognome: { contains: search, mode: 'insensitive' as const } },
-            { partitaIva: { contains: search, mode: 'insensitive' as const } },
-            { codiceFiscale: { contains: search, mode: 'insensitive' as const } },
-            { email: { contains: search, mode: 'insensitive' as const } },
-          ],
-        }
-      : {};
+    const where = this.filtroRicerca(search);
 
     return this.prisma.cliente.findMany({
       where,
@@ -58,18 +66,7 @@ export class ClientiService {
     ({ page, pageSize } = paginazioneSicura(page, pageSize, 50));
     const skip = (page - 1) * pageSize;
 
-    const where: any = search
-      ? {
-          OR: [
-            { ragioneSociale: { contains: search, mode: 'insensitive' as const } },
-            { nome: { contains: search, mode: 'insensitive' as const } },
-            { cognome: { contains: search, mode: 'insensitive' as const } },
-            { partitaIva: { contains: search, mode: 'insensitive' as const } },
-            { codiceFiscale: { contains: search, mode: 'insensitive' as const } },
-            { email: { contains: search, mode: 'insensitive' as const } },
-          ],
-        }
-      : {};
+    const where: any = this.filtroRicerca(search);
 
     // Filtro server-side per stato attivo (undefined = tutti)
     if (attivo !== undefined) {

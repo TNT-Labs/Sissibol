@@ -6,6 +6,7 @@ import { CAMPI_CALCOLO } from './domini';
 import { CreateVeicoloDto } from './dto/create-veicolo.dto';
 import { UpdateVeicoloDto } from './dto/update-veicolo.dto';
 import { paginazioneSicura } from '../common/paginazione';
+import { paroleDiRicerca } from '../common/ricerca';
 
 // Tipi per lo storico veicolo (corrispondono all'enum nel schema.prisma)
 type TipoModificaVeicolo = 'CAMBIO_TARGA' | 'CAMBIO_PROPRIETARIO' | 'CAMBIO_TARGA_E_PROPRIETARIO';
@@ -48,13 +49,17 @@ export class VeicoliService {
       where.idCliente = idCliente;
     }
 
-    if (search) {
-      where.OR = [
-        { targa: { contains: search, mode: 'insensitive' } },
-        { cliente: { ragioneSociale: { contains: search, mode: 'insensitive' }, attivo: true } },
-        { cliente: { nome: { contains: search, mode: 'insensitive' }, attivo: true } },
-        { cliente: { cognome: { contains: search, mode: 'insensitive' }, attivo: true } },
-      ];
+    // Ogni parola nella targa o nel nome del cliente ("rossi mario", "rossi AB1")
+    const parole = paroleDiRicerca(search);
+    if (parole.length > 0) {
+      where.AND = parole.map((parola) => ({
+        OR: [
+          { targa: { contains: parola, mode: 'insensitive' } },
+          { cliente: { ragioneSociale: { contains: parola, mode: 'insensitive' } } },
+          { cliente: { nome: { contains: parola, mode: 'insensitive' } } },
+          { cliente: { cognome: { contains: parola, mode: 'insensitive' } } },
+        ],
+      }));
     }
 
     return this.prisma.veicolo.findMany({
@@ -111,13 +116,17 @@ export class VeicoliService {
       where.idCliente = idCliente;
     }
 
-    if (search) {
-      where.OR = [
-        { targa: { contains: search, mode: 'insensitive' } },
-        { cliente: { ragioneSociale: { contains: search, mode: 'insensitive' }, attivo: true } },
-        { cliente: { nome: { contains: search, mode: 'insensitive' }, attivo: true } },
-        { cliente: { cognome: { contains: search, mode: 'insensitive' }, attivo: true } },
-      ];
+    // Ogni parola nella targa o nel nome del cliente ("rossi mario", "rossi AB1")
+    const parole = paroleDiRicerca(search);
+    if (parole.length > 0) {
+      where.AND = parole.map((parola) => ({
+        OR: [
+          { targa: { contains: parola, mode: 'insensitive' } },
+          { cliente: { ragioneSociale: { contains: parola, mode: 'insensitive' } } },
+          { cliente: { nome: { contains: parola, mode: 'insensitive' } } },
+          { cliente: { cognome: { contains: parola, mode: 'insensitive' } } },
+        ],
+      }));
     }
 
     const [data, total] = await Promise.all([
