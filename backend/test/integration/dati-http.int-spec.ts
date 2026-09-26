@@ -170,6 +170,17 @@ describe('Liste e report (HTTP)', () => {
       expect(await nomi('search=trasporti%2001234')).toEqual(['Trasporti Alfa SRL']);
       expect((await richiesta('GET', '/clienti/paginated?search=a&search=b')).stato).toBe(200);
     });
+
+    it('clienti: la lista ha tutti i campi del modulo di modifica', async () => {
+      await prisma.cliente.update({
+        where: { id: ids.rossi },
+        data: { indirizzo: 'Via Roma 1', note: 'Paga in contanti', avvisiEmail: false },
+      });
+      const [rossi] = (await richiesta('GET', '/clienti/paginated?search=rossi')).json.data;
+      expect(rossi).toEqual(
+        expect.objectContaining({ indirizzo: 'Via Roma 1', note: 'Paga in contanti', avvisiEmail: false, attivo: true }),
+      );
+    });
   });
 
   describe('ricevute dei pagamenti (caricamento multipart)', () => {

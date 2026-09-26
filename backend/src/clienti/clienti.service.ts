@@ -84,9 +84,14 @@ export class ClientiService {
           nome: true,
           cognome: true,
           codiceFiscale: true,
+          // Tutti i campi del modulo di modifica: senza, salvare dalla lista
+          // cancellava indirizzo e note e riattivava gli avvisi via email.
+          indirizzo: true,
           email: true,
           telefono: true,
+          note: true,
           attivo: true,
+          avvisiEmail: true,
           _count: {
             select: { veicoli: true },
           },
